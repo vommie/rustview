@@ -10,16 +10,17 @@ use std::time::Instant;
 
 mod controls;
 mod events;
+mod osd_text;
 pub mod overlay;
 mod playback;
 pub use controls::SeekPrecision;
+pub use osd_text::OsdText;
 pub use playback::PlaybackNumbers;
 mod rating;
 mod zoom;
 
 pub type MpvEventCallback = Arc<dyn Fn(&MpvPlaybackState) + Send + Sync>;
 pub type MpvFullscreenCallback = Arc<dyn Fn() + Send + Sync>;
-pub type MpvGridClickCallback = Arc<dyn Fn() + Send + Sync>;
 pub type MpvConvertToTabCallback = Arc<dyn Fn() + Send + Sync>;
 
 /// The message mpv sends when its window is clicked (a plain left click: the Multiview selects the tile; never a pause).
@@ -49,10 +50,6 @@ pub struct MpvPlayer {
     observer_running: Arc<AtomicBool>,
     callbacks: Arc<RwLock<Vec<MpvEventCallback>>>,
     fullscreen_callbacks: Arc<RwLock<Vec<MpvFullscreenCallback>>>,
-    grid_left_click_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>>,
-    grid_middle_click_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>>,
-    grid_wheel_up_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>>,
-    grid_wheel_down_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>>,
     convert_to_tab_callbacks: Arc<RwLock<Vec<MpvConvertToTabCallback>>>,
     click_callbacks: Arc<RwLock<Vec<MpvClickCallback>>>,
     mute_callbacks: Arc<RwLock<Vec<MpvMuteCallback>>>,
@@ -151,20 +148,6 @@ impl MpvPlayer {
             let _ = mpv_instance.command("keybind", &[k, "no-osd cycle window-maximized"]);
         }
 
-        // Define the dedicated tabgrid input section for Grid View (active ONLY in Tab-Grid mode).
-        // This isolates wheel and click hijacking to Tab-Grid mode without overriding or ignoring normal wheel bindings.
-        let tabgrid_bindings = "MBTN_LEFT no-osd cycle ontop\nMBTN_MID no-osd cycle border\nWHEEL_UP no-osd cycle deinterlace\nWHEEL_DOWN no-osd cycle sub-visibility\n";
-        if let Err(e) = mpv_instance.command("define-section", &["rustview_tabgrid", tabgrid_bindings, "force"]) {
-            tracing::warn!(
-                error = ?e,
-                "[MpvPlayer: Init] Failed to define 'rustview_tabgrid' input section"
-            );
-        } else {
-            tracing::debug!(
-                "[MpvPlayer: Init] Defined 'rustview_tabgrid' input section for isolated grid scroll handling"
-            );
-        }
-
         let mpv_arc = Arc::new(mpv_instance);
         let state = Arc::new(RwLock::new(MpvPlaybackState::default()));
         let current_file_path = Arc::new(RwLock::new(None));
@@ -175,10 +158,6 @@ impl MpvPlayer {
         let observer_running = Arc::new(AtomicBool::new(true));
         let callbacks: Arc<RwLock<Vec<MpvEventCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let fullscreen_callbacks: Arc<RwLock<Vec<MpvFullscreenCallback>>> = Arc::new(RwLock::new(Vec::new()));
-        let grid_left_click_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>> = Arc::new(RwLock::new(Vec::new()));
-        let grid_middle_click_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>> = Arc::new(RwLock::new(Vec::new()));
-        let grid_wheel_up_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>> = Arc::new(RwLock::new(Vec::new()));
-        let grid_wheel_down_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let convert_to_tab_callbacks: Arc<RwLock<Vec<MpvConvertToTabCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let click_callbacks: Arc<RwLock<Vec<MpvClickCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let mute_callbacks: Arc<RwLock<Vec<MpvMuteCallback>>> = Arc::new(RwLock::new(Vec::new()));
@@ -195,10 +174,6 @@ impl MpvPlayer {
             observer_running: observer_running.clone(),
             callbacks: callbacks.clone(),
             fullscreen_callbacks: fullscreen_callbacks.clone(),
-            grid_left_click_callbacks: grid_left_click_callbacks.clone(),
-            grid_middle_click_callbacks: grid_middle_click_callbacks.clone(),
-            grid_wheel_up_callbacks: grid_wheel_up_callbacks.clone(),
-            grid_wheel_down_callbacks: grid_wheel_down_callbacks.clone(),
             convert_to_tab_callbacks: convert_to_tab_callbacks.clone(),
             click_callbacks: click_callbacks.clone(),
             mute_callbacks: mute_callbacks.clone(),
@@ -237,62 +212,13 @@ impl MpvPlayer {
         Ok(())
     }
 
-    /// Toggles Tab-Grid mode on this MPV player instance.
-    /// When `grid_mode` is true, enables the `rustview_tabgrid` input section to intercept scroll and clicks for grid navigation.
-    /// When `grid_mode` is false (normal Tab View or Fullscreen), disables `rustview_tabgrid` so that mouse wheel (up/down)
-    /// falls back to MPV's native or user-configured bindings without being swallowed or ignored.
+    /// Marks the player as shown in the tab grid (or not). The flag keeps a pause the grid causes from counting as the user's;
+    /// mpv takes no input in either case (`RustView` handles the pointer and the keys over every video, the grid too).
     pub fn set_tab_grid_mode(&self, grid_mode: bool) {
         if self.is_tab_grid_mode.swap(grid_mode, Ordering::SeqCst) == grid_mode {
             return;
         }
-
-        if grid_mode {
-            tracing::info!(
-                "[MpvPlayer: GridMode] Activating Tab-Grid mode (OSC off, wheel scrolls grid, clicks select/fullscreen)"
-            );
-            let _ = self.mpv.set_property("osc", "no");
-            let _ = self.mpv.set_property("input-default-bindings", "no");
-            let _ = self.mpv.set_property("input-vo-keyboard", "no");
-            let _ = self.mpv.set_property("input-cursor", "yes");
-
-            // Enable the dedicated tabgrid input section (intercepts mouse clicks and wheel for grid scrolling)
-            let _ = self.mpv.command(
-                "enable-section",
-                &["rustview_tabgrid", "allow-hide-cursor+allow-vo-dragging"],
-            );
-        } else {
-            tracing::info!(
-                "[MpvPlayer: GridMode] Deactivating Tab-Grid mode (restoring normal/fullscreen playback, mouse wheel passed directly to MPV)"
-            );
-            // Disable the tabgrid section to restore underlying keybindings and unreserve mouse wheel
-            let _ = self.mpv.command("disable-section", &["rustview_tabgrid"]);
-
-            let _ = self.mpv.set_property("osc", "no");
-            let _ = self.mpv.set_property("input-default-bindings", "yes");
-            let _ = self.mpv.set_property("input-vo-keyboard", "no");
-            let _ = self.mpv.set_property("input-cursor", "yes");
-
-            // Restore standard bindings with Middle-Click Fullscreen toggle and Ctrl+DoubleClick
-            bind_click(&self.mpv);
-            let _ = self.mpv.command("keybind", &["MBTN_MID", "cycle fullscreen"]);
-            let _ = self.mpv.command("keybind", &["MBTN_LEFT_DBL", "cycle fullscreen"]);
-
-            let convert_keys = [
-                "Ctrl+MBTN_LEFT",
-                "ctrl+MBTN_LEFT",
-                "Ctrl+mbtn_left",
-                "ctrl+mbtn_left",
-                "Ctrl+MBTN_LEFT_DBL",
-                "ctrl+MBTN_LEFT_DBL",
-                "Ctrl+mbtn_left_dbl",
-                "ctrl+mbtn_left_dbl",
-                "Ctrl+MBTN_LEFT_HOLD",
-                "ctrl+MBTN_LEFT_HOLD",
-            ];
-            for k in convert_keys {
-                let _ = self.mpv.command("keybind", &[k, "no-osd cycle window-maximized"]);
-            }
-        }
+        tracing::info!(grid_mode, "[MpvPlayer: GridMode] Tab-Grid mode changed");
     }
 
     #[inline]

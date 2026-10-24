@@ -1,6 +1,6 @@
 use super::error::ViewerError;
 use super::multiview::events::MultiviewEventSink;
-use super::multiview::instance::WeakInstance;
+use super::multiview::instance::{SharedInstance, WeakInstance};
 use super::tab_item::TabCollection;
 use super::tab_ui_gate::TabUiGate;
 use super::types::{MediaTabSession, TabId};
@@ -129,6 +129,16 @@ impl ViewerTabManager {
 
     pub fn list_tabs(&self) -> Vec<MediaTabSession> {
         self.tabs.read().to_vec()
+    }
+
+    /// The Multiview of every tab (cheap: no tab is copied).
+    pub fn instances(&self) -> Vec<SharedInstance> {
+        self.tabs
+            .read()
+            .all()
+            .iter()
+            .map(|tab| tab.multiview.instance.clone())
+            .collect()
     }
 
     // =========================================================================

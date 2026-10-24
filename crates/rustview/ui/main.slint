@@ -347,6 +347,8 @@ export component MainWindow inherits Window {
     callback tab-grid-item-selection-clicked(int /* tab_id */, bool /* ctrl */, bool /* shift */);
     callback tab-grid-item-middle-clicked(int /* tab_id */);
     callback tab-grid-item-close-clicked(int /* tab_id */);
+    // A key of the tab grid (Settings > Hotkeys > Tab-Grid; codes of `GridKey`): returns whether it was used.
+    callback tab-grid-key(int) -> bool;
     callback tab-grid-columns-changed(int /* new_columns */);
     callback tab-grid-auto-columns-toggled(bool /* is_auto */);
     callback tab-grid-close-all-clicked();
@@ -485,6 +487,10 @@ export component MainWindow inherits Window {
 
     public function scroll-folder-to-row(row-idx: int) {
         sidebar_left.scroll-folder-to-row(row-idx);
+    }
+
+    public function tab-grid-reveal(y: length, height: length) {
+        tab-grid-view.reveal-item(y, height);
     }
 
     public function scroll-media-by(dy: length) {

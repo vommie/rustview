@@ -10,6 +10,7 @@ mod commands;
 pub mod cursor;
 pub mod eligibility;
 mod feedback;
+pub mod grid_bars;
 pub mod grid_host;
 pub mod handle;
 mod handle_edit;

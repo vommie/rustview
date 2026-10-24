@@ -64,6 +64,11 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   or as mpv is configured). No migration: older settings files load with these defaults.
 - **The mouse over a video belongs to RustView** (tab and fullscreen): the wheel changes the volume, Ctrl + wheel zooms the video, a right click plays or
   pauses, a click selects the video and a double or middle click works as over a picture.
+- **Video items in the Tab-Grid work like picture items:** the hover frame shows over the video too, a right click opens the tab's context menu,
+  Shift+click selects a range, and the wheel scrolls the grid smoothly. A small control bar (play/pause and the progress bar) appears while the pointer
+  is over a video; the videos stay paused otherwise. Every other video shows its time ("0:03 / 0:08") in a badge at its bottom right.
+- **Keys for the Tab-Grid** (Settings > Hotkeys > Tab-Grid): the arrow keys mark an item (the first press marks the tab you came from), Enter opens it,
+  Del or Ctrl+W closes its tab, F11 shows it in the fullscreen.
 
 ### Changed
 - **Esc** cancels the crop tool of the selected picture first, then the other crop tools (newest first), then it closes the fullscreen as before.

@@ -28,9 +28,10 @@ export component TabGridItemView inherits Rectangle {
     width: root.item.width;
     height: root.item.height;
 
-    background: (tile-touch.has-hover || root.item.is-selected) ? Theme.surface-hover : Theme.surface;
-    border-width: root.item.is-selected ? Math.max(2px, root.border-width-val) : (tile-touch.has-hover ? Math.max(1.5px, root.border-width-val) : root.border-width-val);
-    border-color: root.item.is-selected ? Theme.accent : (tile-touch.has-hover ? Theme.primary : Theme.border);
+    property <bool> lit: tile-touch.has-hover || root.item.is-marked;
+    background: (root.lit || root.item.is-selected) ? Theme.surface-hover : Theme.surface;
+    border-width: root.item.is-selected ? Math.max(2px, root.border-width-val) : (root.lit ? Math.max(1.5px, root.border-width-val) : root.border-width-val);
+    border-color: root.item.is-selected ? Theme.accent : (root.lit ? Theme.primary : Theme.border);
     border-radius: root.corner-radius-val;
     clip: true;
 

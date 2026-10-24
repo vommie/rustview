@@ -15,6 +15,7 @@ use slint::platform::Key;
 /// The view the main window shows (`MainWindow.active-view-mode`).
 const BROWSE: i32 = 0;
 const TAB_VIEW: i32 = 1;
+const TAB_GRID: i32 = 2;
 
 /// Connects the key callback of the main window.
 pub fn install(window: &MainWindow) {
@@ -47,6 +48,7 @@ pub fn dispatch(window: &MainWindow, trigger: &Trigger<'_>, typing: bool) -> boo
         // The video player keys come first while the tab holds a video (they share keys with nothing of the tab).
         TAB_VIEW if crate::ui::multiview::tab_host::shown_has_video() => &[Area::General, Area::Player, Area::Tab],
         TAB_VIEW => &[Area::General, Area::Tab],
+        TAB_GRID => &[Area::General, Area::Grid, Area::Browse],
         _ => &[Area::General, Area::Browse],
     };
     let action = match resolve(trigger, areas, typing) {
@@ -66,6 +68,9 @@ fn run(window: &MainWindow, action: Action, trigger: &Trigger<'_>) -> bool {
     if let Some(rating) = action.rating() {
         window.invoke_rate_key(i32::from(rating));
         return true;
+    }
+    if let Some(key) = action.grid() {
+        return window.invoke_tab_grid_key(key.code());
     }
     if let Some(button) = action.media_bar() {
         crate::ui::multiview::tab_host::bar_key(button);

@@ -45,7 +45,7 @@ fullscreen and the tab view). The tab grid still leaves the pointer to mpv (its 
   action bars (`bar_overlay::register_overlay_xid`). Hosts: `session_video_bar.rs` (fullscreen) and `tab_host.rs` (tab view).
 - Settings: `FullscreenPlayerSettings` (`fullscreen.player`), card `ui/settings_card_player.slint` + `settings_dialog/player_bar.rs`.
 
-## Tab-Grid items (questionnaire 2026-10-24, `~/claude/feedback/2026-10-24-rustview-tab-grid`; to be built next)
+## Tab-Grid items (questionnaire 2026-10-24, `~/claude/feedback/2026-10-24-rustview-tab-grid`; built in 0.4.8)
 
 - The mouse over a video item is RustView's too, like over a picture item: click opens the tab, Ctrl+click and Shift+click select,
   middle click opens the fullscreen, right click opens the tab's context menu, the wheel scrolls the grid smoothly, and the
@@ -57,3 +57,15 @@ fullscreen and the tab view). The tab grid still leaves the pointer to mpv (its 
   shows. (The pause badge of today lies under the video window and is never visible.)
 - New hotkey area "Tab-Grid": the arrow keys move a mark from item to item (it looks like the hover frame), Enter opens the
   marked item, Del or Ctrl+W closes its tab, F11 opens it in the fullscreen.
+
+Code: the video windows let the pointer through in every visible host mode (`apply_pointer_passthrough`), so the grid item's
+own touch area handles the video like a picture. `ui/multiview/grid_bars.rs` is the grid's tick (started by
+`BridgeTabGrid::sync_tab_grid_ui`, stops itself when the grid goes): it asks every Multiview in the grid for its small bars
+(`instance_grid_bar.rs`: `grid_video_bar_targets`, reveal mode `Hover`, `placement::place_mini`, fixed 22 px, only inside the
+visible part of the grid) and keeps the time badges (`sync_time_badges`: mpv's `osd-overlay` with ASS and
+`osd-border-style=background-box`, `MpvPlayer::set_osd_text`; hidden where a small bar shows, removed when the Multiview leaves
+the grid). The small bars use the window pool of `ui/multiview/video_bar` with owner `TabGrid` and the `mini` layout. Keys:
+`Area::Grid` in the keymap, `main_window::dispatch` (view mode 2) -> `tab-grid-key` -> `ui/tabs/grid_keys.rs`; the mark is
+`UiState::tab_grid_mark` / `TabGridItemModel::is_marked`, moved by the pure `ui/tabs/grid/mark.rs` (`neighbor` in the masonry
+layout) and scrolled into view with `tab-grid-reveal`. mpv's grid bindings (clicks and the wheel reported through property
+toggles) are gone.

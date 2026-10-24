@@ -1,6 +1,7 @@
 pub mod dnd;
 pub mod grid;
 pub mod grid_bridge;
+pub mod grid_keys;
 pub mod icon;
 pub mod merge_limit;
 pub mod tab_selection;

@@ -135,6 +135,7 @@ impl VideoBarWindow {
             self.refresh_glass();
         }
         self.sync_prefs(prefs);
+        self.window.set_mini(target.mini);
         self.sync_view(&target.view);
         self.place(target.placement.translated(origin.0, origin.1), prefs);
         if !self.shown {

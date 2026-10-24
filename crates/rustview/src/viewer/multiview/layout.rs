@@ -24,6 +24,14 @@ impl Rect {
     pub fn contains(&self, px: i32, py: i32) -> bool {
         px >= self.x && py >= self.y && px < self.x + self.w && py < self.y + self.h
     }
+
+    /// Whether `other` lies completely inside this rectangle.
+    pub fn contains_rect(&self, other: Rect) -> bool {
+        other.x >= self.x
+            && other.y >= self.y
+            && other.x + other.w <= self.x + self.w
+            && other.y + other.h <= self.y + self.h
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

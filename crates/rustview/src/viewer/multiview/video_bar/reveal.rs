@@ -64,6 +64,7 @@ impl BarReveal {
                             .moved_at
                             .is_some_and(|at| now.saturating_duration_since(at) < input.idle)
                 }
+                RevealMode::Hover => over_video,
             };
         if wanted {
             self.shown = true;
@@ -186,6 +187,30 @@ mod tests {
                 on_bar + Duration::from_secs(5)
             ),
             Phase::Shown
+        );
+    }
+
+    #[test]
+    fn hover_shows_while_the_pointer_is_over_the_video_resting_or_not() {
+        let t0 = Instant::now();
+        let mut reveal = BarReveal::default();
+        assert_eq!(
+            reveal.decide(&input(RevealMode::Hover, Some((100, 100))), t0),
+            Phase::Shown
+        );
+        assert_eq!(
+            reveal.decide(
+                &input(RevealMode::Hover, Some((100, 100))),
+                t0 + Duration::from_secs(30)
+            ),
+            Phase::Shown
+        );
+        assert_eq!(
+            reveal.decide(
+                &input(RevealMode::Hover, Some((900, 100))),
+                t0 + Duration::from_secs(31)
+            ),
+            Phase::FadingOut
         );
     }
 

@@ -3,6 +3,7 @@
 //! binding wins when a stored key collides with a default.
 
 use super::area::Area;
+use crate::ui::tabs::grid::mark::{GridKey, Step};
 use crate::viewer::multiview::command::PlayerCommand;
 use crate::viewer::multiview::media_actions::MediaActionId;
 use crate::viewer::multiview::primary_actions::PrimaryActionId;
@@ -92,6 +93,14 @@ actions! {
         ["Shift?+Home", "Shift?+End"], FIXED;
     BrowseEscape: Browse, "browse.escape", "End a search, clear the selection", ["Escape"], FIXED;
     BrowseTypeAhead: Browse, "browse.type_ahead", "Type a name to jump to it", ["A-Z", "0-9"], FIXED, LABELS;
+
+    GridMarkLeft: Grid, "grid.mark_left", "Mark the item to the left", ["LeftArrow"], REPEAT;
+    GridMarkRight: Grid, "grid.mark_right", "Mark the item to the right", ["RightArrow"], REPEAT;
+    GridMarkUp: Grid, "grid.mark_up", "Mark the item above", ["UpArrow"], REPEAT;
+    GridMarkDown: Grid, "grid.mark_down", "Mark the item below", ["DownArrow"], REPEAT;
+    GridOpen: Grid, "grid.open", "Open the marked item", ["Return"];
+    GridClose: Grid, "grid.close", "Close the tab of the marked item", ["Delete", "Control+W"];
+    GridFullscreen: Grid, "grid.show_fullscreen", "Show the marked item in the fullscreen", ["F11"];
 
     TabRename: Tab, "tab.rename", "Rename", ["F2"];
     TabDelete: Tab, "tab.delete", "Delete", ["Delete"];
@@ -277,6 +286,19 @@ impl Action {
             Self::PlayerVolumeDown => PlayerCommand::Volume { louder: false },
             Self::PlayerSlower => PlayerCommand::Speed { faster: false },
             Self::PlayerFaster => PlayerCommand::Speed { faster: true },
+            _ => return None,
+        })
+    }
+
+    pub const fn grid(self) -> Option<GridKey> {
+        Some(match self {
+            Self::GridMarkLeft => GridKey::Move(Step::Left),
+            Self::GridMarkRight => GridKey::Move(Step::Right),
+            Self::GridMarkUp => GridKey::Move(Step::Up),
+            Self::GridMarkDown => GridKey::Move(Step::Down),
+            Self::GridOpen => GridKey::Open,
+            Self::GridClose => GridKey::Close,
+            Self::GridFullscreen => GridKey::Fullscreen,
             _ => return None,
         })
     }

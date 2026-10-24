@@ -27,6 +27,7 @@ pub mod instance_edit_view;
 mod instance_feedback;
 mod instance_focus;
 mod instance_follow;
+mod instance_grid_bar;
 mod instance_host;
 mod instance_hover;
 mod instance_layout;

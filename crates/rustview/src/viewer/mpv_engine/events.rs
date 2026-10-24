@@ -34,42 +34,6 @@ impl MpvPlayer {
         cbs.push(Arc::new(callback));
     }
 
-    pub fn on_grid_left_click<F>(&self, callback: F)
-    where
-        F: Fn() + Send + Sync + 'static,
-    {
-        let mut cbs = self.grid_left_click_callbacks.write();
-        cbs.clear();
-        cbs.push(Arc::new(callback));
-    }
-
-    pub fn on_grid_middle_click<F>(&self, callback: F)
-    where
-        F: Fn() + Send + Sync + 'static,
-    {
-        let mut cbs = self.grid_middle_click_callbacks.write();
-        cbs.clear();
-        cbs.push(Arc::new(callback));
-    }
-
-    pub fn on_grid_wheel_up<F>(&self, callback: F)
-    where
-        F: Fn() + Send + Sync + 'static,
-    {
-        let mut cbs = self.grid_wheel_up_callbacks.write();
-        cbs.clear();
-        cbs.push(Arc::new(callback));
-    }
-
-    pub fn on_grid_wheel_down<F>(&self, callback: F)
-    where
-        F: Fn() + Send + Sync + 'static,
-    {
-        let mut cbs = self.grid_wheel_down_callbacks.write();
-        cbs.clear();
-        cbs.push(Arc::new(callback));
-    }
-
     /// Reports every mute change, whatever caused it (the single place that watches mpv for it).
     pub fn on_mute_changed<F>(&self, callback: F)
     where
@@ -117,10 +81,6 @@ impl MpvPlayer {
         let is_tab_grid_mode = self.is_tab_grid_mode.clone();
         let callbacks = self.callbacks.clone();
         let fs_callbacks = self.fullscreen_callbacks.clone();
-        let grid_left_callbacks = self.grid_left_click_callbacks.clone();
-        let grid_middle_callbacks = self.grid_middle_click_callbacks.clone();
-        let grid_wheel_up_callbacks = self.grid_wheel_up_callbacks.clone();
-        let grid_wheel_down_callbacks = self.grid_wheel_down_callbacks.clone();
         let convert_callbacks = self.convert_to_tab_callbacks.clone();
         let click_callbacks = self.click_callbacks.clone();
         let mute_callbacks = self.mute_callbacks.clone();
@@ -131,8 +91,6 @@ impl MpvPlayer {
             .spawn(move || {
                 tracing::debug!("[MpvPlayer: Observer] Event observer thread started");
 
-                let mut last_deinterlace = false;
-                let mut last_sub_vis = true;
                 let mut last_mute: Option<bool> = None;
                 let mut last_user_paused: Option<bool> = None;
 
@@ -153,50 +111,7 @@ impl MpvPlayer {
                         }
                     }
 
-                    let in_grid = is_tab_grid_mode.load(Ordering::Relaxed);
-
-                    // 1. Intercept TabGrid Mouse Clicks and Wheel Scrolling
-                    if in_grid {
-                        let ontop_val = mpv.get_property::<bool>("ontop").unwrap_or(false);
-                        if ontop_val {
-                            let _ = mpv.set_property("ontop", false);
-                            let cbs = grid_left_callbacks.read().clone();
-                            for cb in cbs {
-                                cb();
-                            }
-                        }
-
-                        let border_val = mpv.get_property::<bool>("border").unwrap_or(true);
-                        if !border_val {
-                            let _ = mpv.set_property("border", true);
-                            let cbs = grid_middle_callbacks.read().clone();
-                            for cb in cbs {
-                                cb();
-                            }
-                        }
-
-                        // Wheel Up in TabGrid Mode (scrolls grid up)
-                        let deinterlace_val = mpv.get_property::<bool>("deinterlace").unwrap_or(false);
-                        if deinterlace_val != last_deinterlace {
-                            last_deinterlace = deinterlace_val;
-                            let cbs = grid_wheel_up_callbacks.read().clone();
-                            for cb in cbs {
-                                cb();
-                            }
-                        }
-
-                        // Wheel Down in TabGrid Mode (scrolls grid down)
-                        let sub_vis_val = mpv.get_property::<bool>("sub-visibility").unwrap_or(true);
-                        if sub_vis_val != last_sub_vis {
-                            last_sub_vis = sub_vis_val;
-                            let cbs = grid_wheel_down_callbacks.read().clone();
-                            for cb in cbs {
-                                cb();
-                            }
-                        }
-                    }
-
-                    // 2. Intercept double-click / middle-click Fullscreen triggers from MPV
+                    // 1. Intercept double-click / middle-click Fullscreen triggers from MPV
                     let fs_requested = mpv.get_property::<bool>("fullscreen").unwrap_or(false);
                     if fs_requested {
                         let _ = mpv.set_property("fullscreen", false);
@@ -206,7 +121,7 @@ impl MpvPlayer {
                         }
                     }
 
-                    // 3. Intercept Ctrl+Click / Ctrl+DoubleClick in Fullscreen to convert the fullscreen Multiview to a background tab
+                    // 2. Intercept Ctrl+Click / Ctrl+DoubleClick in Fullscreen to convert the fullscreen Multiview to a background tab
                     let convert_requested = mpv.get_property::<bool>("window-maximized").unwrap_or(false);
                     if convert_requested {
                         let _ = mpv.set_property("window-maximized", false);
@@ -216,7 +131,7 @@ impl MpvPlayer {
                         }
                     }
 
-                    // 4. Sync live playback properties
+                    // 3. Sync live playback properties
                     let pos = mpv.get_property::<f64>("time-pos").unwrap_or(0.0);
                     let dur = mpv.get_property::<f64>("duration").unwrap_or(0.0);
                     // The pause state counts as the user's choice only if the view stayed active while it was read.

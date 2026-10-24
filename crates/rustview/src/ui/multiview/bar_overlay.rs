@@ -31,6 +31,8 @@ use overlay::Overlay;
 pub enum BarOwner {
     Fullscreen,
     TabView,
+    /// The tab grid (only the small video control bars).
+    TabGrid,
 }
 
 /// The two bars. Each has a window of its own, so both can be visible at once.

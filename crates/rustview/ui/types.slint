@@ -163,6 +163,8 @@ export struct TabGridItemModel {
     is_selected: bool,
     /// A picture of the tab has unsaved edits (a dot next to the title).
     has_unsaved: bool,
+    /// The keyboard mark of the grid is on this item (Settings > Hotkeys > Tab-Grid); it looks like the hover frame.
+    is_marked: bool,
     icon: IconId,
     rating: int,
     has_tags: bool,

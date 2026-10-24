@@ -61,6 +61,20 @@ pub fn texts(position: f64, duration: f64, ms: bool) -> TimeTexts {
     }
 }
 
+/// The time badge of a video in the tab grid: "0:03 / 0:08" (hours when the video is that long); `None` while its length is
+/// not known.
+pub fn badge(position: f64, duration: f64) -> Option<String> {
+    if !duration.is_finite() || duration <= 0.0 {
+        return None;
+    }
+    let hours = duration >= HOUR_SECS;
+    Some(format!(
+        "{} / {}",
+        clock(position.min(duration), hours, false),
+        clock(duration, hours, false)
+    ))
+}
+
 /// `text` with every digit replaced by "0".
 fn zeros(text: &str) -> String {
     text.chars().map(|c| if c.is_ascii_digit() { '0' } else { c }).collect()
@@ -100,6 +114,14 @@ mod tests {
         assert_eq!(start.remaining, "-2:09");
         assert_eq!(texts(128.4, 128.4, false).remaining, "-0:00");
         assert_eq!(texts(83.25, 128.5, true).remaining, "-0:45.250");
+    }
+
+    #[test]
+    fn the_badge_names_position_and_length() {
+        assert_eq!(badge(3.04, 8.0).as_deref(), Some("0:03 / 0:08"));
+        assert_eq!(badge(3723.0, 7200.0).as_deref(), Some("1:02:03 / 2:00:00"));
+        assert_eq!(badge(12.0, 8.0).as_deref(), Some("0:08 / 0:08"));
+        assert_eq!(badge(1.0, 0.0), None);
     }
 
     #[test]

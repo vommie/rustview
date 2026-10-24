@@ -55,6 +55,11 @@ export component TabGridView inherits Rectangle {
         scroll-area.handle-scroll(0px, dy);
     }
 
+    /// Scrolls so that the item at `y` (content coordinates) with `height` is visible (the keyboard mark moved to it).
+    public function reveal-item(y: length, height: length) {
+        scroll-area.scroll-into-view(y, height);
+    }
+
     changed width => {
         if self.width > 20px {
             root.viewport-geometry-changed(self.width, scroll-area.height);

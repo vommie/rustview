@@ -16,6 +16,7 @@ use super::video_bar::state::VideoBarState;
 use crate::ui::button_feedback::ButtonFeedback;
 use crate::viewer::edit::save_badge::SaveBadge;
 use crate::viewer::edit::tile_edit::{EditSource, TileEdit};
+use crate::viewer::mpv_engine::OsdText;
 use crate::viewer::zoom::state::ZoomState;
 use crate::viewer::{MpvPlayer, X11VideoSubwindow, install_nonfatal_error_handler};
 use parking_lot::RwLock;
@@ -50,6 +51,8 @@ pub struct VideoTile {
     pub focus_overlay: Option<CornerMarks>,
     /// The control bar of the video.
     pub bar: VideoBarState,
+    /// The time badge mpv draws over the picture in the tab grid right now, if any.
+    pub time_badge: Option<OsdText>,
 }
 
 /// What is known about a medium before its tile exists (from the in-memory library state, never from the drive).
@@ -211,10 +214,6 @@ pub(super) fn connect_callbacks(
         PlayerEvent::Clicked(tile.load(Ordering::SeqCst))
     }));
     player.on_convert_to_background_tab(forward(sink, owner, || PlayerEvent::CtrlClick));
-    player.on_grid_left_click(forward(sink, owner, || PlayerEvent::GridLeftClick));
-    player.on_grid_middle_click(forward(sink, owner, || PlayerEvent::GridMiddleClick));
-    player.on_grid_wheel_up(forward(sink, owner, || PlayerEvent::GridWheel { up: true }));
-    player.on_grid_wheel_down(forward(sink, owner, || PlayerEvent::GridWheel { up: false }));
 }
 
 /// Creates the video window inside `rect` (coordinates of the parent window) and starts playback.
@@ -266,6 +265,7 @@ pub fn create_video(
         feedback_overlay: None,
         focus_overlay: None,
         bar: VideoBarState::default(),
+        time_badge: None,
     })
 }
 

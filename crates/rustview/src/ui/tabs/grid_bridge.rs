@@ -101,6 +101,7 @@ impl BridgeTabGrid {
         let scroll_y = window.get_tab_grid_scroll_y();
         let grid_host = GridHost::new(window, tab_manager);
         let selection = state.read().tab_selection.clone();
+        let mark = state.read().tab_grid_mark;
 
         let slint_items: Vec<TabGridItemModel> = sessions
             .iter()
@@ -129,6 +130,7 @@ impl BridgeTabGrid {
                     is_video: solo_kind == Some(TileKind::Video),
                     is_multiview: true,
                     is_selected: selection.contains(s.id),
+                    is_marked: mark == Some(s.id),
                     has_unsaved,
                     icon: tab_icon(s),
                     rating: i32::from(s.record.rating),
@@ -150,6 +152,7 @@ impl BridgeTabGrid {
             .collect();
 
         window.set_tab_grid_items(ModelRc::new(VecModel::from(slint_items)));
+        crate::ui::multiview::grid_bars::ensure_running(window, tab_manager);
         window.set_tab_grid_content_height(total_h);
 
         // 4. Place the Multiviews (their video windows included) on their tiles

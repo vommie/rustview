@@ -30,11 +30,6 @@ pub enum PlayerEvent {
         paused: bool,
     },
     CtrlClick,
-    GridLeftClick,
-    GridMiddleClick,
-    GridWheel {
-        up: bool,
-    },
     ImageDecoded {
         tile: TileKey,
         result: DecodedImage,

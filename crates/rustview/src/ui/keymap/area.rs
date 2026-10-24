@@ -7,6 +7,8 @@ pub enum Area {
     General,
     /// The Browse view (its Rename also works in the tab grid).
     Browse,
+    /// The tab grid; the keys act on the marked item.
+    Grid,
     /// A Multiview shown in a tab; acts on the selected medium.
     Tab,
     /// The Multiview fullscreen window; acts on the selected medium.
@@ -16,13 +18,21 @@ pub enum Area {
 }
 
 impl Area {
-    pub const ALL: [Self; 5] = [Self::General, Self::Browse, Self::Tab, Self::Fullscreen, Self::Player];
+    pub const ALL: [Self; 6] = [
+        Self::General,
+        Self::Browse,
+        Self::Grid,
+        Self::Tab,
+        Self::Fullscreen,
+        Self::Player,
+    ];
 
     /// The prefix of its actions' ids in `settings.json`.
     pub const fn id(self) -> &'static str {
         match self {
             Self::General => "general",
             Self::Browse => "browse",
+            Self::Grid => "grid",
             Self::Tab => "tab",
             Self::Fullscreen => "fullscreen",
             Self::Player => "player",
@@ -34,6 +44,7 @@ impl Area {
         match self {
             Self::General => "General",
             Self::Browse => "Browse",
+            Self::Grid => "Tab-Grid",
             Self::Tab => "Multiview in a Tab",
             Self::Fullscreen => "Multiview in the Fullscreen",
             Self::Player => "Video Player",
@@ -45,6 +56,7 @@ impl Area {
         match self {
             Self::General => "In the main window, whatever it shows.",
             Self::Browse => "In the view with the thumbnails or the table.",
+            Self::Grid => "In the tab grid; the arrow keys mark an item, the other keys act on it.",
             Self::Tab => "In a tab; the keys act on the selected medium.",
             Self::Fullscreen => "In the fullscreen; the keys act on the selected medium.",
             Self::Player => "On the selected video in a tab or the fullscreen.",
@@ -55,8 +67,11 @@ impl Area {
     pub const fn overlaps(self, other: Self) -> bool {
         matches!(
             (self, other),
-            (Self::General, Self::General | Self::Browse | Self::Tab | Self::Player)
-                | (Self::Browse, Self::General | Self::Browse)
+            (
+                Self::General,
+                Self::General | Self::Browse | Self::Grid | Self::Tab | Self::Player
+            ) | (Self::Browse, Self::General | Self::Browse)
+                | (Self::Grid, Self::General | Self::Grid)
                 | (Self::Tab, Self::General | Self::Tab | Self::Player)
                 | (Self::Fullscreen, Self::Fullscreen | Self::Player)
                 | (

@@ -226,13 +226,12 @@ impl MultiviewInstance {
         self.apply_pointer_passthrough();
     }
 
-    /// The video windows take no pointer input in the fullscreen and the tab view: `RustView` handles the mouse over a video
-    /// itself (its control bar, clicks, the wheel), and while a menu or a dialog is open a click has to reach the host window
-    /// anyway. Only the tab grid leaves the pointer to mpv, whose bindings report its clicks and the wheel. Called on every
-    /// tick, so a video that starts later gets it too (the windows change nothing when the state is the same).
+    /// The video windows take no pointer input wherever the Multiview is shown: `RustView` handles the mouse over a video
+    /// itself (its control bar, clicks, the wheel; in the tab grid the grid item does, like over a picture). Called on every
+    /// tick and every change of the host, so a video that starts later gets it too (the windows change nothing when the
+    /// state is the same).
     pub(super) fn apply_pointer_passthrough(&mut self) {
-        let host_takes = matches!(self.host.surface.mode, HostMode::Fullscreen | HostMode::TabView);
-        let through = host_takes || self.host.menu_open || self.host.modal_locked;
+        let through = self.host.surface.mode != HostMode::Hidden || self.host.menu_open || self.host.modal_locked;
         for video in self.tiles.iter_mut().filter_map(|t| t.video.as_mut()) {
             video.window.set_input_passthrough(through);
         }
@@ -365,6 +364,9 @@ impl MultiviewInstance {
         }
         self.apply_video_background();
         self.apply_pointer_passthrough();
+        if mode != HostMode::TabGrid {
+            self.sync_time_badges(&[]);
+        }
         if active {
             self.apply_audio();
         }

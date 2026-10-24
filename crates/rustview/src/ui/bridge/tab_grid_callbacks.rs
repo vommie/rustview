@@ -19,6 +19,8 @@ impl UiBridge {
 
         self.window.on_tab_grid_clicked(move || {
             tracing::info!("[UiBridge: TabGrid] Tab-Grid button clicked. Switching to Masonry Tab Grid view");
+            // The keyboard mark starts hidden every time the grid opens.
+            st_grid.write().tab_grid_mark = None;
             tm_grid.set_all_videos_view_active(false);
             win_grid.set_active_view_mode(2);
             win_grid.set_is_browse_active(false);
@@ -27,6 +29,17 @@ impl UiBridge {
             BridgeViewerTabs::sync_video_embedding(&win_grid, &tm_grid, &fs_grid, &set_grid);
             BridgeTabGrid::sync_tab_grid_ui(&win_grid, &tm_grid, &lib_grid, &set_grid, &st_grid);
             StatusBarBridge::update_metrics(&win_grid, &st_grid);
+        });
+
+        let win_key = self.window.as_weak();
+        let tm_key = self.tab_manager.clone();
+        let st_key = self.state.clone();
+        self.window.on_tab_grid_key(move |code| {
+            let (Some(window), Some(key)) = (win_key.upgrade(), crate::ui::tabs::grid::mark::GridKey::from_code(code))
+            else {
+                return false;
+            };
+            crate::ui::tabs::grid_keys::handle(&window, &tm_key, &st_key, key)
         });
 
         let win_left = self.window.clone_strong();

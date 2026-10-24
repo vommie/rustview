@@ -4,10 +4,12 @@
 
 use super::instance::MultiviewInstance;
 use super::instance_zoom::WHEEL_STEP_DELTA;
+use super::layout::Rect;
 use super::model::TileKind;
 use super::route::HostMode;
-use super::video_bar::placement;
-use super::video_bar::prefs::VideoBarPrefs;
+use super::tile::VideoTile;
+use super::video_bar::placement::{self, VideoBarPlacement};
+use super::video_bar::prefs::{RevealMode, VideoBarPrefs};
 use super::video_bar::progress::ProgressTrack;
 use super::video_bar::reveal::{Phase, RevealInput};
 use super::video_bar::time_text;
@@ -15,6 +17,7 @@ use super::video_bar::view::{DragPhase, VideoBarInput, VideoBarTarget, VideoBarV
 use super::video_bar::volume::{self, VolumeIcon};
 use crate::viewer::mpv_engine::SeekPrecision;
 use crate::viewer::multiview::follow::TileKey;
+use rustview_core::library::models::MediaId;
 use rustview_core::settings::schema::{
     MULTIVIEW_VIDEO_BAR_FADE_MS, MULTIVIEW_VIDEO_BAR_IDLE_MS, MULTIVIEW_VIDEO_BAR_REVEAL_MARGIN_LOGICAL_PX,
     MULTIVIEW_VIDEO_WHEEL_VOLUME_STEP,
@@ -34,6 +37,23 @@ impl MultiviewInstance {
     pub fn video_bar_targets(&mut self, prefs: &VideoBarPrefs, now: Instant) -> Vec<VideoBarTarget> {
         let allowed = self.video_bars_allowed();
         let scale = self.host.surface.dpi.max(0.5);
+        self.collect_bar_targets(allowed, prefs, (prefs.reveal, false), now, |rect| {
+            placement::place(rect, prefs.style, prefs.height, scale)
+        })
+    }
+
+    /// The bars of every video tile that `place` gives a place: `kind` is how they reveal and whether they are the small bars
+    /// of a tab grid item. With `allowed` false none shows and every drag on one ends.
+    pub(super) fn collect_bar_targets(
+        &mut self,
+        allowed: bool,
+        prefs: &VideoBarPrefs,
+        kind: (RevealMode, bool),
+        now: Instant,
+        place: impl Fn(Rect) -> Option<VideoBarPlacement>,
+    ) -> Vec<VideoBarTarget> {
+        let (mode, mini) = kind;
+        let scale = self.host.surface.dpi.max(0.5);
         let margin = (MULTIVIEW_VIDEO_BAR_REVEAL_MARGIN_LOGICAL_PX * scale)
             .round()
             .to_int::<i32>();
@@ -47,8 +67,7 @@ impl MultiviewInstance {
             let Some(video) = tile.video.as_mut().filter(|_| tile.kind == TileKind::Video) else {
                 continue;
             };
-            let place = video_rect.and_then(|rect| placement::place(rect, prefs.style, prefs.height, scale));
-            let (Some(rect), Some(place)) = (video_rect, place) else {
+            let (Some(rect), Some(place)) = (video_rect, video_rect.and_then(&place)) else {
                 video.bar.release();
                 continue;
             };
@@ -58,7 +77,7 @@ impl MultiviewInstance {
             }
             let phase = video.bar.reveal.decide(
                 &RevealInput {
-                    mode: prefs.reveal,
+                    mode,
                     video: rect,
                     bar: place.bar,
                     pointer,
@@ -73,39 +92,13 @@ impl MultiviewInstance {
                 video.bar.set_hover(None);
                 continue;
             }
-            let playback = video.player.playback();
-            let ms = video.bar.ms_shown(media_id, prefs.show_ms);
-            // With milliseconds the time of the observer (a tenth of a second) is too coarse: mpv is asked directly.
-            let actual = if ms && !playback.paused {
-                video.player.get_position()
-            } else {
-                playback.position
-            };
-            let position = video.bar.shown_position(actual, now);
-            let track = ProgressTrack::new(playback.duration, position);
-            if !video.bar.dragging() {
-                video.bar.note_level(playback.volume);
-            }
-            let hours = track.duration_secs() >= 3600.0;
-            let hover = video
-                .bar
-                .hover()
-                .map(|share| (share, time_text::clock(track.time_at(share), hours, ms)));
             targets.push(VideoBarTarget {
                 key,
                 placement: place,
                 phase,
                 held: video.bar.dragging(),
-                view: VideoBarView {
-                    playing: !playback.paused,
-                    times: time_text::texts(position, track.duration_secs(), ms),
-                    fraction: track.fraction(),
-                    spans: track.shares(),
-                    volume_share: volume::slider_share(playback.volume),
-                    volume_icon: VolumeIcon::of(playback.volume, video.last_mute),
-                    muted: video.last_mute,
-                    hover,
-                },
+                mini,
+                view: bar_view(video, media_id, prefs, now),
             });
         }
         targets
@@ -270,5 +263,37 @@ impl MultiviewInstance {
         for video in self.tiles.iter_mut().filter_map(|t| t.video.as_mut()) {
             video.bar.release();
         }
+    }
+}
+
+/// What the bar of `video` (showing medium `media_id`) shows now.
+fn bar_view(video: &mut VideoTile, media_id: MediaId, prefs: &VideoBarPrefs, now: Instant) -> VideoBarView {
+    let playback = video.player.playback();
+    let ms = video.bar.ms_shown(media_id, prefs.show_ms);
+    // With milliseconds the time of the observer (a tenth of a second) is too coarse: mpv is asked directly.
+    let actual = if ms && !playback.paused {
+        video.player.get_position()
+    } else {
+        playback.position
+    };
+    let position = video.bar.shown_position(actual, now);
+    let track = ProgressTrack::new(playback.duration, position);
+    if !video.bar.dragging() {
+        video.bar.note_level(playback.volume);
+    }
+    let hours = track.duration_secs() >= 3600.0;
+    let hover = video
+        .bar
+        .hover()
+        .map(|share| (share, time_text::clock(track.time_at(share), hours, ms)));
+    VideoBarView {
+        playing: !playback.paused,
+        times: time_text::texts(position, track.duration_secs(), ms),
+        fraction: track.fraction(),
+        spans: track.shares(),
+        volume_share: volume::slider_share(playback.volume),
+        volume_icon: VolumeIcon::of(playback.volume, video.last_mute),
+        muted: video.last_mute,
+        hover,
     }
 }

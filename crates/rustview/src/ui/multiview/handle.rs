@@ -536,21 +536,6 @@ impl MultiviewHandle {
         });
     }
 
-    /// Makes the tab that owns the Multiview instance `instance_id` the shown tab (left click on its grid item).
-    pub(super) fn activate_tab(&self, instance_id: u64) {
-        self.on_tab_of_instance(instance_id, |w, tab_id| {
-            w.invoke_tab_grid_item_left_clicked(tab_id.wrapping_as::<i32>());
-        });
-    }
-
-    /// Ctrl+click on a video in a grid item: the tab joins or leaves the multi-selection of tabs (the same path as Ctrl+click on
-    /// the rest of the item).
-    pub(super) fn toggle_tab_selection(&self, instance_id: u64) {
-        self.on_tab_of_instance(instance_id, |w, tab_id| {
-            w.invoke_tab_grid_item_selection_clicked(tab_id.wrapping_as::<i32>(), true, false);
-        });
-    }
-
     fn on_tab_of_instance(&self, instance_id: u64, f: impl FnOnce(&MainWindow, TabId) + Send + 'static) {
         let (Some(tab_manager), Some(main_window)) = (self.tab_manager(), self.main_window()) else {
             return;
@@ -559,13 +544,6 @@ impl MultiviewHandle {
             return;
         };
         let _ = main_window.upgrade_in_event_loop(move |w| f(&w, tab_id));
-    }
-
-    /// Scrolls the tab grid (wheel over a grid item that shows a Multiview).
-    pub(super) fn scroll_grid(&self, up: bool) {
-        if let Some(main_window) = self.main_window() {
-            let _ = main_window.upgrade_in_event_loop(move |w| w.invoke_scroll_media_by(if up { 40.0 } else { -40.0 }));
-        }
     }
 }
 

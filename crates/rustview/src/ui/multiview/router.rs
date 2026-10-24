@@ -113,9 +113,6 @@ fn route_event(handle: &MultiviewHandle, weak: &WeakInstance, event: PlayerEvent
             let click = instance.lock().register_click(true);
             (RoutedEvent::CtrlClick, click)
         }
-        PlayerEvent::GridLeftClick => (RoutedEvent::GridLeft, ClickKind::None),
-        PlayerEvent::GridMiddleClick => (RoutedEvent::GridMiddle, ClickKind::None),
-        PlayerEvent::GridWheel { up } => (RoutedEvent::GridWheel { up }, ClickKind::None),
     };
     let (mode, origin, instance_id) = {
         let guard = instance.lock();
@@ -161,9 +158,6 @@ pub(super) fn execute(action: UiAction, handle: &MultiviewHandle, instance_id: O
         (UiAction::OpenWithItem(media_id, item), _) => handle.open_with_item(media_id, item),
         (UiAction::CloseActiveTab, _) => handle.close_active_tab(),
         (UiAction::OpenTabFullscreen, Some(id)) => handle.open_tab_fullscreen(id),
-        (UiAction::ActivateTab, Some(id)) => handle.activate_tab(id),
-        (UiAction::ToggleTabSelection, Some(id)) => handle.toggle_tab_selection(id),
-        (UiAction::ScrollGrid { up }, _) => handle.scroll_grid(up),
         (UiAction::Navigate { forward }, _) => handle.navigate(forward),
         (UiAction::DeselectInBrowse(media_id), _) => handle.deselect_in_browse(media_id),
         (UiAction::TabMembersChanged, _) => handle.tab_members_changed(),

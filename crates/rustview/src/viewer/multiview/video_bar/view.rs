@@ -30,6 +30,8 @@ pub struct VideoBarTarget {
     pub phase: Phase,
     /// A drag on the bar runs: it stays even while the pointer is over another window.
     pub held: bool,
+    /// The small bar of a tab grid item (play/pause and the progress bar only).
+    pub mini: bool,
     pub view: VideoBarView,
 }
 

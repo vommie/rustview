@@ -12,11 +12,12 @@ An action belongs to one area; the same key may mean different things in areas t
 |---|---|
 | General | the main window in every view (Browse, tab view, tab grid) |
 | Browse | the Browse view (Rename also in the tab grid, where it acts on the last used panel) |
+| Tab-Grid | the tab grid: arrow keys move a mark, Enter / Del, Ctrl+W / F11 act on the marked item (since 0.4.8, questionnaire 2026-10-24) |
 | Tab | a Multiview shown in a tab (acts on the selected medium) |
 | Fullscreen | the Multiview fullscreen window (acts on the selected medium) |
 | Video player | the selected video in a tab or the fullscreen (comes first while the Multiview holds a video) |
 
-Conflicts are checked between areas that can be active at the same time: General with Browse, Tab and Video player; Tab and
+Conflicts are checked between areas that can be active at the same time: General with Browse, Tab-Grid, Tab and Video player; Tab and
 Fullscreen each with Video player. The one allowed overlap: a Video player key may also page in the Fullscreen (paging only
 works for a single image, the player only for a video). Tab and Fullscreen are separate areas (user: they are not quite the
 same, e.g. only the fullscreen of a Browse view pages or becomes a tab) with similar defaults.

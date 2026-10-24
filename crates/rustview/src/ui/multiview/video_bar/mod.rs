@@ -77,11 +77,7 @@ fn hide_except(owner: BarOwner, keep: &[TileKey]) {
             continue;
         };
         if bar.assigned.is_some_and(|(o, key)| o == owner && !keep.contains(&key)) {
-            bar.hide(if keep.is_empty() {
-                "the host shows no bars"
-            } else {
-                "its tile has no bar now"
-            });
+            bar.hide("no bar is wanted for its tile now");
             bar.assigned = None;
         }
     }

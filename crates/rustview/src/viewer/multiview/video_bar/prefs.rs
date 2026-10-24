@@ -21,6 +21,8 @@ pub enum RevealMode {
     Bottom,
     /// Any movement of the pointer over the video shows the bar; it goes after a moment without movement.
     Anywhere,
+    /// The pointer anywhere over the video, resting or not (the small bar of a tab grid item; no setting).
+    Hover,
 }
 
 /// How a click or a drag on the progress bar seeks.

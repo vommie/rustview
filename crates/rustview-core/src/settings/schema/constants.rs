@@ -563,6 +563,17 @@ pub const MULTIVIEW_VIDEO_BAR_PILL_INSET_LOGICAL_PX: f32 = 10.0;
 /// A video narrower or lower than this (logical pixels) gets no control bar.
 pub const MULTIVIEW_VIDEO_BAR_MIN_VIDEO_WIDTH_LOGICAL_PX: f32 = 200.0;
 
+/// The small control bar of a video in a tab grid item: its height in logical pixels (it does not follow the setting).
+pub const MULTIVIEW_VIDEO_BAR_MINI_HEIGHT_LOGICAL_PX: f32 = 22.0;
+
+/// A video in a tab grid item narrower than this (logical pixels) gets no small control bar.
+pub const MULTIVIEW_VIDEO_BAR_MINI_MIN_VIDEO_WIDTH_LOGICAL_PX: f32 = 120.0;
+
+/// The time badge of a video in a tab grid item: its font height and its distance from the edges, in logical pixels.
+pub const MULTIVIEW_TIME_BADGE_FONT_LOGICAL_PX: f32 = 12.0;
+
+pub const MULTIVIEW_TIME_BADGE_MARGIN_LOGICAL_PX: f32 = 5.0;
+
 /// One notch of the mouse wheel over a video or its volume bar changes the volume by this many percent.
 pub const MULTIVIEW_VIDEO_WHEEL_VOLUME_STEP: f64 = 5.0;
 

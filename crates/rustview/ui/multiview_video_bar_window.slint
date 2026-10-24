@@ -77,6 +77,8 @@ export component MultiviewVideoBarWindow inherits Window {
     // False without a compositing manager: the bar is solid then and does not fade.
     in property <bool> translucent: true;
     in property <bool> pill: false;
+    // The small bar of a tab grid item: play/pause and the progress bar only.
+    in property <bool> mini: false;
     in property <float> bar-opacity: 0.7;
     in property <length> bar-height: 30px;
     in property <length> bubble-height: 28px;
@@ -150,7 +152,7 @@ export component MultiviewVideoBarWindow inherits Window {
                     clicked => { root.play-pause(); }
                 }
 
-                BarTime {
+                if !root.mini : BarTime {
                     text: root.current-text;
                     template: root.current-template;
                     font-size: root.font-size;
@@ -215,7 +217,7 @@ export component MultiviewVideoBarWindow inherits Window {
                     }
                 }
 
-                BarTime {
+                if !root.mini : BarTime {
                     text: root.remaining-text;
                     template: root.remaining-template;
                     font-size: root.font-size;
@@ -224,14 +226,14 @@ export component MultiviewVideoBarWindow inherits Window {
                     clicked => { root.toggle-ms(); }
                 }
 
-                BarIconButton {
+                if !root.mini : BarIconButton {
                     icon: root.volume-icon == 0 ? IconId.volume-off : (root.volume-icon == 1 ? IconId.volume-low : IconId.volume-on);
                     size: root.bar-height;
                     icon-size: root.icon-size;
                     clicked => { root.speaker(); }
                 }
 
-                slider := Rectangle {
+                if !root.mini : slider := Rectangle {
                     width: 3 * root.bar-height;
                     property <length> knob: Math.round(12 * root.pt / 1px) * 1px;
                     property <length> inner-width: self.width - self.knob;
