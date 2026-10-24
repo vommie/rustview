@@ -150,7 +150,7 @@ impl UiBridge {
         if let Some(media_id) = fullscreen_target {
             tracing::info!(
                 media_id,
-                "[UiBridge: DeleteAction] Delete requested in the fullscreen: opening delete files dialog for its medium"
+                "[UiBridge: DeleteAction] Delete requested in a Multiview: opening delete files dialog for its selected medium"
             );
             let fullscreen = params.fullscreen.clone();
             let followup: DeleteFollowup = Rc::new(move |ids| fullscreen.drop_deleted(ids));

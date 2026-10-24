@@ -34,8 +34,6 @@ impl MultiviewInstance {
         self.zoom_slider.clear();
         self.zoom_minimap_bubble.clear();
         self.rename_target = None;
-        self.rename_pinned = false;
-        self.last_hovered = None;
         let tiles = std::mem::take(&mut self.tiles);
         self.layout = Layout::default();
         self.bump();

@@ -407,7 +407,27 @@ impl MultiviewHandle {
         }
     }
 
-    /// DEL on the single medium or the delete button of a tile: asks the main window for the regular delete dialog (the same
+    /// F2 in a video's window of the tab view: the main window's rename, which acts on the selected medium of the tab (not
+    /// marked as coming from the fullscreen).
+    pub(super) fn request_tab_rename(&self) {
+        if let Some(main_window) = self.shared.main_window.lock().clone() {
+            let _ = main_window.upgrade_in_event_loop(|w| w.invoke_request_rename());
+        }
+    }
+
+    /// Esc in a video's window of the tab view, with no crop tool to cancel: a selection of tabs ends, as Esc does in the main
+    /// window.
+    pub(super) fn end_tab_selection(&self) {
+        if let Some(main_window) = self.shared.main_window.lock().clone() {
+            let _ = main_window.upgrade_in_event_loop(|w| {
+                if w.get_has_tab_selection() {
+                    w.invoke_tab_selection_cleared();
+                }
+            });
+        }
+    }
+
+    /// DEL on the selected medium or the delete button of a tile: asks the main window for the regular delete dialog (the same
     /// flow as DEL in the Browse view) for `media_id`. The request is marked as coming from the fullscreen window while it is
     /// handled; DEL in the main window always means the Browse selection, even with a Multiview open.
     pub fn request_delete(&self, media_id: MediaId) {

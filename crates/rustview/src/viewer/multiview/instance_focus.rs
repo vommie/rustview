@@ -6,6 +6,7 @@ use super::follow::TileKey;
 use super::hint::HintAnchor;
 use super::instance::MultiviewInstance;
 use super::layout::Rect;
+use super::media_feedback::{FADE, HOLD};
 use super::model::TileKind;
 use super::prefs;
 use super::route::HostMode;
@@ -13,6 +14,7 @@ use super::view::FocusMarkView;
 use rustview_core::library::models::MediaId;
 use rustview_core::settings::schema::MULTIVIEW_FOCUS_CORNER_THICKNESS_LOGICAL_PX;
 use rustview_core::util::cast::{FloatToInt, SaturatingAs};
+use std::time::Instant;
 
 impl MultiviewInstance {
     fn tile_keys(&self) -> Vec<TileKey> {
@@ -103,10 +105,47 @@ impl MultiviewInstance {
         )
     }
 
+    /// The marks are on screen: not hidden with the resting cursor, or shown for a moment by a key.
+    fn marks_shown(&self) -> bool {
+        let hidden_with_cursor = prefs::current().focus_marks.hide_with_cursor && self.cursor_hidden;
+        !hidden_with_cursor || self.marks_revealed_until.is_some_and(|until| Instant::now() < until)
+    }
+
+    /// A key reached the selected tile: its marks show for about a second (as long as the feedback of a rating), also while
+    /// they are hidden with the cursor.
+    pub(super) fn reveal_marks(&mut self, now: Instant) {
+        let was_shown = self.marks_shown();
+        self.marks_revealed_until = Some(now + HOLD + FADE);
+        if !was_shown {
+            tracing::debug!(
+                instance = self.id,
+                "[Multiview: Focus] Marks shown for a moment by a key"
+            );
+            self.sync_focus_overlays();
+            self.bump();
+        }
+    }
+
+    /// Called every tick: a moment of shown marks that is over hides them again (while the cursor is hidden).
+    pub(super) fn poll_mark_reveal(&mut self, now: Instant) {
+        if self.marks_revealed_until.is_some_and(|until| now >= until) {
+            self.marks_revealed_until = None;
+            self.marks_visibility_changed();
+        }
+    }
+
+    /// The marks appeared or went (the cursor was hidden or shown, a moment of shown marks ended).
+    pub(super) fn marks_visibility_changed(&mut self) {
+        if self.focus_marked().is_some() {
+            self.sync_focus_overlays();
+            self.bump();
+        }
+    }
+
     /// The marks tile `index` carries while it is the selected one of several.
     pub(super) fn focus_view(&self, index: usize) -> Option<FocusMarkView> {
         let tile = self.tiles.get(index)?;
-        if !self.host_is_interactive() || self.focus_marked() != Some(tile.key) {
+        if !self.host_is_interactive() || self.focus_marked() != Some(tile.key) || !self.marks_shown() {
             return None;
         }
         let placed = self.layout.tiles.get(index)?;
@@ -125,7 +164,7 @@ impl MultiviewInstance {
     /// them (in the corners of its window), every other video has none. Costs a comparison per video when nothing changed, so
     /// the host tick may call it to retry a mark mpv did not take yet (no picture).
     pub(super) fn sync_focus_overlays(&mut self) {
-        let marked = if self.host_is_interactive() {
+        let marked = if self.host_is_interactive() && self.marks_shown() {
             self.focus_marked()
         } else {
             None

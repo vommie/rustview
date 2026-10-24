@@ -1,7 +1,7 @@
 //! Multiview core, independent of the UI layer so that viewer tabs can own a running Multiview.
 //!
 //! The pure modules (`layout`, `layout_pins`, `audio`, `follow`, `model`, `navigation`, `actions`,
-//! `container`, `click`, `route`, `target_pick`, `focus`, `hint`) have no Slint/X11/mpv dependencies and are unit tested. `instance*` is the running Multiview (single source of truth for its
+//! `container`, `click`, `route`, `focus`, `command`, `hint`) have no Slint/X11/mpv dependencies and are unit tested. `instance*` is the running Multiview (single source of truth for its
 //! tiles, arrangement, sound and interaction state), `tile`/`teardown`/`image_decode` its native parts, `events` the
 //! channel from player threads back to the UI and `view` the Slint-free description a host draws.
 
@@ -9,6 +9,7 @@ pub mod audio;
 pub mod bar_menu;
 pub mod bar_placement;
 pub mod click;
+pub mod command;
 pub mod container;
 pub mod events;
 pub mod feedback_overlay;
@@ -20,6 +21,7 @@ pub mod image_decode;
 pub mod instance;
 mod instance_actions;
 mod instance_clone;
+mod instance_commands;
 pub mod instance_edit;
 pub mod instance_edit_view;
 mod instance_feedback;
@@ -45,7 +47,6 @@ pub mod prefs;
 pub mod primary_actions;
 pub mod rating_keys;
 pub mod route;
-pub mod target_pick;
 pub mod teardown;
 pub mod tile;
 pub mod view;

@@ -1,7 +1,7 @@
 # Multiview: the selected medium (focus)
 
-Status: **stage 1 implemented in 0.4.1** (focus model, clicks, marks, hint; the rating keys already act on the focus so the hint can be used),
-stages 2 and 3 open. Concept agreed on 2026-10-24, after RustView 0.4.0. Decisions were made with the user in four rounds; this file is the
+Status: **stages 1 and 2 implemented** (0.4.1: focus model, clicks, marks, hint, rating keys; 0.4.2: every key through `MultiviewCommand`, Esc chain,
+DEL and zoom keys in the tab view, refusals with reasons, marks hidden with the cursor and shown by a key), stage 3 open. Concept agreed on 2026-10-24, after RustView 0.4.0. Decisions were made with the user in four rounds; this file is the
 reference for the implementation on branch `claude`. Paths are relative to `crates/rustview/` as in CLAUDE.md.
 
 ## Goal
@@ -129,7 +129,8 @@ the sound and mutes the other videos the policy controls; focusing an image chan
 1. Focus model, click on images and videos, bar clicks focus, marks for images and videos, the hint component. **Done in 0.4.1**, together with the
    rating keys (Ctrl+0..5) acting on the focus; settings for the marks are still the defaults (Medium/Medium).
 2. All keys through `MultiviewCommand` to the focus (fullscreen, tab view, mpv messages), the Esc chain incl. the mpv Esc binding, DEL and zoom keys in
-   the tab view, refusals with reasons, marks revealed by a key.
+   the tab view, refusals with reasons, marks revealed by a key. **Done in 0.4.2**; hiding the marks with the cursor already works (default on), its
+   switch and tooltips follow in stage 3. F5 acts on the selected medium; the refresh button of the tab toolbar still refreshes the whole tab.
 3. Tab view panels, "The selected video" sound choice, the settings section and the cursor-hiding switch with its tooltips, CLAUDE.md (Multiview chapter)
    and CHANGELOG.
 

@@ -190,10 +190,8 @@ pub(super) fn connect_callbacks(
 ) {
     player.on_toggle_fullscreen(forward(sink, owner, || PlayerEvent::ToggleFullscreen));
     player.on_close_tab(forward(sink, owner, || PlayerEvent::CloseTab));
-    let tile = Arc::clone(current_tile);
-    player.on_rename_requested(forward(sink, owner, move || {
-        PlayerEvent::RenameRequested(tile.load(Ordering::SeqCst))
-    }));
+    player.on_rename_requested(forward(sink, owner, || PlayerEvent::RenameRequested));
+    player.on_escape(forward(sink, owner, || PlayerEvent::EscapePressed));
     player.on_delete_requested(forward(sink, owner, || PlayerEvent::DeleteRequested));
     let (rating_sink, rating_owner) = (Arc::clone(sink), Arc::clone(owner));
     player.on_rating_requested(move |rating| {

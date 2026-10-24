@@ -2,7 +2,7 @@
 
 use super::{BridgeViewerTabs, TabDragEndParams};
 use crate::ui::MainWindow;
-use crate::ui::media::BridgeMedia;
+use crate::ui::media::{BridgeMedia, RefreshOrigin};
 use crate::ui::multiview::MultiviewHandle;
 use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
@@ -187,6 +187,42 @@ impl BridgeViewerTabs {
                     BridgeTabGrid::sync_tab_grid_ui(&win_v_close, &tm_v_close, &lib_v_close, &set_v_close, &st_v_close);
                 }
             }
+        });
+
+        // 7a. F5 in a viewer tab: the selected medium of its Multiview is read again (the hint shows when none is selected)
+        let win_k_refresh = window.clone_strong();
+        let tm_k_refresh = tab_manager.clone();
+        let lib_k_refresh = library.clone();
+        let thumb_k_refresh = thumbnails.clone();
+        let set_k_refresh = settings.clone();
+        let st_k_refresh = state.clone();
+        let fs_k_refresh = fullscreen.clone();
+        window.on_viewer_refresh_key(move || {
+            if BridgeMedia::is_system_busy(&win_k_refresh, &thumb_k_refresh, &st_k_refresh) {
+                StatusBarBridge::warn(
+                    &win_k_refresh,
+                    "Cannot refresh: another operation is already in progress.",
+                );
+                return;
+            }
+            let Some(media_id) = crate::ui::multiview::tab_host::key_target_media() else {
+                return;
+            };
+            tracing::info!(
+                media_id,
+                "[BridgeViewerTabs: Refresh] F5 refreshes the selected medium of the tab"
+            );
+            BridgeMedia::refresh_media_ids(
+                &win_k_refresh,
+                &lib_k_refresh,
+                &thumb_k_refresh,
+                &tm_k_refresh,
+                &set_k_refresh,
+                &st_k_refresh,
+                &[media_id],
+                RefreshOrigin::Selection,
+            );
+            fs_k_refresh.sync_tab(&tm_k_refresh);
         });
 
         // 7. Viewer Toolbar Refresh Button (Guarded by is_system_busy)

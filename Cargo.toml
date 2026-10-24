@@ -4,7 +4,7 @@ members = ["crates/rustview-core", "crates/rustview"]
 default-members = ["crates/rustview-core", "crates/rustview"]
 
 [workspace.package]
-version = "0.4.1"
+version = "0.4.2"
 edition = "2024"
 # The lowest toolchain known to work: the code uses `AtomicUsize::try_update` (1.95). rust-toolchain.toml pins `stable`.
 rust-version = "1.95"

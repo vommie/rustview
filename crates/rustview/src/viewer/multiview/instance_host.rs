@@ -398,7 +398,6 @@ impl MultiviewInstance {
     /// after its fullscreen window is gone. The host becomes `Hidden`; the next `set_host` places and resumes everything.
     pub fn park(&mut self, parent_xid: u64, rect: Rect) -> Result<(), String> {
         self.clear_hover();
-        self.rename_pinned = false;
         let (width, height) = (
             rect.w.max(MULTIVIEW_MIN_VIDEO_WINDOW_PX).saturating_as::<u32>(),
             rect.h.max(MULTIVIEW_MIN_VIDEO_WINDOW_PX).saturating_as::<u32>(),
@@ -443,7 +442,6 @@ impl MultiviewInstance {
         }
         self.clear_feedback();
         self.clear_hover();
-        self.rename_pinned = false;
         for video in self.tiles.iter_mut().filter_map(|t| t.video.as_mut()) {
             video.window.hide();
             video.player.set_view_active(false);

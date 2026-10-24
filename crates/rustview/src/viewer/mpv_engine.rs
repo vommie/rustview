@@ -36,6 +36,14 @@ const CLICK_MESSAGE: &str = "rustview-click";
 fn bind_click(mpv: &Mpv) {
     let _ = mpv.command("keybind", &["MBTN_LEFT", &format!("script-message {CLICK_MESSAGE}")]);
 }
+
+/// The message mpv sends for Esc in its window: the Multiview runs its Esc chain (crop tools, then close or nothing), the same
+/// as for Esc anywhere else, instead of toggling a fullscreen.
+const ESCAPE_MESSAGE: &str = "rustview-escape";
+
+fn bind_escape(mpv: &Mpv) {
+    let _ = mpv.command("keybind", &["ESC", &format!("script-message {ESCAPE_MESSAGE}")]);
+}
 /// Called from the observer thread when the player's window was clicked.
 pub type MpvClickCallback = Arc<dyn Fn() + Send + Sync>;
 /// Called from the observer thread when the mute state changed (a hotkey, the on-screen controller or `set_mute`).
@@ -66,6 +74,7 @@ pub struct MpvPlayer {
     delete_callbacks: Arc<RwLock<Vec<MpvDeleteCallback>>>,
     rating_callbacks: Arc<RwLock<Vec<MpvRatingCallback>>>,
     click_callbacks: Arc<RwLock<Vec<MpvClickCallback>>>,
+    escape_callbacks: Arc<RwLock<Vec<MpvClickCallback>>>,
     mute_callbacks: Arc<RwLock<Vec<MpvMuteCallback>>>,
     pause_callbacks: Arc<RwLock<Vec<MpvPauseCallback>>>,
     observer_handle: Mutex<Option<std::thread::JoinHandle<()>>>,
@@ -140,12 +149,12 @@ impl MpvPlayer {
         // A single left click never pauses the video; it is reported, so the Multiview can select the tile
         bind_click(&mpv_instance);
 
-        // Bind double-click, middle-click, 'f', 'F', and 'ESC' in MPV to cycle fullscreen
+        // Bind double-click, middle-click, 'f' and 'F' in MPV to cycle fullscreen; Esc is reported on its own
         let _ = mpv_instance.command("keybind", &["MBTN_LEFT_DBL", "cycle fullscreen"]);
         let _ = mpv_instance.command("keybind", &["MBTN_MID", "cycle fullscreen"]);
         let _ = mpv_instance.command("keybind", &["f", "cycle fullscreen"]);
         let _ = mpv_instance.command("keybind", &["F", "cycle fullscreen"]);
-        let _ = mpv_instance.command("keybind", &["ESC", "cycle fullscreen"]);
+        bind_escape(&mpv_instance);
 
         // Bind F2 and f2 in MPV without OSD to toggle snap-window (intercepted by RustView observer for rename)
         let _ = mpv_instance.command("keybind", &["F2", "no-osd cycle snap-window"]);
@@ -227,6 +236,7 @@ impl MpvPlayer {
         let delete_callbacks: Arc<RwLock<Vec<MpvDeleteCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let rating_callbacks: Arc<RwLock<Vec<MpvRatingCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let click_callbacks: Arc<RwLock<Vec<MpvClickCallback>>> = Arc::new(RwLock::new(Vec::new()));
+        let escape_callbacks: Arc<RwLock<Vec<MpvClickCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let mute_callbacks: Arc<RwLock<Vec<MpvMuteCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let pause_callbacks: Arc<RwLock<Vec<MpvPauseCallback>>> = Arc::new(RwLock::new(Vec::new()));
 
@@ -251,6 +261,7 @@ impl MpvPlayer {
             delete_callbacks: delete_callbacks.clone(),
             rating_callbacks: rating_callbacks.clone(),
             click_callbacks: click_callbacks.clone(),
+            escape_callbacks: escape_callbacks.clone(),
             mute_callbacks: mute_callbacks.clone(),
             pause_callbacks: pause_callbacks.clone(),
             observer_handle: Mutex::new(None),
@@ -326,7 +337,7 @@ impl MpvPlayer {
             bind_click(&self.mpv);
             let _ = self.mpv.command("keybind", &["MBTN_MID", "cycle fullscreen"]);
             let _ = self.mpv.command("keybind", &["MBTN_LEFT_DBL", "cycle fullscreen"]);
-            let _ = self.mpv.command("keybind", &["ESC", "cycle fullscreen"]);
+            bind_escape(&self.mpv);
 
             // Re-assert F2 binding
             let _ = self.mpv.command("keybind", &["F2", "no-osd cycle snap-window"]);

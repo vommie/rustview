@@ -13,11 +13,6 @@ use std::collections::HashSet;
 use std::time::Instant;
 
 impl MultiviewInstance {
-    /// The medium a rating reaches: the selected one (`None` = several tiles and none selected).
-    pub fn rating_target(&self) -> Option<MediaId> {
-        self.focus_target_media()
-    }
-
     /// A gutter is being dragged (a rating is ignored meanwhile).
     pub fn is_dragging(&self) -> bool {
         self.drag.is_some()
@@ -92,9 +87,9 @@ mod tests {
 
     #[test]
     fn several_media_without_a_selection_have_no_target_and_a_lone_one_is_it() {
-        assert_eq!(instance().lock().rating_target(), None);
+        assert_eq!(instance().lock().focus_target_media(), None);
         let lone = MultiviewInstance::create(Arc::new(NullSink), vec![seed(9, TileKind::Image)]);
-        assert_eq!(lone.lock().rating_target(), Some(9));
+        assert_eq!(lone.lock().focus_target_media(), Some(9));
     }
 
     #[test]

@@ -222,6 +222,8 @@ impl MultiviewInstance {
         for video in self.tiles.iter_mut().filter_map(|t| t.video.as_mut()) {
             video.window.set_cursor_hidden(hidden);
         }
+        // The marks of the selected medium may go and come with the cursor.
+        self.marks_visibility_changed();
     }
 
     pub fn is_cursor_hidden(&self) -> bool {

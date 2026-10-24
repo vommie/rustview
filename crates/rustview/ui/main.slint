@@ -355,6 +355,10 @@ export component MainWindow inherits Window {
 
     callback viewer-close-tab();
     callback viewer-refresh();
+    // Keys of the tab view that act on the selected medium of its Multiview: F5, DEL and the zoom keys (0 = reset, 1 = in, 2 = out).
+    callback viewer-refresh-key();
+    callback viewer-delete-key();
+    callback viewer-zoom-key(int);
     callback viewer-previous();
     callback viewer-next();
     // The area of the viewer tab that a Multiview fills changed (size or position); Rust places the native video windows.
@@ -578,7 +582,7 @@ export component MainWindow inherits Window {
                 return reject;
             }
 
-            // The crop tools of the tab view come first: Esc cancels the one opened first, Enter applies, Ctrl+S saves,
+            // The crop tools of the tab view come first: Esc cancels the one of the selected picture (else the one opened last), Enter applies, Ctrl+S saves,
             // Ctrl+Z undoes. Not while a text input has the focus.
             if root.active-view-mode == 1 && !root.is-text-input-focused {
                 if event.text == Key.Escape && root.edit-key(0) {
@@ -619,10 +623,14 @@ export component MainWindow inherits Window {
                 return accept;
             }
 
-            // DEL Shortcut for media file or folder deletion in Browse mode (Disabled while editing text inputs)
+            // DEL Shortcut for media file or folder deletion in Browse mode, the selected medium in a viewer tab (Disabled while editing text inputs)
             if event.text == Key.Delete && !root.is-text-input-focused {
                 if root.active-view-mode == 0 {
                     root.request-delete();
+                    return accept;
+                }
+                if root.active-view-mode == 1 {
+                    root.viewer-delete-key();
                     return accept;
                 }
             }
@@ -747,8 +755,23 @@ export component MainWindow inherits Window {
 
             if root.active-view-mode == 1 {
                 if event.text == Key.F5 {
-                    root.viewer-refresh();
+                    root.viewer-refresh-key();
                     return accept;
+                }
+                // Zoom of the selected picture: Ctrl+Backspace resets (Ctrl+0 rates), Ctrl++ / Ctrl+- step.
+                if event.modifiers.control && !event.modifiers.alt && !root.is-text-input-focused {
+                    if event.text == Key.Backspace {
+                        root.viewer-zoom-key(0);
+                        return accept;
+                    }
+                    if event.text == "+" || event.text == "=" {
+                        root.viewer-zoom-key(1);
+                        return accept;
+                    }
+                    if event.text == "-" || event.text == "_" {
+                        root.viewer-zoom-key(2);
+                        return accept;
+                    }
                 }
                 if event.text == Key.LeftArrow {
                     root.viewer-previous();

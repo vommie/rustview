@@ -18,6 +18,7 @@ use crate::system::{MonitorInfo, SystemDisplayService};
 use crate::ui::MainWindow;
 use crate::ui::MultiviewFullscreenWindow;
 use crate::ui::state::UiState;
+use crate::viewer::multiview::command::{MultiviewCommand, ZoomKey};
 use crate::viewer::multiview::instance::{MultiviewInstance, SharedInstance};
 use crate::viewer::multiview::route::UiAction;
 use crate::viewer::{PointerProbe, force_x11_fullscreen_on_monitor, get_raw_window_xid};
@@ -200,8 +201,8 @@ fn create_window() -> Result<MultiviewFullscreenWindow, slint::PlatformError> {
             tracing::warn!("[Multiview: ModalLock] A dialog is open, but it cannot be brought to the front");
         }
     });
-    win.on_request_rename(|| run(Session::rename_hovered));
-    win.on_request_delete(|| run(Session::delete_single));
+    win.on_request_rename(|| run(|s| s.command(MultiviewCommand::Rename)));
+    win.on_request_delete(|| run(|s| s.command(MultiviewCommand::Delete)));
     win.on_tile_clicked(|index, is_ctrl| run(|s| s.on_tile_click(index, is_ctrl)));
     win.on_background_clicked(|is_ctrl| run(|s| s.on_click(is_ctrl)));
     win.on_middle_clicked(|| {
@@ -225,7 +226,11 @@ fn create_window() -> Result<MultiviewFullscreenWindow, slint::PlatformError> {
     win.on_minimap_slider(|index, code| {
         with_session(|s| s.zoom_minimap_slider(index.max(0).saturating_as::<usize>(), code));
     });
-    win.on_zoom_key(|key| with_session(|s| s.zoom_key(key)));
+    win.on_zoom_key(|key| {
+        if let Some(zoom) = ZoomKey::from_code(key) {
+            run(|s| s.command(MultiviewCommand::Zoom(zoom)));
+        }
+    });
     win.on_crop_pointer(|index, phase, x, y, shift| {
         with_session(|s| s.crop_pointer(index.max(0).saturating_as::<usize>(), phase, x, y, shift));
     });

@@ -8,7 +8,7 @@ use super::follow::TileKey;
 use super::image_decode;
 use super::instance::MultiviewInstance;
 use super::model::{TileKind, aspect_differs};
-use super::route::{HostMode, UiAction};
+use super::route::HostMode;
 use crate::viewer::edit::claims::{self, EditClaim};
 use crate::viewer::edit::prefs as edit_prefs;
 use crate::viewer::edit::tile_edit::{TileEdit, aspect_of, crop_display};
@@ -319,20 +319,6 @@ impl MultiviewInstance {
         true
     }
 
-    /// Enter: applies the crop of the tile under the pointer, else the one opened last.
-    pub fn apply_crop_target(&mut self) -> bool {
-        let hovered = self
-            .hovered
-            .and_then(|i| self.tiles.get(i))
-            .filter(|t| t.edit.as_ref().is_some_and(|e| e.tool.is_some()))
-            .map(|t| t.key);
-        self.prune_crop_order();
-        match hovered.or_else(|| self.crop_order.newest()) {
-            Some(key) => self.apply_crop(key),
-            None => false,
-        }
-    }
-
     pub fn undo_edit(&mut self, key: TileKey) -> bool {
         self.change_stack(key, |edit| edit.stack.undo().is_some(), "Undo")
     }
@@ -492,35 +478,5 @@ impl MultiviewInstance {
         };
         let dpi = f64::from(self.host.surface.dpi);
         self.crop_pointer(index, phase, f64::from(x) * dpi, f64::from(y) * dpi, shift)
-    }
-
-    /// A key of the image editor (0 = Esc, 1 = Enter, 2 = Ctrl+S, 3 = Ctrl+Shift+S, 4 = Ctrl+Z, 5 = Ctrl+Shift+Z / Ctrl+Y).
-    /// Returns whether the editor used it (otherwise the key keeps its usual meaning) and what the application has to do.
-    pub fn edit_key(&mut self, code: i32) -> (bool, UiAction) {
-        if !self.edit_host_is_interactive() {
-            return (false, UiAction::None);
-        }
-        tracing::info!(code, "[ImageEdit: Keys] Editor key");
-        match code {
-            0 => (self.cancel_newest_crop(), UiAction::None),
-            1 => (self.apply_crop_target(), UiAction::None),
-            2 => match self.save_target() {
-                Some(key) => (true, UiAction::SaveTile(key)),
-                None => (false, UiAction::None),
-            },
-            3 => match self.save_target() {
-                Some(key) => (true, UiAction::SaveTileAs(key)),
-                None => (false, UiAction::None),
-            },
-            4 => (
-                self.undo_target().is_some_and(|key| self.undo_edit(key)),
-                UiAction::None,
-            ),
-            5 => (
-                self.undo_target().is_some_and(|key| self.redo_edit(key)),
-                UiAction::None,
-            ),
-            _ => (false, UiAction::None),
-        }
     }
 }

@@ -47,27 +47,15 @@ impl MultiviewHandle {
             tracing::debug!(rating, "[Multiview: Rating] Ignored: a dialog is open");
             return;
         }
-        let (target, mode, dragging, anchor) = {
+        let (mode, dragging, anchor) = {
             let guard = instance.lock();
-            (
-                guard.rating_target(),
-                guard.host_mode(),
-                guard.is_dragging(),
-                guard.hint_anchor(),
-            )
+            (guard.host_mode(), guard.is_dragging(), guard.hint_anchor())
         };
         if dragging || !matches!(mode, HostMode::Fullscreen | HostMode::TabView) {
             tracing::debug!(rating, ?mode, dragging, "[Multiview: Rating] Ignored");
             return;
         }
-        let Some(target) = target else {
-            tracing::info!(
-                rating,
-                "[Multiview: Rating] Nothing selected: the hint asks for a selection"
-            );
-            if let Some(anchor) = anchor {
-                super::hint::show(anchor, HintKind::NoSelection);
-            }
+        let Some(target) = super::commands::target_media(instance) else {
             return;
         };
         let ids = {
@@ -75,7 +63,7 @@ impl MultiviewHandle {
             rateable_ids(vec![target], |id| standing_of(&state, &app.library, id))
         };
         if ids.is_empty() {
-            tracing::debug!(rating, "[Multiview: Rating] Nothing to rate");
+            super::commands::refused(anchor, HintKind::NotRateable);
             return;
         }
         let rated = BridgeTags::apply_rating_to_ids(

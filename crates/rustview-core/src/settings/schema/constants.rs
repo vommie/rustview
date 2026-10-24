@@ -532,6 +532,9 @@ pub const MULTIVIEW_FOCUS_CORNER_LOGICAL_PX: u32 = 24;
 
 pub const MULTIVIEW_FOCUS_CORNER_THICKNESS_LOGICAL_PX: u32 = 2;
 
+/// The marks of the selected medium are hidden while the resting mouse cursor is hidden.
+pub const DEFAULT_FULLSCREEN_FOCUS_HIDE_WITH_CURSOR: bool = true;
+
 /// Ticks during which the display parameters of a recycled player are taken for those of the previous file if they are equal.
 pub const MULTIVIEW_STALE_PROBE_TICKS: u32 = 20;
 

@@ -11,10 +11,8 @@ use super::follow::TileKey;
 use super::instance::MultiviewInstance;
 use super::model::{AspectSource, aspect_differs, aspect_from_video_params};
 use super::prefs;
-use super::target_pick::pick_target;
 use super::tile::StaleProbe;
 use super::view::MediaBarTarget;
-use rustview_core::library::models::MediaId;
 use std::time::Instant;
 
 impl MultiviewInstance {
@@ -25,6 +23,7 @@ impl MultiviewInstance {
         self.ticks = self.ticks.wrapping_add(1);
         self.poll_pointer(pointer());
         self.poll_zoom();
+        self.poll_mark_reveal(Instant::now());
         if !self.has_video() {
             return;
         }
@@ -58,9 +57,6 @@ impl MultiviewInstance {
         }
         self.pointer = pointer;
         self.hovered = pointer.and_then(|(x, y)| self.tile_at_host(x, y));
-        if let Some(tile) = self.hovered.and_then(|i| self.tiles.get(i)) {
-            self.last_hovered = Some(tile.media_id);
-        }
     }
 
     /// Forgets the hover (the Multiview is hidden, parked, rearranged or its tiles changed).
@@ -128,19 +124,6 @@ impl MultiviewInstance {
                 })
             })
             .collect()
-    }
-
-    /// F2 acts on the tile under the pointer, else the last hovered one, else the first. The result becomes the rename
-    /// target.
-    pub fn rename_hovered(&mut self, pointer: Option<(i32, i32)>) -> Option<MediaId> {
-        let under_pointer = pointer.and_then(|(x, y)| self.tile_at_host(x, y));
-        let ids = self.slot_media_ids();
-        let target = pick_target(under_pointer, self.hovered, self.last_hovered, &ids);
-        if let Some(id) = target {
-            self.rename_target = Some(id);
-            self.rename_pinned = false;
-        }
-        target
     }
 
     /// Videos start with the aspect ratio of the library record; once mpv knows the real display size, correct it.

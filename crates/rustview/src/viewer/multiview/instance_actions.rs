@@ -157,15 +157,6 @@ impl MultiviewInstance {
         }
     }
 
-    /// DEL deletes the single medium the Multiview shows. With several media there is no telling which one DEL means; the
-    /// delete buttons of the tiles are the way then.
-    pub fn delete_single(&self) -> UiAction {
-        match self.solo_tile() {
-            Some((id, _, _)) => UiAction::DeleteTile(id),
-            None => UiAction::None,
-        }
-    }
-
     /// What the close button does: the fullscreen closes, a tab that shows the Multiview closes with its tab.
     pub(super) fn close_action(&self) -> UiAction {
         match self.host.surface.mode {

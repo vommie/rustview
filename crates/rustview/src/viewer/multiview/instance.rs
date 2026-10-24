@@ -65,7 +65,6 @@ pub struct MultiviewInstance {
     pub(super) host: HostState,
     pub(super) drag: Option<DragState>,
     pub(super) hovered: Option<usize>,
-    pub(super) last_hovered: Option<MediaId>,
     /// Last pointer position in the coordinates of the host window (physical pixels).
     pub(super) pointer: Option<(i32, i32)>,
     /// When the pointer last moved; the mouse cursor hides once it rested long enough.
@@ -79,9 +78,8 @@ pub struct MultiviewInstance {
     /// The color the fullscreen paints behind the media (also around a single video, whose window covers the display).
     pub(super) video_background: Option<[u8; 3]>,
     pub(super) ticks: u32,
+    /// The medium the F2 that is being handled acts on (set by `run_command`).
     pub(super) rename_target: Option<MediaId>,
-    /// The rename target was named by a player (not picked by the pointer) and is used by the next rename request.
-    pub(super) rename_pinned: bool,
     pub(super) clicks: ClickDetector,
     pub(super) revision: u64,
     /// The tiles whose zoom slider hangs below their media bar (every tile has its own; any number can be open).
@@ -96,6 +94,8 @@ pub struct MultiviewInstance {
     pub(super) crop_order: ToolOrder,
     /// The selected tile, the one the keys act on (`instance_focus`).
     pub(super) focus: Focus,
+    /// A key reached the selected tile: its marks show until then, also while they are hidden with the cursor.
+    pub(super) marks_revealed_until: Option<Instant>,
 }
 
 impl MultiviewInstance {
@@ -120,7 +120,6 @@ impl MultiviewInstance {
                 host: HostState::hidden(&PLACEHOLDER_CONTAINER),
                 drag: None,
                 hovered: None,
-                last_hovered: None,
                 pointer: None,
                 last_move: None,
                 pinned: false,
@@ -129,7 +128,6 @@ impl MultiviewInstance {
                 video_background: None,
                 ticks: 0,
                 rename_target: None,
-                rename_pinned: false,
                 clicks: ClickDetector::default(),
                 revision: 0,
                 zoom_slider: Vec::new(),
@@ -138,6 +136,7 @@ impl MultiviewInstance {
                 feedback: MediaFeedback::default(),
                 crop_order: ToolOrder::default(),
                 focus,
+                marks_revealed_until: None,
             })
         })
     }
@@ -168,11 +167,6 @@ impl MultiviewInstance {
             }
         }
         ids
-    }
-
-    /// The medium of every tile in slot order (a medium shown twice appears twice).
-    pub(super) fn slot_media_ids(&self) -> Vec<MediaId> {
-        self.tiles.iter().map(|t| t.media_id).collect()
     }
 
     /// The key of the tile in slot `index` (the bar and the layout address tiles by slot, which changes whenever tiles come
@@ -225,25 +219,9 @@ impl MultiviewInstance {
         self.layout.rows.len()
     }
 
-    /// The media an F2 rename acts on (the tile the user pressed F2 over, or the one reported by its player).
+    /// The medium the F2 that is being handled acts on (the selected one, see `run_command`).
     pub fn rename_target(&self) -> Option<MediaId> {
         self.rename_target
-    }
-
-    /// A player reported F2: the next rename request acts on that tile's medium.
-    pub fn note_rename_target_of_tile(&mut self, key: TileKey) {
-        if let Some(tile) = self.tiles.iter().find(|t| t.key == key) {
-            self.rename_target = Some(tile.media_id);
-            self.rename_pinned = true;
-        }
-    }
-
-    /// The tile a rename request acts on: the one a player named, else the one under the pointer (see `rename_hovered`).
-    pub fn resolve_rename_target(&mut self, pointer: Option<(i32, i32)>) -> Option<MediaId> {
-        if std::mem::take(&mut self.rename_pinned) {
-            return self.rename_target;
-        }
-        self.rename_hovered(pointer)
     }
 
     /// One click inside the Multiview (Slint tile or background, or a Ctrl+click reported by an mpv player).

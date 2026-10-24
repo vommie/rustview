@@ -16,8 +16,17 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   needs none.
 - **A short hint over the view** ("Select a medium first") when a key needs a medium and none is selected: a disc like the rating icon with one line below
   it, also over a video. It fades by itself.
+- **Every key that acts on a medium in a Multiview goes to the selected one** (with two or more media), wherever the pointer is: F2 (rename), DEL (delete),
+  Ctrl+Backspace / Ctrl++ / Ctrl+- (zoom), Enter (apply the crop), Ctrl+S / Ctrl+Shift+S (save, save as), Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y (undo, redo) and F5
+  in a tab (refresh). When a key does not fit the selected medium, the hint says why ("Nothing to save", "No crop to apply", "Videos cannot be zoomed
+  here", ...). While the pointer rests over a video, the keys the player knows itself (for example Ctrl+S, Ctrl++) still go to the player for now.
+- **DEL and the zoom keys work in a Multiview tab** too, not only in the fullscreen; DEL also with several media (it deletes the selected one).
+- **The marks of the selected medium hide with the mouse cursor** while the resting cursor is hidden; a key that acts on the medium shows them for a moment.
 
 ### Changed
+- **Esc** cancels the crop tool of the selected picture first, then the other crop tools (newest first), then it closes the fullscreen as before.
+- **Esc over a video in a tab** no longer opens the fullscreen; it behaves like Esc anywhere else in the tab.
+- **F5 in a Multiview tab** refreshes the selected medium (the refresh button of the tab still refreshes all of them).
 - **Ctrl+0..5 in a Multiview rate the selected medium only**, wherever the pointer is (also when pressed over a video). Before, they rated every medium the
   view showed; with several media and none selected nothing is rated now and the hint appears. A Multiview of one medium rates it as before.
 - A click on a video in a Multiview is no longer ignored: it selects the video (it still never pauses it).

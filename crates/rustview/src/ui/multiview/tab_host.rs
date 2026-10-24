@@ -14,6 +14,7 @@ use super::views::{self, ImageCache, ViewModels};
 use crate::ui::{MainWindow, MultiviewTabBus};
 use crate::viewer::multiview::HostSurface;
 use crate::viewer::multiview::click::ClickKind;
+use crate::viewer::multiview::command::{MultiviewCommand, ZoomKey};
 use crate::viewer::multiview::instance::{MultiviewInstance, SharedInstance, WeakInstance};
 use crate::viewer::multiview::media_actions::{BarClick, MediaActionId};
 use crate::viewer::multiview::primary_actions::PrimaryActionId;
@@ -141,20 +142,49 @@ pub fn bind(window: &MainWindow, handle: MultiviewHandle) {
     });
     bus.on_crop_ratio(|index, landscape| act(|mv| mv.crop_ratio(index.max(0).saturating_as::<usize>(), landscape)));
     window.on_edit_key(edit_key);
+    window.on_viewer_delete_key(|| command_key(MultiviewCommand::Delete));
+    window.on_viewer_zoom_key(|code| {
+        if let Some(zoom) = ZoomKey::from_code(code) {
+            command_key(MultiviewCommand::Zoom(zoom));
+        }
+    });
     bus.on_background_clicked(on_click);
     bus.on_middle_clicked(|| run(route_for(RoutedEvent::ToggleFullscreen, ClickKind::None)));
 }
 
-/// A key of the image editor in the tab view: the instance of the shown tab decides; returns whether it used the key.
+/// A key of the image editor in the tab view (0 = Esc, see `MultiviewCommand::from_edit_code` for the others): the instance of
+/// the shown tab decides; returns whether it used the key (Esc only when it cancelled a crop tool, every other one always).
 fn edit_key(code: i32) -> bool {
     let Some(instance) = current_instance() else {
         return false;
     };
-    let (used, action) = instance.lock().edit_key(code);
+    let Some(command) = MultiviewCommand::from_edit_code(code) else {
+        let used = code == 0 && instance.lock().escape_crop();
+        drop(instance);
+        refresh();
+        return used;
+    };
+    let action = super::commands::run(&instance, command);
     drop(instance);
     refresh();
     run(action);
-    used
+    true
+}
+
+/// A key of the tab view that acts on the selected medium of the shown tab (DEL, the zoom keys).
+fn command_key(command: MultiviewCommand) {
+    let Some(instance) = current_instance() else {
+        return;
+    };
+    let action = super::commands::run(&instance, command);
+    drop(instance);
+    refresh();
+    run(action);
+}
+
+/// The selected medium of the shown tab for a key the application carries out itself (F5), or `None` after the hint.
+pub fn key_target_media() -> Option<MediaId> {
+    super::commands::target_media(&current_instance()?)
 }
 
 /// Runs `f` on the instance of the shown tab and syncs the result.
@@ -433,9 +463,8 @@ fn on_tick() {
     update_bar_overlay();
 }
 
-/// The medium an F2 rename acts on in the active tab: the tile a player named, else the tile under the pointer, else the first.
+/// The medium an F2 rename acts on in the active tab: its selected medium (the hint shows when several are shown and none is).
 pub fn rename_target(tab_manager: &ViewerTabManager) -> Option<MediaId> {
     let tab = tab_manager.get_active_tab()?;
-    let pointer = with_host(|h| h.probe.as_ref().and_then(|p| p.position_in(h.main_xid))).flatten();
-    tab.multiview.instance.lock().resolve_rename_target(pointer)
+    super::commands::target_media(&tab.multiview.instance)
 }

@@ -6,6 +6,7 @@
 
 mod bar_hosting;
 pub mod bar_overlay;
+mod commands;
 pub mod cursor;
 pub mod eligibility;
 mod feedback;

@@ -43,7 +43,8 @@ export component MultiviewFullscreenWindow inherits Window {
     callback crop-pointer(int /* tile index */, int /* phase */, length /* x */, length /* y */, bool /* shift */);
     callback crop-ratio(int /* tile index */, bool /* landscape */);
     // A key of the image editor: 0 = Esc, 1 = Enter, 2 = Ctrl+S, 3 = Ctrl+Shift+S, 4 = Ctrl+Z, 5 = Ctrl+Shift+Z / Ctrl+Y.
-    // True = the editor used it (Esc cancelled a crop tool, ...); otherwise the key keeps its usual meaning.
+    // True = the editor used it (Esc cancelled a crop tool; the others act on the selected picture or show why not); otherwise
+    // the key keeps its usual meaning.
     callback edit-key(int /* code */) -> bool;
     callback zoom-key(int /* 0 = reset, 1 = in, 2 = out */);
     // Ctrl+0..5 rate the media shown (text, Ctrl, Alt, Meta, key repeat); true = it was a rating key.
@@ -74,7 +75,8 @@ export component MultiviewFullscreenWindow inherits Window {
                 }
                 return accept;
             }
-            // The crop tools come first: Esc cancels the one opened first, the normal Esc only when none is open.
+            // The crop tools come first: Esc cancels the one of the selected picture, else the one opened last; the normal Esc only
+            // when none is open.
             if event.text == Key.Escape {
                 if root.edit-key(0) {
                     return accept;
@@ -113,7 +115,7 @@ export component MultiviewFullscreenWindow inherits Window {
             if root.rating-hotkey(event.text, event.modifiers.control, event.modifiers.alt, event.modifiers.meta, event.repeat) {
                 return accept;
             }
-            // Zoom of the image under the pointer: Ctrl+Backspace resets (Ctrl+0 rates), Ctrl++ / Ctrl+- step.
+            // Zoom of the selected picture: Ctrl+Backspace resets (Ctrl+0 rates), Ctrl++ / Ctrl+- step.
             if event.modifiers.control && event.text == Key.Backspace {
                 root.zoom-key(0);
                 return accept;

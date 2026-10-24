@@ -11,6 +11,7 @@ use crate::ui::MultiviewFullscreenWindow;
 use crate::viewer::PointerProbe;
 use crate::viewer::multiview::HostSurface;
 use crate::viewer::multiview::click::ClickKind;
+use crate::viewer::multiview::command::MultiviewCommand;
 use crate::viewer::multiview::media_actions::{BarClick, MediaActionId};
 use crate::viewer::multiview::primary_actions::PrimaryActionId;
 use crate::viewer::multiview::route::{HostMode, OriginKind, RoutedEvent, UiAction, route};
@@ -109,21 +110,27 @@ impl Session {
         self.refresh();
     }
 
-    /// A key of the image editor; returns whether it was used and what the application has to do about it.
+    /// A key of the image editor (0 = Esc, see `MultiviewCommand::from_edit_code` for the others); returns whether it was used
+    /// and what the application has to do about it. Esc is used only when it cancelled a crop tool; every other editor key is
+    /// used (it acts on the selected picture, or the hint says why not).
     pub(super) fn edit_key(&mut self, code: i32) -> (bool, UiAction) {
-        let result = self.instance.lock().edit_key(code);
+        let outcome = match MultiviewCommand::from_edit_code(code) {
+            Some(command) => (true, super::commands::run(&self.instance, command)),
+            None => (code == 0 && self.instance.lock().escape_crop(), UiAction::None),
+        };
         self.refresh();
-        result
+        outcome
+    }
+
+    /// A key that acts on the selected medium (F2, DEL, the zoom keys).
+    pub(super) fn command(&mut self, command: MultiviewCommand) -> UiAction {
+        let action = super::commands::run(&self.instance, command);
+        self.refresh();
+        action
     }
 
     pub(super) fn zoom_minimap_slider(&mut self, index: usize, code: i32) {
         self.instance.lock().zoom_minimap_slider(index, code);
-        self.refresh();
-    }
-
-    /// Ctrl+Backspace / Ctrl++ / Ctrl+- zoom the image under the pointer (else the only image).
-    pub(super) fn zoom_key(&mut self, key: i32) {
-        self.instance.lock().zoom_key(key);
         self.refresh();
     }
 
@@ -250,20 +257,6 @@ impl Session {
             tracing::info!(is_ctrl, ?action, "[Multiview: Click] Double click");
         }
         action
-    }
-
-    /// F2 acts on the tile under the pointer, else the last hovered one, else the first.
-    pub(super) fn rename_hovered(&mut self) -> UiAction {
-        let pointer = pointer_in_window(self.probe.as_ref(), &self.monitor);
-        match self.instance.lock().rename_hovered(pointer) {
-            Some(_) => UiAction::RequestRename,
-            None => UiAction::None,
-        }
-    }
-
-    /// DEL in the fullscreen window.
-    pub(super) fn delete_single(&mut self) -> UiAction {
-        self.instance.lock().delete_single()
     }
 
     /// The user deleted media through the Multiview: their tiles leave the view.

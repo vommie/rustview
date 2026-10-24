@@ -9,6 +9,7 @@ use super::session::{self, Session};
 use super::session_convert;
 use super::tab_host;
 use crate::viewer::multiview::click::ClickKind;
+use crate::viewer::multiview::command::MultiviewCommand;
 use crate::viewer::multiview::events::{MultiviewEventSink, PlayerEvent};
 use crate::viewer::multiview::instance::WeakInstance;
 use crate::viewer::multiview::media_actions::MediaActionId;
@@ -96,28 +97,49 @@ fn route_event(handle: &MultiviewHandle, weak: &WeakInstance, event: PlayerEvent
             refresh_host(handle, mode);
             return;
         }
-        // Esc in a video's window arrives as a fullscreen toggle: an open crop tool of an image is cancelled first.
-        PlayerEvent::ToggleFullscreen | PlayerEvent::CloseTab if instance.lock().cancel_newest_crop() => {
-            let mode = instance.lock().host_mode();
+        // Esc in a video's window runs the same chain as Esc anywhere else: a crop tool (the selected tile's first), then the
+        // fullscreen closes or, in the tab view, a selection of tabs ends.
+        PlayerEvent::EscapePressed => {
+            let (cancelled, mode) = {
+                let mut guard = instance.lock();
+                (guard.escape_crop(), guard.host_mode())
+            };
             drop(instance);
-            refresh_host(handle, mode);
+            if cancelled {
+                refresh_host(handle, mode);
+            } else {
+                match mode {
+                    HostMode::Fullscreen => {
+                        session::close_by_user();
+                    }
+                    HostMode::TabView => handle.end_tab_selection(),
+                    HostMode::TabGrid | HostMode::Hidden => {}
+                }
+            }
             return;
         }
         PlayerEvent::ToggleFullscreen => (RoutedEvent::ToggleFullscreen, ClickKind::None),
         PlayerEvent::CloseTab => (RoutedEvent::CloseTab, ClickKind::None),
-        PlayerEvent::RenameRequested(tile) => {
-            instance.lock().note_rename_target_of_tile(tile);
-            (RoutedEvent::Rename, ClickKind::None)
+        // F2 and DEL in a video's window act on the selected medium, whichever video reported them.
+        PlayerEvent::RenameRequested => {
+            let mode = instance.lock().host_mode();
+            match mode {
+                HostMode::Fullscreen => {
+                    let action = super::commands::run(&instance, MultiviewCommand::Rename);
+                    drop(instance);
+                    execute(action, handle, None);
+                }
+                HostMode::TabView => handle.request_tab_rename(),
+                HostMode::TabGrid | HostMode::Hidden => {}
+            }
+            return;
         }
         PlayerEvent::DeleteRequested => {
-            let (mode, action) = {
-                let guard = instance.lock();
-                (guard.host_mode(), guard.delete_single())
-            };
+            let action = super::commands::run(&instance, MultiviewCommand::Delete);
+            let mode = instance.lock().host_mode();
             drop(instance);
-            if mode == HostMode::Fullscreen {
-                execute(action, handle, None);
-            }
+            execute(action, handle, None);
+            refresh_host(handle, mode);
             return;
         }
         PlayerEvent::RatingRequested(rating) => {

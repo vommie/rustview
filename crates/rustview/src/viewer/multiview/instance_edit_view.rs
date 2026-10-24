@@ -145,39 +145,6 @@ impl MultiviewInstance {
         })
     }
 
-    /// The tile under the pointer if it has unsaved edits, else the only tile that has some (Ctrl+S).
-    pub fn save_target(&self) -> Option<TileKey> {
-        let dirty = |i: usize| self.tile_is_dirty(i);
-        if let Some(index) = self.hovered.filter(|i| dirty(*i)) {
-            return Some(self.tiles[index].key);
-        }
-        let mut keys = (0..self.tiles.len()).filter(|i| dirty(*i)).map(|i| self.tiles[i].key);
-        match (keys.next(), keys.next()) {
-            (Some(only), None) => Some(only),
-            _ => None,
-        }
-    }
-
-    /// The tile under the pointer if it has something to undo or redo, else the only such tile (Ctrl+Z, Ctrl+Shift+Z).
-    pub fn undo_target(&self) -> Option<TileKey> {
-        let editable = |i: usize| {
-            self.tiles
-                .get(i)
-                .and_then(|t| t.edit.as_ref())
-                .is_some_and(|e| !e.saving)
-        };
-        if let Some(index) = self.hovered.filter(|i| editable(*i)) {
-            return Some(self.tiles[index].key);
-        }
-        let mut keys = (0..self.tiles.len())
-            .filter(|i| editable(*i))
-            .map(|i| self.tiles[i].key);
-        match (keys.next(), keys.next()) {
-            (Some(only), None) => Some(only),
-            _ => None,
-        }
-    }
-
     /// The file of tile `key` is being written (`true`) or the attempt ended without writing (`false`).
     pub fn set_saving(&mut self, key: TileKey, saving: bool) {
         let Some(index) = self.tile_index(key) else { return };
@@ -246,9 +213,6 @@ impl MultiviewInstance {
         tile.source = Some(source);
         tile.edit = None;
         tile.save_badge = SaveBadge::Saved(Instant::now());
-        if self.last_hovered == Some(previous) {
-            self.last_hovered = Some(media_id);
-        }
         crate::viewer::edit::touch_unsaved();
         tracing::info!(
             previous_media_id = previous,

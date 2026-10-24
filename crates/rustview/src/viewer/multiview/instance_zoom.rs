@@ -5,6 +5,7 @@
 //! changes, runs what `ZoomState::poll` asks for on worker threads (the events come back through the sink) and describes the
 //! result for the host (`TileView::zoom`, `TileView::minimap`, `zoom_bubbles`).
 
+use super::command::ZoomKey;
 use super::events::PlayerEvent;
 use super::follow::TileKey;
 use super::instance::MultiviewInstance;
@@ -284,24 +285,23 @@ impl MultiviewInstance {
         self.bump();
     }
 
-    /// Ctrl+Backspace (0, reset), Ctrl++ (1) and Ctrl+- (2): the image under the pointer, else the only image of the Multiview.
-    pub fn zoom_key(&mut self, key: i32) {
-        let index = self
-            .hovered
-            .filter(|&i| self.zoomable(i))
-            .or_else(|| (self.tiles.len() == 1 && self.zoomable(0)).then_some(0));
-        let Some(index) = index else { return };
+    /// Ctrl+Backspace (reset), Ctrl++ and Ctrl+- on the picture of tile `index` (the selected one, see `instance_commands`).
+    /// Returns false when that tile cannot be zoomed.
+    pub(super) fn zoom_key_at(&mut self, index: usize, key: ZoomKey) -> bool {
+        if !self.zoomable(index) {
+            return false;
+        }
         let (prefs, now) = (zoom_prefs::current(), Instant::now());
         if let Some(zoom) = self.tiles[index].zoom.as_mut() {
             match key {
-                0 => zoom.reset(&prefs, now),
-                1 => zoom.zoom_step(true, prefs.wheel_step, None, &prefs, now),
-                2 => zoom.zoom_step(false, prefs.wheel_step, None, &prefs, now),
-                _ => return,
+                ZoomKey::Reset => zoom.reset(&prefs, now),
+                ZoomKey::In => zoom.zoom_step(true, prefs.wheel_step, None, &prefs, now),
+                ZoomKey::Out => zoom.zoom_step(false, prefs.wheel_step, None, &prefs, now),
             }
         }
         self.poll_zoom_at(now);
         self.bump();
+        true
     }
 
     /// The zoom of tile `index` in percent (for the status), if it can be zoomed.

@@ -197,12 +197,14 @@ export component MultiviewCanvas inherits Rectangle {
         }
 
         // The corner marks of the selected medium of several (on the picture; mpv draws them on a video). A zoomed picture has them
-        // in the corners of its room.
+        // in the corners of the part of it that is visible in its room.
         if root.interactive && tile.focused && tile.kind != 1 : MultiviewFocusCorners {
-            x: tile.zoomed ? tile.zoom-area-x : 0px;
-            y: tile.zoomed ? tile.zoom-area-y : 0px;
-            width: tile.zoomed ? tile.zoom-area-width : parent.width;
-            height: tile.zoomed ? tile.zoom-area-height : parent.height;
+            property <length> left: Math.max(tile.zoom-x, 0px);
+            property <length> top: Math.max(tile.zoom-y, 0px);
+            x: tile.zoomed ? tile.zoom-area-x + self.left : 0px;
+            y: tile.zoomed ? tile.zoom-area-y + self.top : 0px;
+            width: tile.zoomed ? Math.min(tile.zoom-x + tile.zoom-width, tile.zoom-area-width) - self.left : parent.width;
+            height: tile.zoomed ? Math.min(tile.zoom-y + tile.zoom-height, tile.zoom-area-height) - self.top : parent.height;
             mark-length: tile.focus-corner;
             thickness: tile.focus-thickness;
         }
