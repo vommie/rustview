@@ -107,6 +107,9 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 - **Opening the Tab-Grid froze RustView** as soon as a tab was open (since 0.4.0): the app no longer reacted and had to be killed.
 - **F5 in Browse** did nothing although the menu named it; it refreshes the selected files now.
 - The tag menu no longer names F2 for "Rename Tag..." (F2 never renamed a tag).
+- **A tooltip stayed on screen after a right-click menu** (for example "Tag: Forest" after right-clicking a tag and pressing Esc): the menu's
+  heading showed it and it did not go away when the menu closed. Closing a menu now hides it, and while a menu is open only its own entries show
+  tooltips. The heading of a menu shows a tooltip only when the name in it is cut short.
 - **The tag filter ("Filter tags...") took no typing after a context menu** (the Browse filter neither): the click into the field only closed the menu,
   the field did not get the cursor, and what you typed went to type-ahead find instead. The click now puts the cursor into the field. While a menu is open
   the keys belong to it: Esc closes the menu instead of clearing a filter field behind it, and letters no longer land in that field.

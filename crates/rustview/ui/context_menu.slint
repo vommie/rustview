@@ -25,6 +25,7 @@ export component ContextMenuItemRow inherits Rectangle {
         text: root.item.tooltip;
         hold: root.item.hold && root.usable;
         is-enabled: (root.item.tooltip != "" || (root.item.hold && root.usable)) && root.item.kind != 3;
+        in-menu: true;
         delay: 350ms;
     }
 
@@ -106,6 +107,7 @@ export component ContextMenuItemRow inherits Rectangle {
         height: 100%;
         text: root.item.tooltip != "" ? root.item.tooltip : root.item.text;
         tooltip-enabled: root.item.tooltip != "";
+        in-menu: true;
         delay: 350ms;
 
         HorizontalLayout {

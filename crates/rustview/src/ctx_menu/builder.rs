@@ -31,14 +31,14 @@ impl CtxMenuBuilder {
 
     /// Single Point of Truth (SPoT): Formats a dynamic header with a sticky prefix and left-side ellipsis (...filename.ext)
     /// to prevent visual overflow in context menus while preserving the category prefix and the file extension.
-    /// Returns `(display_text, full_tooltip_text)`.
+    /// Returns `(display_text, full_tooltip_text)`; the tooltip is empty when the name fits (it would only repeat the header).
     pub fn format_header_title(prefix: &str, name: &str, max_name_chars: usize) -> (String, String) {
         let trimmed_name = name.trim();
         let full_text = format!("{prefix}{trimmed_name}");
 
         let char_count = trimmed_name.chars().count();
         if char_count <= max_name_chars {
-            (full_text.clone(), full_text)
+            (full_text, String::new())
         } else {
             let keep_count = max_name_chars.saturating_sub(1);
             let chars: Vec<char> = trimmed_name.chars().collect();

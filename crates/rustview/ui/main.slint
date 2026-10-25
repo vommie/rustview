@@ -286,6 +286,13 @@ export component MainWindow inherits Window {
     in-out property <bool> is-context-menu-open: false;
     in property <[ContextMenuLevelModel]> context-menu-levels: [];
 
+    // Opening a menu hides the tooltip of the element behind it; closing it hides the tooltip of a menu entry, which vanished
+    // under the pointer without hearing that it left.
+    changed is-context-menu-open => {
+        GlobalTooltip.menu-open = root.is-context-menu-open;
+        GlobalTooltip.hide();
+    }
+
     in property <[MediaItemView]> media-items: [];
     in property <[FolderNodeView]> folders: [];
     in property <[FavoriteItemView]> favorites: [];

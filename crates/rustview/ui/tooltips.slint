@@ -40,6 +40,9 @@ export global GlobalTooltip {
     in-out property <IconId> icon: IconId.none;
     in-out property <length> pos-x: 0px;
     in-out property <length> pos-y: 0px;
+    // A context menu of the window is open: only the tooltips of its entries show (`TooltipHost.in-menu`). An element behind the
+    // menu's backdrop never hears that the pointer left, so its tooltip would appear over the menu.
+    in-out property <bool> menu-open: false;
 
     public function show(
         text: string,
@@ -139,6 +142,8 @@ export component TooltipHost inherits Rectangle {
     in property <bool> is-enabled: true;
     // The element acts only when held: the bubble shows the hold badge (also without a text).
     in property <bool> hold: false;
+    // The element is an entry of a context menu (see `GlobalTooltip.menu-open`).
+    in property <bool> in-menu: false;
 
     // Behavioral Options
     in property <duration> delay: 0ms; // 0ms = use TooltipSettings.default-delay
@@ -149,6 +154,7 @@ export component TooltipHost inherits Rectangle {
     // Internal State
     property <bool> is-hovered: false;
     property <duration> effective-delay: (root.delay > 0ms) ? root.delay : TooltipSettings.default-delay;
+    property <bool> allowed: TooltipSettings.enabled && root.is-enabled && (root.in-menu || !GlobalTooltip.menu-open);
 
     width: 100%;
     height: 100%;
@@ -160,7 +166,7 @@ export component TooltipHost inherits Rectangle {
         interval: root.effective-delay;
         running: false;
         triggered() => {
-            if root.is-hovered && TooltipSettings.enabled && root.is-enabled && (root.text != "" || root.hold) {
+            if root.is-hovered && root.allowed && (root.text != "" || root.hold) {
                 let target-x = root.absolute-position.x + root.offset-x;
                 let target-y = root.absolute-position.y + root.height + 4px + root.offset-y;
                 GlobalTooltip.hold = root.hold;
@@ -179,7 +185,7 @@ export component TooltipHost inherits Rectangle {
     /// Invoked when mouse enters the host component area
     public function on-hover-enter(mx: length, my: length) {
         root.is-hovered = true;
-        if TooltipSettings.enabled && root.is-enabled && (root.text != "" || root.hold) {
+        if root.allowed && (root.text != "" || root.hold) {
             if root.effective-delay <= 0ms {
                 root.show-now(mx, my);
             } else {
@@ -192,7 +198,7 @@ export component TooltipHost inherits Rectangle {
     public function reveal(mx: length, my: length) {
         root.is-hovered = true;
         hover-timer.running = false;
-        if TooltipSettings.enabled && root.is-enabled && (root.text != "" || root.hold) {
+        if root.allowed && (root.text != "" || root.hold) {
             root.show-now(mx, my);
         }
     }
@@ -241,6 +247,7 @@ export component TooltipArea inherits Rectangle {
     in property <length> offset-x: 0px;
     in property <length> offset-y: 0px;
     in property <MouseCursor> cursor: MouseCursor.default;
+    in property <bool> in-menu: false;
 
     callback clicked();
     // A press of the right mouse button (a control with a second meaning on the right click).
@@ -253,6 +260,7 @@ export component TooltipArea inherits Rectangle {
         shortcut: root.shortcut;
         icon: root.icon;
         is-enabled: root.tooltip-enabled;
+        in-menu: root.in-menu;
         delay: root.delay;
         follow-cursor: root.follow-cursor;
         offset-x: root.offset-x;
