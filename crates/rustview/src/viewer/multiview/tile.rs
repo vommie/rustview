@@ -6,7 +6,7 @@
 use super::audio::TileAudio;
 use super::events::{MultiviewEventSink, PlayerEvent};
 use super::feedback_overlay::OverlayState;
-use super::focus_overlay::CornerMarks;
+use super::focus_overlay::WindowMarks;
 use super::follow::TileKey;
 use super::instance::WeakInstance;
 use super::layout::Rect;
@@ -50,8 +50,8 @@ pub struct VideoTile {
     pub owner: EventOwner,
     /// The rating icon that mpv draws over the picture right now, if any.
     pub feedback_overlay: Option<OverlayState>,
-    /// The corner marks of the selected tile that mpv draws over the picture right now, if any.
-    pub focus_overlay: Option<CornerMarks>,
+    /// The part of the corner marks of the selected tile that mpv draws over the picture right now, if any.
+    pub focus_overlay: Option<WindowMarks>,
     /// The control bar of the video.
     pub bar: VideoBarState,
     /// The time badge mpv draws over the picture in the tab grid right now, if any.

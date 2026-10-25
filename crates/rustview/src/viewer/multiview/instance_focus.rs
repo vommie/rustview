@@ -1,5 +1,6 @@
 //! Instance behavior around the selected tile (`focus`): selecting it, keeping it in line with the tiles, the marks a host draws
-//! for it and the corner marks of a video, which mpv draws itself (`focus_overlay`).
+//! for it and the part of the corner marks that mpv draws over a video (`focus_overlay`). The marks frame the view of the tile
+//! (`host_room`), not its medium.
 
 use super::focus_overlay::{self, CornerMarks};
 use super::follow::TileKey;
@@ -13,7 +14,7 @@ use super::route::HostMode;
 use super::view::FocusMarkView;
 use rustview_core::library::models::MediaId;
 use rustview_core::settings::schema::MULTIVIEW_FOCUS_CORNER_THICKNESS_LOGICAL_PX;
-use rustview_core::util::cast::{FloatToInt, SaturatingAs};
+use rustview_core::util::cast::FloatToInt;
 use std::time::Instant;
 
 impl MultiviewInstance {
@@ -151,50 +152,60 @@ impl MultiviewInstance {
         if !self.host_is_interactive() || self.focus_marked() != Some(tile.key) || !self.marks_shown() {
             return None;
         }
-        let placed = self.layout.tiles.get(index)?;
-        let projection = &self.host.projection;
-        let (column, content) = (projection.rect(placed.column), projection.rect(placed.content));
+        let (view, content) = (self.host_room(index)?, self.host_content(index)?);
         let (corner, thickness) = self.focus_mark_size();
         Some(FocusMarkView {
-            column: Rect::new(column.x - content.x, column.y - content.y, column.w, column.h),
+            view: Rect::new(view.x - content.x, view.y - content.y, view.w, view.h),
             brighten: f32::from(prefs::current().focus_marks.brighten_percent) / 100.0,
             corner,
             thickness,
         })
     }
 
-    /// Brings the corner marks that mpv draws over the videos in line with the selection: the selected video of several gets
-    /// them (in the corners of its window), every other video has none. Costs a comparison per video when nothing changed, so
-    /// the host tick may call it to retry a mark mpv did not take yet (no picture).
-    pub(super) fn sync_focus_overlays(&mut self) {
-        let marked = if self.host_is_interactive() && self.marks_shown() {
-            self.focus_marked()
-        } else {
-            None
-        };
+    /// The corner marks of the selected tile in host pixels: in the corners of its view (`host_room`), whatever its medium,
+    /// zoom or kind. `None` while no tile carries marks (one tile, none selected, hidden with the cursor, no interactive host).
+    fn focus_corner_marks(&self) -> Option<(TileKey, CornerMarks)> {
+        if !self.host_is_interactive() || !self.marks_shown() {
+            return None;
+        }
+        let key = self.focus_marked()?;
+        let view = self.host_room(self.tile_index(key)?)?;
         let (length, thickness) = self.focus_mark_size();
-        let projection = self.host.projection;
-        for (tile, placed) in self.tiles.iter_mut().zip(&self.layout.tiles) {
+        Some((key, CornerMarks::new(view, length, thickness)?))
+    }
+
+    /// Brings the corner marks that mpv draws over the videos in line with the selection: the selected video of several gets the
+    /// part of its marks that its window covers (all of them while it is zoomed and its window fills the view, none while it sits
+    /// letterboxed in the middle of a taller or wider view, where the canvas draws them), every other video has none. Costs a
+    /// comparison per video when nothing changed, so the host tick may call it to retry a mark mpv did not take yet (no picture).
+    pub(super) fn sync_focus_overlays(&mut self) {
+        let marked = self.focus_corner_marks();
+        for index in 0..self.tiles.len() {
+            let wanted = match marked {
+                Some((key, marks)) if key == self.tiles[index].key => self
+                    .video_window_rect(index)
+                    .map(|window| marks.in_window(window))
+                    .filter(focus_overlay::WindowMarks::any),
+                _ => None,
+            };
+            let tile = &mut self.tiles[index];
             let Some(video) = tile.video.as_mut() else {
                 continue;
             };
-            let wanted = if marked == Some(tile.key) && tile.kind == TileKind::Video && tile.error.is_none() {
-                let Rect { w, h, .. } = projection.rect(placed.content);
-                CornerMarks::new(
-                    (w.saturating_as::<u32>(), h.saturating_as::<u32>()),
-                    length.saturating_as::<u32>(),
-                    thickness.saturating_as::<u32>(),
-                )
-            } else {
-                None
-            };
+            let wanted = wanted.filter(|_| tile.kind == TileKind::Video && tile.error.is_none());
             if video.focus_overlay == wanted {
                 continue;
             }
             if let Some(marks) = wanted {
                 video.focus_overlay = focus_overlay::show(&video.player, &marks).then_some(marks);
                 if video.focus_overlay.is_some() {
-                    tracing::debug!(tile = tile.key, window = ?marks.window, "[Multiview: Focus] Video marks shown");
+                    tracing::debug!(
+                        tile = tile.key,
+                        view = ?marks.marks.view,
+                        window = ?marks.window,
+                        corners = marks.parts.iter().flatten().count(),
+                        "[Multiview: Focus] Video marks shown"
+                    );
                 }
             } else {
                 focus_overlay::hide(&video.player);
@@ -206,8 +217,10 @@ impl MultiviewInstance {
 
 #[cfg(test)]
 mod tests {
+    use crate::viewer::multiview::command::ZoomKey;
     use crate::viewer::multiview::events::{MultiviewEventSink, PlayerEvent};
     use crate::viewer::multiview::instance::{MultiviewInstance, SharedInstance, WeakInstance};
+    use crate::viewer::multiview::layout::Rect;
     use crate::viewer::multiview::model::TileKind;
     use crate::viewer::multiview::tile::TileSeed;
     use crate::viewer::multiview::{HostSurface, follow::TileKey};
@@ -215,6 +228,7 @@ mod tests {
     use slint::{Rgb8Pixel, SharedPixelBuffer};
     use std::path::PathBuf;
     use std::sync::Arc;
+    use std::time::{Duration, Instant};
 
     struct NullSink;
 
@@ -298,6 +312,38 @@ mod tests {
             ),
         );
         assert_eq!(mv.focus_target(), Some(second));
+    }
+
+    #[test]
+    fn the_marks_frame_the_view_of_the_tile_not_its_medium() {
+        let shared = shown(&[1, 2]);
+        let mut mv = shared.lock();
+        mv.select_tile_at(1);
+        let (room, content) = (mv.host_room(1).unwrap(), mv.host_content(1).unwrap());
+        assert!(
+            room.contains_rect(content) && room.h == 1080 && content.h < room.h,
+            "the medium is letterboxed in its view"
+        );
+        let focus = mv.view().tiles[1].focus.unwrap();
+        // Relative to the tile (the medium): the view starts above it and spans the whole row height.
+        assert_eq!(
+            focus.view,
+            Rect::new(room.x - content.x, room.y - content.y, room.w, room.h)
+        );
+        let (_, marks) = mv.focus_corner_marks().unwrap();
+        assert_eq!(marks.view, room);
+    }
+
+    #[test]
+    fn zooming_the_selected_picture_leaves_its_marks_where_they_are() {
+        let shared = shown(&[1, 2]);
+        let mut mv = shared.lock();
+        mv.select_tile_at(0);
+        let before = mv.view().tiles[0].focus.unwrap();
+        assert!(mv.zoom_key_at(0, ZoomKey::In));
+        mv.poll_zoom_at(Instant::now() + Duration::from_secs(2));
+        assert!(mv.view().tiles[0].zoom.is_some(), "the picture is zoomed");
+        assert_eq!(mv.view().tiles[0].focus.unwrap().view, before.view);
     }
 
     #[test]

@@ -89,12 +89,19 @@ New choice "The selected video" for Settings > Fullscreen > Sound > "Sound follo
 the sound and mutes the other videos the policy controls; focusing an image changes nothing. The default stays "first".
 
 ## Look
-- **Area:** the empty part of the focused tile's column (`TileLayout::column`, full row height) is brightened with white: Off 0 %, Weak 4 %,
-  Medium 7 % (default), Strong 11 %. Drawn by `multiview_canvas.slint` below the media, so it is only visible where the medium leaves room (also around videos).
-- **Corner marks:** four L-shaped marks inside the corners of the medium, 2 logical px thick, `Theme.primary` (the color of the Browse selection),
-  Short 16 / Medium 24 (default) / Long 32 logical px. Images: Slint, above the picture and below the crop overlay; while zoomed they sit in the corners of
-  the area the picture is shown in. Videos: mpv `overlay-add` (8 strips, each a 1x1 premultiplied BGRA pixel scaled with `dw`/`dh`, overlay ids of their
-  own next to the rating feedback's), re-sent on every layout change like the feedback; works on Wayland and over a paused video. Not drawn in the tab-grid miniature.
+- **Area:** the empty part of the focused tile's view (its canvas, `host_room`: the column at the full row height) is brightened with white: Off 0 %,
+  Weak 4 %, Medium 7 % (default), Strong 11 %. Drawn by `multiview_canvas.slint` below the media, so it is only visible where the medium leaves room (also around videos).
+- **Corner marks:** four L-shaped marks inside the corners of the tile's VIEW, 2 logical px thick, `Theme.primary` (the color of the Browse
+  selection), Short 16 / Medium 24 (default) / Long 32 logical px. **User decision 2026-10-25: the marks frame the view (the tile's canvas,
+  `host_room`, the same rectangle the media bar sits on and a zoomed medium may fill), not the medium.** Before, they sat in the corners of the
+  medium (of the visible part of a zoomed picture), and the marks of a zoomed video landed in wrong places: mpv placed them by the size of the
+  medium while the video window had grown into the whole room. Now one rectangle decides for every kind, size and zoom: the canvas draws the
+  marks for every tile (above the picture, below the crop overlay; `MultiviewFocusCorners`), and where a video's native window covers a corner,
+  mpv draws the part of that mark that lies inside its window (`focus_overlay`: the marks are made in host coordinates, cut to the window the
+  video has now (`video_window_rect`: the medium's place, or the room while zoomed) and moved into it; one `overlay-add` bitmap per corner, ids
+  in `mpv_engine/overlay.rs`, a corner outside the window has none). An unzoomed letterboxed video therefore shows the canvas's marks in the free
+  space around it, a video that fills its view or is zoomed shows mpv's. Re-sent whenever the view or the window changes (reproject and every
+  tick, a comparison when nothing changed); works on Wayland and over a paused video. Not drawn in the tab-grid miniature.
 - **Hidden with the cursor:** while the resting mouse cursor is hidden (setting or primary bar button) and "Hide the selection marks too" is on, area and
   corners are hidden as well (at once, no fade) and come back with the cursor. A key that acts on the focused tile (also one refused with a reason) shows
   them for about one second. The focus itself stays.

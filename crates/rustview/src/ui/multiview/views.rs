@@ -116,7 +116,7 @@ fn tile_view(tile: &TileView, dpi: f32, images: &mut ImageCache) -> MultiviewTil
     let fl = |v: f64| v.az::<f32>() / dpi.max(0.01);
     let crop_pic = crop.map_or((0.0, 0.0, 0.0, 0.0), |c| c.picture);
     let crop_rect = crop.map_or((0.0, 0.0, 0.0, 0.0), |c| c.rect);
-    let focus_column = tile.focus.map_or(Rect::default(), |f| f.column);
+    let focus_view = tile.focus.map_or(Rect::default(), |f| f.view);
     MultiviewTileView {
         x: logical(x, dpi),
         y: logical(y, dpi),
@@ -179,10 +179,10 @@ fn tile_view(tile: &TileView, dpi: f32, images: &mut ImageCache) -> MultiviewTil
         crop_grid: crop.is_some_and(|c| c.grid),
         crop_dragging: crop.is_some_and(|c| c.dragging),
         focused: tile.focus.is_some(),
-        focus_column_x: logical(focus_column.x, dpi),
-        focus_column_y: logical(focus_column.y, dpi),
-        focus_column_width: logical(focus_column.w, dpi),
-        focus_column_height: logical(focus_column.h, dpi),
+        focus_view_x: logical(focus_view.x, dpi),
+        focus_view_y: logical(focus_view.y, dpi),
+        focus_view_width: logical(focus_view.w, dpi),
+        focus_view_height: logical(focus_view.h, dpi),
         focus_brighten: tile.focus.map_or(0.0, |f| f.brighten),
         focus_corner: logical(tile.focus.map_or(0, |f| f.corner), dpi),
         focus_thickness: logical(tile.focus.map_or(0, |f| f.thickness), dpi),

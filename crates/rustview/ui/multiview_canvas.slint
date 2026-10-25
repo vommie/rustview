@@ -108,13 +108,13 @@ export component MultiviewCanvas inherits Rectangle {
         width: tile.width;
         height: tile.height;
 
-        // The selected medium of several: its column is brightened (the medium covers its own part of it, so the light shows
+        // The selected medium of several: its view is brightened (the medium covers its own part of it, so the light shows
         // only where the medium leaves room, also around a video window).
         if root.interactive && tile.focused && tile.focus-brighten > 0 : Rectangle {
-            x: tile.focus-column-x;
-            y: tile.focus-column-y;
-            width: tile.focus-column-width;
-            height: tile.focus-column-height;
+            x: tile.focus-view-x;
+            y: tile.focus-view-y;
+            width: tile.focus-view-width;
+            height: tile.focus-view-height;
             background: Colors.white.with-alpha(tile.focus-brighten);
         }
 
@@ -200,15 +200,13 @@ export component MultiviewCanvas inherits Rectangle {
             }
         }
 
-        // The corner marks of the selected medium of several (on the picture; mpv draws them on a video). A zoomed picture has them
-        // in the corners of the part of it that is visible in its room.
-        if root.interactive && tile.focused && tile.kind != 1 : MultiviewFocusCorners {
-            property <length> left: Math.max(tile.zoom-x, 0px);
-            property <length> top: Math.max(tile.zoom-y, 0px);
-            x: tile.zoomed ? tile.zoom-area-x + self.left : 0px;
-            y: tile.zoomed ? tile.zoom-area-y + self.top : 0px;
-            width: tile.zoomed ? Math.min(tile.zoom-x + tile.zoom-width, tile.zoom-area-width) - self.left : parent.width;
-            height: tile.zoomed ? Math.min(tile.zoom-y + tile.zoom-height, tile.zoom-area-height) - self.top : parent.height;
+        // The corner marks of the selected medium of several frame its view, not the medium, so they stay put at every size and
+        // zoom. A video's native window covers this scene where it lies over a corner; mpv draws that part of the mark itself.
+        if root.interactive && tile.focused : MultiviewFocusCorners {
+            x: tile.focus-view-x;
+            y: tile.focus-view-y;
+            width: tile.focus-view-width;
+            height: tile.focus-view-height;
             mark-length: tile.focus-corner;
             thickness: tile.focus-thickness;
         }

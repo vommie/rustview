@@ -97,13 +97,14 @@ export struct MultiviewTileView {
     crop-ratio-label: string,
     crop-grid: bool,
     crop-dragging: bool,
-    // The selected medium of several (`focus`): its column relative to the tile (brightened where the medium leaves room, by
-    // `focus-brighten`, 0..1) and the corner marks (drawn here on images; mpv draws them on videos).
+    // The selected medium of several (`focus`): the view of the tile (its canvas: the column at the full height of its row),
+    // relative to the tile. It is brightened where the medium leaves room (by `focus-brighten`, 0..1) and the corner marks frame
+    // it, for images and videos alike (mpv draws the part of a mark that a video's window covers).
     focused: bool,
-    focus-column-x: length,
-    focus-column-y: length,
-    focus-column-width: length,
-    focus-column-height: length,
+    focus-view-x: length,
+    focus-view-y: length,
+    focus-view-width: length,
+    focus-view-height: length,
     focus-brighten: float,
     focus-corner: length,
     focus-thickness: length,

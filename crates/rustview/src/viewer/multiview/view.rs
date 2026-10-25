@@ -38,13 +38,14 @@ pub struct TileView {
     pub focus: Option<FocusMarkView>,
 }
 
-/// The marks of the selected medium (physical pixels). The host draws the column and, on an image, the corner marks; mpv draws
-/// the corner marks of a video itself (`focus_overlay`).
+/// The marks of the selected medium (physical pixels). The host brightens the view and draws the corner marks in its corners;
+/// where a video's native window covers a corner, mpv draws the part of the mark inside it (`focus_overlay`).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FocusMarkView {
-    /// The column of the tile (the full height of its row), relative to the tile; brightened where the medium leaves room.
-    pub column: Rect,
-    /// White over the column, 0 (off) to 1.
+    /// The view of the tile (its canvas, `host_room`: the column at the full height of its row), relative to the tile. The marks
+    /// frame it, whatever the medium's size or zoom; it is brightened where the medium leaves room.
+    pub view: Rect,
+    /// White over the view, 0 (off) to 1.
     pub brighten: f32,
     /// Length and thickness of the corner marks.
     pub corner: i32,

@@ -9,6 +9,13 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ## [Unreleased]
 
+### Fixed
+- **The corner marks of the selected medium in a Multiview frame its view now, not the medium** (your decision): they sit in the corners
+  of the tile's area (its column at the full height of the row) for pictures and videos alike, in the fullscreen and in tabs. Before, the
+  marks of a video were placed by its picture and landed in wrong places as soon as the video was zoomed; a zoomed picture had them at its
+  visible part. The brightened area is the same rectangle, and Settings > Fullscreen > Selected Medium and hiding the marks with the mouse
+  cursor work as before.
+
 ## [0.5.0] - 2026-10-25
 
 ### Added
