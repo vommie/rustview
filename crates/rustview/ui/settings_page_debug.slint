@@ -1,18 +1,56 @@
+// Settings > Debug (`docs/debug_page.md`): the checks (Dependencies, Health), the log, the diagnostic report, tools, the
+// startup timeline, live runtime values and the log privacy option. The cards remember whether they are open.
+
 import { CheckBox } from "std-widgets.slint";
 import { Theme } from "styles.slint";
-import { SettingsCard } from "settings_card.slint";
+import { DebugUi } from "settings_debug_ui.slint";
+import { DebugCard, WrapText } from "settings_debug_parts.slint";
+import { DebugChecks } from "settings_debug_checks.slint";
+import { DebugLogCard, DebugReportCard, DebugRuntimeCard, DebugStartupCard, DebugToolsCard } from "settings_debug_tools.slint";
 
 export component SettingsPageDebug inherits VerticalLayout {
     spacing: 12px;
 
     in-out property <bool> obfuscate-logs: true;
+    in-out property <int> log-level-idx: 2;
+    in-out property <bool> log-files: false;
+    in-out property <bool> mpv-log: false;
 
-    SettingsCard {
-        title: "Details";
+    DebugChecks { }
 
-        CheckBox {
-            text: "Obfuscate sensitive details like tag names and file paths in logs";
-            checked <=> root.obfuscate-logs;
+    DebugLogCard {
+        log-level-idx <=> root.log-level-idx;
+        log-files <=> root.log-files;
+        mpv-log <=> root.mpv-log;
+    }
+
+    DebugReportCard { }
+
+    DebugToolsCard { }
+
+    DebugStartupCard { }
+
+    DebugRuntimeCard { }
+
+    DebugCard {
+        title: "Privacy";
+        summary: root.obfuscate-logs ? "names hidden in the terminal and in reports" : "names shown in the terminal and in reports";
+        open: DebugUi.privacy-open;
+        toggled => { DebugUi.card-toggled("privacy"); }
+
+        if DebugUi.privacy-open : VerticalLayout {
+            spacing: 6px;
+
+            CheckBox {
+                text: "Obfuscate sensitive details like tag names and file paths in logs";
+                checked <=> root.obfuscate-logs;
+            }
+
+            WrapText {
+                text: "Applies to the terminal output and to the diagnostic report. The log files are always written twice: rustview-private.log with names hidden, rustview.log without.";
+                text-color: Theme.text-muted;
+                font-size: 11px;
+            }
         }
     }
 }

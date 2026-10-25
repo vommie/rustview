@@ -1,0 +1,307 @@
+// Building blocks of Settings > Debug: the collapsible card, a check row with its fix commands, a command line with a copy
+// button, and a row of label and value.
+
+import { Theme } from "styles.slint";
+import { AppIcon, IconId, IconSize } from "icons.slint";
+import { TooltipArea } from "tooltips.slint";
+import { ToolbarButton } from "toolbar_button.slint";
+import { ButtonFeedbackOverlay } from "button_feedback.slint";
+import { ButtonFeedback, FeedbackKind } from "button_feedback_types.slint";
+import { DebugCheckView, DebugInfoRow, DebugStyle, DebugUi } from "settings_debug_ui.slint";
+
+/// A text that wraps and takes the height it needs at the width it really gets. (A wrapped `Text` placed directly in nested
+/// layouts is measured as one line; inside its own rectangle it is measured at its real width.)
+export component WrapText inherits Rectangle {
+    in property <string> text;
+    in property <color> text-color: Theme.text;
+    in property <length> font-size: 12px;
+    in property <int> font-weight: 400;
+    in property <string> font-family;
+    in property <TextHorizontalAlignment> horizontal-alignment: TextHorizontalAlignment.left;
+
+    min-height: label.preferred-height;
+    preferred-height: label.preferred-height;
+
+    label := Text {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        text: root.text;
+        color: root.text-color;
+        font-size: root.font-size;
+        font-weight: root.font-weight;
+        font-family: root.font-family;
+        horizontal-alignment: root.horizontal-alignment;
+        wrap: word-wrap;
+    }
+}
+
+/// A card of the Debug page: a header that opens and closes it (chevron, title, a summary at the right, an optional icon
+/// button) and the body, which the caller adds only while the card is open.
+export component DebugCard inherits Rectangle {
+    in property <string> title;
+    in property <string> summary;
+    in property <bool> summary-alarming;
+    in property <bool> open;
+    in property <IconId> action-icon: IconId.none;
+    in property <string> action-tooltip;
+    in property <bool> action-enabled: true;
+    callback toggled();
+    callback action();
+
+    background: Theme.surface;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: Theme.border;
+
+    VerticalLayout {
+        padding: 10px;
+        spacing: 10px;
+        alignment: start;
+
+        header := Rectangle {
+            min-height: 26px;
+            border-radius: 4px;
+            background: header-area.has-hover ? Theme.surface-hover : transparent;
+
+            header-area := TooltipArea {
+                text: root.open ? "Close this card" : "Open this card";
+                cursor: MouseCursor.pointer;
+                clicked => { root.toggled(); }
+            }
+
+            HorizontalLayout {
+                padding-left: 2px;
+                padding-right: 2px;
+                spacing: 6px;
+
+                VerticalLayout {
+                    alignment: center;
+
+                    AppIcon {
+                        icon: root.open ? IconId.chevron-down : IconId.chevron-right;
+                        size: IconSize.md;
+                        color: Theme.primary;
+                    }
+                }
+
+                Text {
+                    text: root.title;
+                    color: Theme.primary;
+                    font-weight: 700;
+                    font-size: 12px;
+                    vertical-alignment: center;
+                }
+
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    alignment: center;
+
+                    WrapText {
+                        text: root.summary;
+                        text-color: root.summary-alarming ? Theme.accent : Theme.text-muted;
+                        font-size: 11px;
+                        horizontal-alignment: right;
+                    }
+                }
+
+                if root.action-icon != IconId.none : VerticalLayout {
+                    alignment: center;
+
+                    ToolbarButton {
+                        height: 24px;
+                        icon: root.action-icon;
+                        tooltip: root.action-tooltip;
+                        is-enabled: root.action-enabled;
+                        clicked => { root.action(); }
+                    }
+                }
+            }
+        }
+
+        @children
+    }
+}
+
+/// A command that fixes something, with a button that copies it (it flashes green when the clipboard took it).
+export component CommandLine inherits HorizontalLayout {
+    in property <string> text;
+    in property <length> indent: 24px;
+    in property <string> copy-tooltip: "Copy the command";
+
+    property <ButtonFeedback> feedback;
+
+    padding-left: root.indent;
+    spacing: 6px;
+
+    Rectangle {
+        horizontal-stretch: 1;
+        background: Theme.background;
+        border-radius: 3px;
+        border-width: 1px;
+        border-color: Theme.border;
+
+        HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+            padding-top: 4px;
+            padding-bottom: 4px;
+
+            VerticalLayout {
+                alignment: center;
+
+                WrapText {
+                    text: root.text;
+                    text-color: Theme.status-ok;
+                    font-family: "monospace";
+                    font-size: 11px;
+                }
+            }
+        }
+    }
+
+    VerticalLayout {
+        alignment: center;
+
+        Rectangle {
+            width: 24px;
+            height: 24px;
+            border-radius: 3px;
+
+            ToolbarButton {
+                height: 24px;
+                icon: IconId.copy;
+                tooltip: root.copy-tooltip;
+                clicked => {
+                    root.feedback = {
+                        kind: DebugUi.copy-text(root.text) ? FeedbackKind.success : FeedbackKind.error,
+                        seq: root.feedback.seq + 1,
+                    };
+                }
+            }
+
+            ButtonFeedbackOverlay {
+                border-radius: 3px;
+                icon-size: IconSize.md;
+                feedback: root.feedback;
+            }
+        }
+    }
+}
+
+/// One check: its status icon, title and detail, the fix commands below, and a jump to the settings page that has more.
+export component CheckRow inherits VerticalLayout {
+    in property <DebugCheckView> check;
+
+    spacing: 4px;
+
+    HorizontalLayout {
+        spacing: 8px;
+
+        VerticalLayout {
+            alignment: start;
+            padding-top: 1px;
+
+            AppIcon {
+                icon: DebugStyle.status-icon(root.check.status);
+                size: IconSize.md;
+                color: DebugStyle.status-color(root.check.status);
+            }
+        }
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 1px;
+
+            WrapText {
+                text: root.check.title;
+                font-weight: root.check.status >= 2 ? 700 : 400;
+            }
+
+            if root.check.detail != "" : WrapText {
+                text: root.check.detail;
+                text-color: Theme.text-muted;
+                font-size: 11px;
+            }
+        }
+
+        if root.check.settings-page >= 0 : VerticalLayout {
+            alignment: start;
+
+            ToolbarButton {
+                height: 24px;
+                icon: IconId.open;
+                tooltip: "Show " + root.check.settings-page-name;
+                clicked => { DebugUi.jump-to-page(root.check.settings-page); }
+            }
+        }
+    }
+
+    for line in root.check.fix-lines : CommandLine {
+        text: line;
+    }
+}
+
+/// A row "label: value" (the value in a monospace font, wrapped).
+export component InfoRow inherits HorizontalLayout {
+    in property <DebugInfoRow> info;
+    in property <length> label-width: 130px;
+
+    spacing: 12px;
+
+    WrapText {
+        width: root.label-width;
+        text: root.info.label;
+        text-color: Theme.text-muted;
+        font-size: 11px;
+    }
+
+    WrapText {
+        horizontal-stretch: 1;
+        text: root.info.value;
+        font-family: "monospace";
+        font-size: 11px;
+    }
+}
+
+/// A tool: an icon button and what it does (title and explanation) next to it.
+export component ToolRow inherits HorizontalLayout {
+    in property <IconId> icon;
+    in property <string> tooltip;
+    in property <string> title;
+    in property <string> description;
+    in property <bool> hold;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    spacing: 10px;
+
+    VerticalLayout {
+        alignment: start;
+
+        ToolbarButton {
+            height: 26px;
+            icon: root.icon;
+            tooltip: root.tooltip;
+            hold: root.hold;
+            is-enabled: root.enabled;
+            clicked => { root.clicked(); }
+        }
+    }
+
+    VerticalLayout {
+        horizontal-stretch: 1;
+        alignment: center;
+        spacing: 1px;
+
+        WrapText {
+            text: root.title;
+        }
+
+        if root.description != "" : WrapText {
+            text: root.description;
+            text-color: Theme.text-muted;
+            font-size: 11px;
+        }
+    }
+}

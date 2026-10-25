@@ -7,6 +7,9 @@ use rustview_core::util::cast::Az;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
+/// At most this many queued mpv events are taken per turn of the observer loop (the properties are polled in between).
+const MAX_EVENTS_PER_TURN: usize = 256;
+
 impl MpvPlayer {
     pub fn subscribe<F>(&self, callback: F)
     where
@@ -85,6 +88,7 @@ impl MpvPlayer {
         let click_callbacks = self.click_callbacks.clone();
         let mute_callbacks = self.mute_callbacks.clone();
         let pause_callbacks = self.pause_callbacks.clone();
+        let current_file = self.current_file_path.clone();
 
         let observer = std::thread::Builder::new()
             .name("mpv-event-observer".into())
@@ -93,6 +97,7 @@ impl MpvPlayer {
 
                 let mut last_mute: Option<bool> = None;
                 let mut last_user_paused: Option<bool> = None;
+                let mut gpu_context_known = false;
 
                 while running.load(Ordering::Relaxed) {
                     // A player that is neither shown nor in the tab grid has nobody to react to: poll it less often.
@@ -102,13 +107,36 @@ impl MpvPlayer {
                     } else {
                         MPV_OBSERVER_ACTIVE_POLL_MS
                     };
-                    if let Some(Ok(libmpv2::events::Event::ClientMessage(args))) =
-                        mpv.wait_event(poll_ms.az::<f64>() / 1000.0)
-                        && args.first() == Some(&CLICK_MESSAGE)
-                    {
-                        for cb in click_callbacks.read().clone() {
-                            cb();
+                    // Waits for the first event, then takes what else is queued (mpv's messages come in bursts).
+                    let mut timeout = poll_ms.az::<f64>() / 1000.0;
+                    for _ in 0..MAX_EVENTS_PER_TURN {
+                        let Some(event) = mpv.wait_event(timeout) else {
+                            break;
+                        };
+                        timeout = 0.0;
+                        match event {
+                            Ok(libmpv2::events::Event::ClientMessage(args)) if args.first() == Some(&CLICK_MESSAGE) => {
+                                for cb in click_callbacks.read().clone() {
+                                    cb();
+                                }
+                            }
+                            Ok(libmpv2::events::Event::LogMessage {
+                                prefix, level, text, ..
+                            }) => {
+                                let file = current_file.read().clone();
+                                super::messages::handle(prefix, level, text, file.as_deref());
+                            }
+                            _ => {}
                         }
+                    }
+
+                    // The GPU context mpv chose, for Settings > Debug (read until the first video has one).
+                    if !gpu_context_known
+                        && let Ok(context) = mpv.get_property::<String>("current-gpu-context")
+                        && !context.is_empty()
+                    {
+                        crate::system::diagnostics::graphics::record_mpv_context(&context);
+                        gpu_context_known = true;
                     }
 
                     // 1. Intercept double-click / middle-click Fullscreen triggers from MPV

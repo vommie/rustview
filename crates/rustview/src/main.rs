@@ -44,6 +44,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // `rustview check`: the checks of Settings > Debug in the terminal
+    if let Some(Command::Check) = cli.command {
+        std::process::exit(rustview::app::check::run(&data_dir, &config_dir));
+    }
+
     // 2. Standalone CLI Migration Tool (XnViewMP)
     if cli.migrate.xnview_db.is_some() {
         tracing_subscriber::fmt()
@@ -158,10 +163,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let after_first_frame_render = after_first_frame.clone();
     if let Err(e) = main_window
         .window()
-        .set_rendering_notifier(move |state, _| match state {
+        .set_rendering_notifier(move |state, graphics_api| match state {
             // Called while the window exists but is not mapped yet.
             slint::RenderingState::RenderingSetup => {
                 startup_clock::mark("GlReady");
+                rustview::system::diagnostics::graphics::capture(graphics_api);
                 if should_maximize
                     && let Some(window) = main_weak_render.upgrade()
                     && let Some(xid) = rustview::viewer::get_raw_window_xid(window.window())

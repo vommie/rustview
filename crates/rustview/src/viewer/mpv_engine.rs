@@ -11,6 +11,7 @@ use std::time::Instant;
 mod controls;
 mod events;
 mod gpu_context;
+mod messages;
 mod osd_text;
 pub mod overlay;
 mod playback;
@@ -19,6 +20,7 @@ pub use controls::SeekPrecision;
 pub use osd_text::OsdText;
 pub use playback::PlaybackNumbers;
 mod rating;
+pub mod self_test;
 mod zoom;
 
 pub type MpvEventCallback = Arc<dyn Fn(&MpvPlaybackState) + Send + Sync>;
@@ -27,6 +29,14 @@ pub type MpvConvertToTabCallback = Arc<dyn Fn() + Send + Sync>;
 
 /// The message mpv sends when its window is clicked (a plain left click: the Multiview selects the tile; never a pause).
 const CLICK_MESSAGE: &str = "rustview-click";
+
+/// The players that exist now (Settings > Debug, Runtime).
+static LIVE_PLAYERS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// How many video players exist now.
+pub fn live_players() -> usize {
+    LIVE_PLAYERS.load(Ordering::Relaxed)
+}
 
 fn bind_click(mpv: &Mpv) {
     let _ = mpv.command("keybind", &["MBTN_LEFT", &format!("script-message {CLICK_MESSAGE}")]);
@@ -150,6 +160,9 @@ impl MpvPlayer {
             let _ = mpv_instance.command("keybind", &[k, "no-osd cycle window-maximized"]);
         }
 
+        // mpv's warnings and errors go into the log (everything into mpv.log while it is switched on)
+        messages::request(&mpv_instance);
+
         let mpv_arc = Arc::new(mpv_instance);
         let state = Arc::new(RwLock::new(MpvPlaybackState::default()));
         let current_file_path = Arc::new(RwLock::new(None));
@@ -184,6 +197,7 @@ impl MpvPlayer {
         };
 
         player.spawn_event_observer_thread();
+        LIVE_PLAYERS.fetch_add(1, Ordering::Relaxed);
 
         tracing::info!(
             elapsed_us = t0.elapsed().as_micros(),
@@ -291,6 +305,7 @@ impl MpvPlayer {
 
 impl Drop for MpvPlayer {
     fn drop(&mut self) {
+        LIVE_PLAYERS.fetch_sub(1, Ordering::Relaxed);
         self.observer_running.store(false, Ordering::Release);
         let _ = self.mpv.command("quit", &[]);
     }

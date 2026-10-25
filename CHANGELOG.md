@@ -10,6 +10,26 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 ## [Unreleased]
 
 ### Added
+- **Settings > Debug checks what RustView needs and how it is doing** (click the check button; nothing is checked on its own). The card
+  **Dependencies** lists the programs and libraries RustView uses (libmpv and FFmpeg with their versions, xclip or wl-clipboard for copying
+  pictures, kscreen-doctor/xrandr for the monitors, the desktop portal for the file dialogs, gio for Open With, xdg-open, the file manager, the X11
+  extensions and the compositor) with the exact `sudo pacman -S ...` command for everything that is missing, plus one command for all of them; a
+  closed group **Developer** has samply and `perf_event_paranoid`. The card **Health** shows the library database (size, media, folders, tags), the
+  folder tree check, the thumbnails, the settings file, the free space, the drive of the root folder (from the mount table, the drive is not
+  touched), the window system, the graphics (with a warning for software rendering), how videos draw and the RAM budget. Problems come first, what
+  passed is one row; the cards sit side by side in a wide window and one below the other in a narrow one. `rustview check` prints the same checks in
+  the terminal.
+- **The log is kept:** the last 5,000 lines stay in memory, and Settings > Debug > Log can write log files (off by default): `rustview.log` as it
+  happened and `rustview-private.log` with file names, paths, folders, tags and searches hidden, to share; a new pair per start, the last 5 are kept,
+  in `~/.local/state/rustview/`. The log level (Errors, Warnings, Info, Debug, Trace) applies with Save without a restart; `RUST_LOG` still wins.
+  mpv's warnings and errors are in the log now, and a switch writes mpv's detailed log to `mpv.log`.
+- **A log window** (the list button of the Log card) follows the log live and can stay open next to the main window: every line, warnings and
+  errors, or errors only, with names shown or hidden, follow the newest line, copy the lines shown.
+- **A diagnostic report** for bug reports (copy or save): version, system, window system, graphics, the checks, the settings you changed, the
+  startup and the last 300 log lines; names and paths are hidden while "Obfuscate" is on.
+- **Debug tools:** a video self-test (mpv plays its own test picture for three seconds in a small window and tells how it was drawn), the folders
+  of RustView (open them, copy their paths), the startup timeline of this session, live runtime values (memory, thumbnail cache, players, window
+  system, graphics, environment overrides), resetting the window size and position, and resetting the layout (held).
 - **Videos zoom like pictures** (tab and fullscreen): Ctrl + mouse wheel zooms toward the pointer, Ctrl++ / Ctrl+- / Ctrl+Backspace, dragging moves
   the picture, the Zoom button of the media bar opens the slider, and the minimap shows a still of the video with the visible part framed (drag it,
   middle click resets, right click opens its slider). A zoomed video uses the free room around its tile, as a zoomed picture does.

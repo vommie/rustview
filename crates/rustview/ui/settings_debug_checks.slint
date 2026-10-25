@@ -1,0 +1,266 @@
+// Settings > Debug: the cards Dependencies and Health (side by side when the page is wide, one below the other when it is
+// narrow). Problems first; the checks that passed are one row that opens on a click.
+
+import { Theme } from "styles.slint";
+import { AppIcon, IconId, IconSize } from "icons.slint";
+import { TooltipArea } from "tooltips.slint";
+import { ToolbarButton } from "toolbar_button.slint";
+import { DebugCheckGroupView, DebugUi } from "settings_debug_ui.slint";
+import { CheckRow, CommandLine, DebugCard, WrapText } from "settings_debug_parts.slint";
+
+/// The row that stands for the checks that passed; a click lists them.
+component PassedRow inherits Rectangle {
+    in property <int> count;
+    in property <bool> shown;
+    callback toggled();
+
+    min-height: 26px;
+    border-radius: 4px;
+    background: area.has-hover ? Theme.surface-hover : Theme.surface-variant;
+
+    area := TooltipArea {
+        text: root.shown ? "Hide the checks that passed" : "Show the checks that passed";
+        cursor: MouseCursor.pointer;
+        clicked => { root.toggled(); }
+    }
+
+    HorizontalLayout {
+        padding-left: 4px;
+        padding-right: 8px;
+        spacing: 6px;
+
+        VerticalLayout {
+            alignment: center;
+
+            AppIcon {
+                icon: root.shown ? IconId.chevron-down : IconId.chevron-right;
+                size: IconSize.md;
+                color: Theme.text-muted;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+
+            AppIcon {
+                icon: IconId.status-ok;
+                size: IconSize.md;
+                color: Theme.status-ok;
+            }
+        }
+
+        Text {
+            horizontal-stretch: 1;
+            text: root.count == 1 ? "1 check passed" : root.count + " checks passed";
+            color: Theme.text;
+            font-size: 12px;
+            vertical-alignment: center;
+        }
+    }
+}
+
+/// The body of a card of checks: what needs attention, then the passed checks (one row or the list).
+component CheckGroupBody inherits VerticalLayout {
+    in property <DebugCheckGroupView> group;
+    in property <bool> passed-shown;
+    in property <string> empty-text;
+    callback passed-toggled();
+
+    spacing: 8px;
+
+    for check in root.group.attention : CheckRow {
+        check: check;
+    }
+
+    if root.group.passed.length > 0 : PassedRow {
+        count: root.group.passed.length;
+        shown: root.passed-shown;
+        toggled => { root.passed-toggled(); }
+    }
+
+    if root.passed-shown : VerticalLayout {
+        spacing: 8px;
+        padding-left: 12px;
+
+        for check in root.group.passed : CheckRow {
+            check: check;
+        }
+    }
+
+    if root.group.attention.length == 0 && root.group.passed.length == 0 && root.empty-text != "" : WrapText {
+        text: root.empty-text;
+        text-color: Theme.text-muted;
+        font-size: 11px;
+    }
+}
+
+component DependenciesCard inherits DebugCard {
+    title: "Dependencies";
+    summary: DebugUi.dependencies.summary;
+    summary-alarming: DebugUi.dependencies.alarming;
+    open: DebugUi.dependencies-open;
+    toggled => { DebugUi.card-toggled("dependencies"); }
+
+    if DebugUi.dependencies-open : VerticalLayout {
+        spacing: 10px;
+
+        CheckGroupBody {
+            group: DebugUi.dependencies;
+            passed-shown: DebugUi.dependencies-passed-shown;
+            empty-text: "Click the check button to look for the programs and libraries RustView uses.";
+            passed-toggled => { DebugUi.passed-toggled("dependencies"); }
+        }
+
+        if DebugUi.install-all != "" : VerticalLayout {
+            spacing: 4px;
+
+            Text {
+                text: "Install everything that is missing:";
+                color: Theme.text;
+                font-size: 11px;
+                font-weight: 700;
+            }
+
+            CommandLine {
+                indent: 0px;
+                text: DebugUi.install-all;
+            }
+        }
+
+        // The tools for profiling RustView: a group of their own, closed at first; never a warning.
+        if DebugUi.developer.attention.length + DebugUi.developer.passed.length > 0 : Rectangle {
+            min-height: 26px;
+            border-radius: 4px;
+            background: developer-area.has-hover ? Theme.surface-hover : transparent;
+
+            developer-area := TooltipArea {
+                text: DebugUi.developer-open ? "Hide the developer tools" : "Show the developer tools";
+                cursor: MouseCursor.pointer;
+                clicked => { DebugUi.developer-toggled(); }
+            }
+
+            HorizontalLayout {
+                padding-left: 4px;
+                spacing: 6px;
+
+                VerticalLayout {
+                    alignment: center;
+
+                    AppIcon {
+                        icon: DebugUi.developer-open ? IconId.chevron-down : IconId.chevron-right;
+                        size: IconSize.md;
+                        color: Theme.text-muted;
+                    }
+                }
+
+                Text {
+                    text: "Developer";
+                    color: Theme.text;
+                    font-size: 12px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    alignment: center;
+
+                    WrapText {
+                        text: DebugUi.developer.summary;
+                        text-color: Theme.text-muted;
+                        font-size: 11px;
+                        horizontal-alignment: right;
+                    }
+                }
+            }
+        }
+
+        if DebugUi.developer-open : VerticalLayout {
+            spacing: 8px;
+            padding-left: 12px;
+
+            for check in DebugUi.developer.attention : CheckRow {
+                check: check;
+            }
+
+            for check in DebugUi.developer.passed : CheckRow {
+                check: check;
+            }
+        }
+    }
+}
+
+component HealthCard inherits DebugCard {
+    title: "Health";
+    summary: DebugUi.health.summary;
+    summary-alarming: DebugUi.health.alarming;
+    open: DebugUi.health-open;
+    toggled => { DebugUi.card-toggled("health"); }
+
+    if DebugUi.health-open : CheckGroupBody {
+        group: DebugUi.health;
+        passed-shown: DebugUi.health-passed-shown;
+        empty-text: "";
+        passed-toggled => { DebugUi.passed-toggled("health"); }
+    }
+}
+
+/// The check button with the time of the last check, and the two cards.
+export component DebugChecks inherits VerticalLayout {
+    // Side by side from this width of the page on.
+    in property <length> two-columns-from: 720px;
+
+    spacing: 12px;
+
+    HorizontalLayout {
+        spacing: 8px;
+
+        VerticalLayout {
+            alignment: center;
+
+            ToolbarButton {
+                height: 26px;
+                icon: IconId.refresh;
+                tooltip: DebugUi.checking ? "The checks are running" : "Check the programs, the library, the settings file and the free space";
+                is-enabled: !DebugUi.checking;
+                clicked => { DebugUi.run-checks(); }
+            }
+        }
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+
+            WrapText {
+                text: DebugUi.checking ? "Checking..." : (DebugUi.checked-at == ""
+                    ? "Not checked yet. What RustView knows without looking at the system is shown below."
+                    : "Checked at " + DebugUi.checked-at);
+                text-color: Theme.text-muted;
+                font-size: 11px;
+            }
+        }
+    }
+
+    if root.width >= root.two-columns-from : HorizontalLayout {
+        spacing: 12px;
+        alignment: stretch;
+
+        DependenciesCard {
+            horizontal-stretch: 1;
+            width: (parent.width - 12px) / 2;
+        }
+
+        HealthCard {
+            horizontal-stretch: 1;
+            width: (parent.width - 12px) / 2;
+        }
+    }
+
+    if root.width < root.two-columns-from : VerticalLayout {
+        spacing: 12px;
+
+        DependenciesCard { }
+
+        HealthCard { }
+    }
+}

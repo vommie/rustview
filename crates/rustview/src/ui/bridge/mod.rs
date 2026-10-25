@@ -49,6 +49,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 mod actions;
+mod layout_reset;
 mod pointer_callbacks;
 mod settings_subscriber;
 mod subsystem_callbacks;
@@ -111,6 +112,40 @@ pub struct UiBridge {
 }
 
 impl UiBridge {
+    /// What Settings > Debug needs from the main window: the library, the thumbnails and the reset tools.
+    fn set_debug_context(
+        settings_dialog: &Rc<RefCell<SettingsDialogController>>,
+        window: &MainWindow,
+        library: &Arc<Library>,
+        thumbnails: &Arc<ThumbnailManager>,
+        settings: &Arc<SettingsManager>,
+        state: &Arc<RwLock<UiState>>,
+    ) {
+        let log_settings = settings.clone();
+        let window_weak = window.as_weak();
+        let reset_window = Rc::new(move || {
+            if let Some(window) = window_weak.upgrade() {
+                layout_reset::reset_window(&window);
+            }
+        });
+        let (window_weak, settings, state, layout_thumbnails) =
+            (window.as_weak(), settings.clone(), state.clone(), thumbnails.clone());
+        let reset_layout = Rc::new(move || {
+            if let Some(window) = window_weak.upgrade() {
+                layout_reset::reset_layout(&window, &settings, &state, &layout_thumbnails);
+            }
+        });
+        settings_dialog
+            .borrow()
+            .set_debug_context(crate::ui::settings_dialog::DebugContext {
+                library: library.clone(),
+                thumbnails: thumbnails.clone(),
+                open_log_window: Rc::new(move || crate::ui::log_window::open(&log_settings)),
+                reset_window,
+                reset_layout,
+            });
+    }
+
     pub fn new(
         window: MainWindow,
         library: Arc<Library>,
@@ -275,6 +310,7 @@ impl UiBridge {
         let last_click = Arc::new(Mutex::new(None));
 
         BridgeSidebarPanelTabs::init(&window, &settings, &state);
+        Self::set_debug_context(&settings_dialog, &window, &library, &thumbnails, &settings, &state);
 
         fullscreen.bind(
             AppContext {

@@ -1,5 +1,5 @@
 //! The command line of the `rustview` binary (parsed with `clap`): no arguments start the application, `api ...` runs the headless
-//! API for other tools, `--migrate-xnview` runs the `XnView` MP database migration.
+//! API for other tools, `check` runs the checks of Settings > Debug, `--migrate-xnview` runs the `XnView` MP database migration.
 
 use clap::{Parser, Subcommand};
 use rustview_core::cli_api::ApiSubcommand;
@@ -28,6 +28,8 @@ pub enum Command {
         #[command(subcommand)]
         command: ApiSubcommand,
     },
+    /// Checks the programs this app needs and the state of its library, as Settings > Debug does (exit status 1 on a problem)
+    Check,
     /// The API commands also work without the leading `api`
     #[command(flatten)]
     Direct(ApiSubcommand),
@@ -93,6 +95,12 @@ mod tests {
                 }
             );
         }
+    }
+
+    #[test]
+    fn check_runs_the_checks() {
+        let cli = Cli::try_parse_from(["rustview", "check"]).expect("check command");
+        assert!(matches!(cli.command, Some(Command::Check)));
     }
 
     #[test]

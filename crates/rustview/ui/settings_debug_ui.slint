@@ -1,0 +1,135 @@
+// Settings > Debug (`docs/debug_page.md`): what the page shows and what it asks Rust to do. Filled by
+// `src/ui/settings_dialog/debug_page/`. The log options themselves are settings of the window (saved with Save).
+
+import { IconId } from "icons.slint";
+import { Theme } from "styles.slint";
+
+/// One check. `status`: 0 = OK, 1 = info, 2 = warning, 3 = problem.
+export struct DebugCheckView {
+    id: string,
+    status: int,
+    title: string,
+    detail: string,
+    // The commands that fix it (each with a copy button).
+    fix-lines: [string],
+    // The index of a settings page that has more about it (-1 = none) and its name.
+    settings-page: int,
+    settings-page-name: string,
+}
+
+/// The checks of one card: what needs attention, what passed, and the one-line summary of the header.
+export struct DebugCheckGroupView {
+    attention: [DebugCheckView],
+    passed: [DebugCheckView],
+    summary: string,
+    // The summary is about a problem or a warning (drawn in the warning color).
+    alarming: bool,
+}
+
+export struct DebugInfoRow {
+    label: string,
+    value: string,
+}
+
+/// A stage of the startup: where its bar starts and ends (0..1 of the whole startup) and the time it was reached.
+export struct DebugStageView {
+    name: string,
+    start: float,
+    end: float,
+    time: string,
+    first-frame: bool,
+}
+
+/// A folder of RustView (its id is passed back when it is opened or its path copied).
+export struct DebugFolderView {
+    id: string,
+    label: string,
+    path: string,
+}
+
+export global DebugStyle {
+    public pure function status-icon(status: int) -> IconId {
+        if status == 3 {
+            return IconId.status-error;
+        }
+        if status == 2 {
+            return IconId.status-warning;
+        }
+        if status == 1 {
+            return IconId.status-info;
+        }
+        return IconId.status-ok;
+    }
+
+    public pure function status-color(status: int) -> color {
+        if status == 3 {
+            return Theme.status-corrupt;
+        }
+        if status == 2 {
+            return Theme.accent;
+        }
+        if status == 1 {
+            return Theme.primary;
+        }
+        return Theme.status-ok;
+    }
+}
+
+export global DebugUi {
+    // The cards that are open (remembered in `view.debug_page`).
+    in property <bool> dependencies-open: true;
+    in property <bool> health-open: true;
+    in property <bool> log-open;
+    in property <bool> report-open;
+    in property <bool> tools-open;
+    in property <bool> startup-open;
+    in property <bool> runtime-open;
+    in property <bool> privacy-open;
+    // The passed checks are listed (otherwise one row "N checks passed").
+    in property <bool> dependencies-passed-shown;
+    in property <bool> health-passed-shown;
+    in property <bool> developer-open;
+
+    in property <DebugCheckGroupView> dependencies;
+    in property <DebugCheckGroupView> health;
+    in property <DebugCheckGroupView> developer;
+    // One `sudo pacman -S --needed ...` line when two or more packages are missing ("" = none).
+    in property <string> install-all;
+    // The checks run now / when they last ran ("" = not yet).
+    in property <bool> checking;
+    in property <string> checked-at;
+
+    in property <string> log-summary;
+    // The value of RUST_LOG when it decides the level ("" = the level of the settings is used).
+    in property <string> env-override;
+    in property <string> log-folder;
+
+    in property <string> report-summary;
+    in property <string> report-note;
+    in property <bool> report-note-error;
+
+    in property <bool> self-test-running;
+    in property <[DebugCheckView]> self-test-results;
+    in property <[DebugFolderView]> folders;
+
+    in property <[DebugStageView]> stages;
+    in property <string> startup-summary;
+
+    in property <[DebugInfoRow]> runtime;
+    in property <string> runtime-summary;
+
+    callback card-toggled(string /* card id */);
+    callback passed-toggled(string /* card id */);
+    callback developer-toggled();
+    callback run-checks();
+    // Copies a text to the clipboard; false when the clipboard refused it.
+    callback copy-text(string) -> bool;
+    callback jump-to-page(int);
+    callback open-log-window();
+    callback open-folder(string /* folder id */);
+    callback copy-report();
+    callback save-report();
+    callback run-self-test();
+    callback reset-window();
+    callback reset-layout();
+}

@@ -24,6 +24,7 @@ pub const WINDOWS: &[(&str, &str)] = &[
         "SettingsDialogController::close; the changes that were not saved are discarded",
     ),
     ("ColorPickerWindow", "color_picker::shutdown"),
+    ("LogWindow", "log_window::close (hidden; its place is kept)"),
     ("FileRenameDialog", "hidden directly"),
     ("FavoriteRenameDialog", "FavoriteRenameDialogController::close"),
     ("MissingFileDialog", "MissingFileDialogController::close"),

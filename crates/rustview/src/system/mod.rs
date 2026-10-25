@@ -1,6 +1,7 @@
 pub mod app_dirs;
 pub mod clipboard;
 pub mod desktop;
+pub mod diagnostics;
 pub mod display;
 pub mod dnd;
 pub mod error;

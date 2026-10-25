@@ -1,4 +1,5 @@
 mod confirmations;
+mod debug_page;
 mod formats_page;
 mod hotkeys_page;
 mod image_edit_page;
@@ -11,6 +12,8 @@ pub const HOTKEYS_PAGE: i32 = 9;
 use crate::system::{MonitorInfo, SystemDisplayService};
 use crate::ui::color_picker::PickerRequest;
 use crate::ui::{MainWindow, SettingsWindow, TooltipSettings, color_picker};
+use debug_page::DebugPageController;
+pub use debug_page::{DEBUG_PAGE, DebugContext};
 pub use formats_page::FormatCounter;
 use formats_page::FormatsPage;
 use hotkeys_page::HotkeysPageController;
@@ -44,11 +47,13 @@ pub struct SettingsDialogController {
     detected_monitors: Rc<RefCell<Vec<MonitorInfo>>>,
     formats_page: Arc<FormatsPage>,
     hotkeys_page: Rc<HotkeysPageController>,
+    debug_page: Rc<DebugPageController>,
 }
 
 impl SettingsDialogController {
     pub fn new(manager: Arc<SettingsManager>) -> Self {
         let hotkeys_page = HotkeysPageController::new(manager.clone());
+        let debug_page = DebugPageController::new(manager.clone());
         Self {
             settings_window: None,
             manager,
@@ -56,12 +61,18 @@ impl SettingsDialogController {
             detected_monitors: Rc::new(RefCell::new(Vec::new())),
             formats_page: Arc::new(FormatsPage::default()),
             hotkeys_page,
+            debug_page,
         }
     }
 
     /// Lets the File Formats page show how many indexed files each format owns (call before the first `show`).
     pub fn set_format_counter(&self, counter: FormatCounter) {
         self.formats_page.set_counter(counter);
+    }
+
+    /// Gives Settings > Debug what it needs from the rest of the app (call before the first `show`).
+    pub fn set_debug_context(&self, context: DebugContext) {
+        self.debug_page.set_context(context);
     }
 
     pub fn set_main_window(&mut self, weak: slint::Weak<MainWindow>) {
@@ -101,6 +112,9 @@ impl SettingsDialogController {
             color_picker::install(&window);
             self.formats_page.install(&window);
             self.hotkeys_page.install(&window);
+            self.debug_page.install(&window);
+            let debug_page = self.debug_page.clone();
+            window.on_debug_page_shown(move |shown| debug_page.page_shown(shown));
             self.register_callbacks(&window);
             self.settings_window = Some(window);
         }
@@ -115,6 +129,10 @@ impl SettingsDialogController {
             }
 
             let _ = crate::ui::dialog_parent::show(window);
+            // The window keeps its page between openings: no change event tells the Debug page it is shown again.
+            if window.get_active_category() == DEBUG_PAGE {
+                self.debug_page.page_shown(true);
+            }
         }
     }
 
@@ -283,6 +301,7 @@ impl SettingsDialogController {
 
         // Debug properties
         window.set_obfuscate_logs(settings.debug.obfuscate_logs);
+        self.debug_page.populate(window, settings);
     }
 
     /// Action bar, sound and background of the fullscreen.
@@ -710,6 +729,7 @@ impl SettingsDialogController {
 
                 // Save Debug Parameters
                 current.debug.obfuscate_logs = w.get_obfuscate_logs();
+                DebugPageController::save(&w, &mut current);
 
                 mgr_save.update(&current);
 

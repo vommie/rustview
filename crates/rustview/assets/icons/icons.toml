@@ -147,6 +147,19 @@ tag = { tabler = "tag", doc = "Tag marker (outline)" }
 tag_filled = { tabler = "tag", style = "filled", doc = "Filled tag marker (thumbnail badges only)" }
 tag_root = { tabler = "hierarchy-2", doc = "Top level of the tag tree" }
 
+# --- Settings > Debug (`docs/debug_page.md`) ---------------------------------------------------------------------------
+status_info = { tabler = "info-circle", doc = "Information status (a check with nothing to do)" }
+log_window = { tabler = "list-details", doc = "Open the log window (the log, live)" }
+video_self_test = { tabler = "player-play", doc = "Settings > Debug: play the built-in test picture (video self-test)" }
+window_reset = { tabler = "app-window-center", doc = "Settings > Debug: the main window back to its default size, centered" }
+ui_layout_reset = { tabler = "layout-sidebar", doc = "Settings > Debug: sidebars, columns and view back to their defaults (held)" }
+log_all_lines = { tabler = "list", doc = "Log window: show every line" }
+log_warnings = { tabler = "alert-triangle", doc = "Log window: show warnings and errors only" }
+log_errors = { tabler = "circle-x", doc = "Log window: show errors only" }
+log_names_shown = { tabler = "eye", doc = "Log window: the lines with every name (the real log)" }
+log_names_hidden = { tabler = "eye-off", doc = "Log window: the lines as the private log has them (names hidden)" }
+log_follow = { tabler = "arrow-bar-to-down", doc = "Log window: scroll to every new line" }
+
 # --- Colored icons (never tinted): ratings -------------------------------------------------------------------------
 rating_0 = { custom = "rating_0.svg", color = true, doc = "Unrated badge" }
 rating_1 = { custom = "rating_1.svg", color = true, doc = "Rating 1 badge" }

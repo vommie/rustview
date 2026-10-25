@@ -149,7 +149,10 @@ fn mpv(facts: &DependencyFacts) -> Check {
             "libmpv",
             Status::Ok,
             mpv.version.clone(),
-            format!("plays the videos (with FFmpeg {})", mpv.ffmpeg_version),
+            format!(
+                "plays the videos (with FFmpeg {})",
+                mpv.ffmpeg_version.trim_start_matches('n')
+            ),
         ),
         Some(Err(error)) => dep(
             "libmpv",

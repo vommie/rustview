@@ -7,7 +7,6 @@ use super::dependencies::{DependencyFacts, FfmpegFacts, MpvFacts, PROGRAMS, Port
 use super::health::{AuditFacts, LibraryFacts, MountFacts, RootFacts, SettingsFileFacts, SpaceFacts, ThumbnailFacts};
 use crate::library::{FolderDiagnostics, Library};
 use crate::settings::AppSettings;
-use crate::thumbnails::ThumbnailStorageStats;
 use crate::util::cast::SaturatingAs;
 use chrono::{DateTime, Local};
 use std::collections::BTreeSet;
@@ -159,13 +158,25 @@ pub fn audit(library: &Library) -> Result<AuditFacts, String> {
     })
 }
 
-/// The thumbnail numbers from the store's statistics and the number of media.
-pub fn thumbnails(stats: &ThumbnailStorageStats, media: u64) -> ThumbnailFacts {
-    ThumbnailFacts {
-        thumbnails: stats.lmdb_thumbnails_count,
-        bytes: stats.total_cache_bytes,
-        media_without: media.saturating_sub(stats.lmdb_thumbnails_count.saturating_as::<u64>()),
-    }
+/// The number of thumbnails (database) and the size of the pack files in `cache_dir` (their sizes only; nothing is opened or
+/// created there).
+pub fn thumbnails(library: &Library, cache_dir: &Path, media: u64) -> Result<ThumbnailFacts, String> {
+    let db = library.raw_db();
+    let rtxn = db.env.read_txn().map_err(|e| e.to_string())?;
+    let thumbnails = db.thumbnails.len(&rtxn).map_err(|e| e.to_string())?;
+    let bytes = std::fs::read_dir(cache_dir).map_or(0, |entries| {
+        entries
+            .filter_map(Result::ok)
+            .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "bin"))
+            .filter_map(|entry| entry.metadata().ok())
+            .map(|meta| meta.len())
+            .sum()
+    });
+    Ok(ThumbnailFacts {
+        thumbnails: thumbnails.saturating_as::<usize>(),
+        bytes,
+        media_without: media.saturating_sub(thumbnails),
+    })
 }
 
 /// Reads `settings.json` again and looks for the copy of a damaged one.

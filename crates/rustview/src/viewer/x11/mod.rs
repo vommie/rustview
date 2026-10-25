@@ -7,6 +7,7 @@ mod error_handler;
 mod ghost;
 mod overlay_server;
 mod pointer;
+mod server_facts;
 mod session;
 mod subwindow;
 mod windows;
@@ -18,6 +19,7 @@ pub use error_handler::install_nonfatal_error_handler;
 pub use ghost::{GhostPixels, GhostWindow};
 pub use overlay_server::OverlayServer;
 pub use pointer::PointerProbe;
+pub use server_facts::x11_server_facts;
 pub use session::x11_display_answers;
 pub use subwindow::{SubwindowGeometry, ViewportBounds, X11VideoSubwindow, XRectangle};
 pub use windows::{

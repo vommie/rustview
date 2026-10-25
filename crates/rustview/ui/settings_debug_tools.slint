@@ -1,0 +1,278 @@
+// Settings > Debug: the cards Log, Diagnostic Report, Tools, Startup and Runtime (`docs/debug_page.md`).
+
+import { ComboBox } from "std-widgets.slint";
+import { Theme } from "styles.slint";
+import { AppIcon, IconId, IconSize } from "icons.slint";
+import { ToolbarButton } from "toolbar_button.slint";
+import { SettingsOptionRow, SettingsSwitchRow } from "settings_option_row.slint";
+import { DebugUi } from "settings_debug_ui.slint";
+import { CheckRow, CommandLine, DebugCard, InfoRow, ToolRow, WrapText } from "settings_debug_parts.slint";
+
+/// The log: its level and files (settings, applied with Save) and the log window.
+export component DebugLogCard inherits DebugCard {
+    in-out property <int> log-level-idx;
+    in-out property <bool> log-files;
+    in-out property <bool> mpv-log;
+
+    title: "Log";
+    summary: DebugUi.log-summary;
+    open: DebugUi.log-open;
+    action-icon: IconId.log-window;
+    action-tooltip: "Open the log window: it follows the log live and can stay open next to the main window";
+    toggled => { DebugUi.card-toggled("log"); }
+    action => { DebugUi.open-log-window(); }
+
+    if DebugUi.log-open : VerticalLayout {
+        spacing: 4px;
+
+        SettingsOptionRow {
+            label: "Level";
+            description: DebugUi.env-override != ""
+                ? "RUST_LOG=" + DebugUi.env-override + " is set and decides the level while it is."
+                : "How much RustView writes to its log. Applies with Save, without a restart.";
+            enabled: DebugUi.env-override == "";
+
+            ComboBox {
+                width: 140px;
+                enabled: DebugUi.env-override == "";
+                model: ["Errors", "Warnings", "Info", "Debug", "Trace"];
+                current-index <=> root.log-level-idx;
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 4px;
+
+            SettingsSwitchRow {
+                horizontal-stretch: 1;
+                label: "Write log files";
+                description: "rustview.log as it happened and rustview-private.log with names hidden (to share), in " + DebugUi.log-folder + ": a new pair per start, the last 5 are kept.";
+                checked <=> root.log-files;
+            }
+
+            VerticalLayout {
+                alignment: center;
+
+                ToolbarButton {
+                    height: 26px;
+                    icon: IconId.folder-open;
+                    tooltip: "Open the folder of the log files";
+                    clicked => { DebugUi.open-folder("logs"); }
+                }
+            }
+        }
+
+        SettingsSwitchRow {
+            label: "Detailed mpv log";
+            description: "mpv.log next to them, with every message of the video player (thousands of lines), for videos opened afterwards. mpv's warnings and errors are always in the log.";
+            checked <=> root.mpv-log;
+        }
+    }
+}
+
+/// The diagnostic report: copy it or save it.
+export component DebugReportCard inherits DebugCard {
+    title: "Diagnostic Report";
+    summary: DebugUi.report-summary;
+    open: DebugUi.report-open;
+    toggled => { DebugUi.card-toggled("report"); }
+
+    if DebugUi.report-open : VerticalLayout {
+        spacing: 8px;
+
+        WrapText {
+            text: "A text for a bug report: version, system, window system, graphics, the checks, the settings you changed, the startup and the last 300 log lines. Names and paths are hidden while \"Obfuscate\" (Privacy) is on.";
+            text-color: Theme.text-muted;
+            font-size: 11px;
+        }
+
+        HorizontalLayout {
+            spacing: 6px;
+
+            VerticalLayout {
+                alignment: start;
+
+                ToolbarButton {
+                    height: 26px;
+                    icon: IconId.copy;
+                    tooltip: "Copy the report to the clipboard";
+                    clicked => { DebugUi.copy-report(); }
+                }
+            }
+
+            VerticalLayout {
+                alignment: start;
+
+                ToolbarButton {
+                    height: 26px;
+                    icon: IconId.save;
+                    tooltip: "Save the report as a text file";
+                    clicked => { DebugUi.save-report(); }
+                }
+            }
+
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+
+                WrapText {
+                    text: DebugUi.report-note;
+                    text-color: DebugUi.report-note-error ? Theme.status-corrupt : Theme.status-ok;
+                    font-size: 11px;
+                }
+            }
+        }
+    }
+}
+
+/// The tools: the video self-test, the folders, resetting the window and the layout.
+export component DebugToolsCard inherits DebugCard {
+    title: "Tools";
+    summary: "video self-test, folders, reset";
+    open: DebugUi.tools-open;
+    toggled => { DebugUi.card-toggled("tools"); }
+
+    if DebugUi.tools-open : VerticalLayout {
+        spacing: 12px;
+
+        VerticalLayout {
+            spacing: 6px;
+
+            ToolRow {
+                icon: IconId.video-self-test;
+                tooltip: DebugUi.self-test-running ? "The self-test is running" : "Play the test picture";
+                enabled: !DebugUi.self-test-running;
+                title: "Video self-test";
+                description: DebugUi.self-test-running
+                    ? "A small mpv window shows the test picture for three seconds..."
+                    : "Plays a three-second test picture that mpv makes itself (no file is read) in a small window and reports how it was drawn.";
+                clicked => { DebugUi.run-self-test(); }
+            }
+
+            if DebugUi.self-test-results.length > 0 : VerticalLayout {
+                spacing: 6px;
+                padding-left: 36px;
+
+                for check in DebugUi.self-test-results : CheckRow {
+                    check: check;
+                }
+            }
+        }
+
+        VerticalLayout {
+            spacing: 6px;
+
+            for folder in DebugUi.folders : HorizontalLayout {
+                spacing: 10px;
+
+                VerticalLayout {
+                    alignment: start;
+
+                    ToolbarButton {
+                        height: 26px;
+                        icon: IconId.folder-open;
+                        tooltip: "Open this folder in the file manager";
+                        clicked => { DebugUi.open-folder(folder.id); }
+                    }
+                }
+
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: 2px;
+
+                    Text {
+                        text: folder.label;
+                        color: Theme.text;
+                        font-size: 12px;
+                    }
+
+                    CommandLine {
+                        indent: 0px;
+                        text: folder.path;
+                        copy-tooltip: "Copy the path";
+                    }
+                }
+            }
+        }
+
+        ToolRow {
+            icon: IconId.window-reset;
+            tooltip: "Reset the main window";
+            title: "Reset the window size and position";
+            description: "The main window gets its default size, centered on its monitor (useful after a monitor was changed).";
+            clicked => { DebugUi.reset-window(); }
+        }
+
+        ToolRow {
+            icon: IconId.ui-layout-reset;
+            tooltip: "Reset the layout";
+            hold: true;
+            title: "Reset the layout";
+            description: "Sidebar widths, the inspector, the panel tabs, the table columns, grid or table and the tab grid columns go back to their defaults. Sort order, filters, settings, tags and the library stay.";
+            clicked => { DebugUi.reset-layout(); }
+        }
+    }
+}
+
+/// The stages of this launch as bars on one time line.
+export component DebugStartupCard inherits DebugCard {
+    title: "Startup";
+    summary: DebugUi.startup-summary;
+    open: DebugUi.startup-open;
+    toggled => { DebugUi.card-toggled("startup"); }
+
+    if DebugUi.startup-open : VerticalLayout {
+        spacing: 3px;
+
+        for stage in DebugUi.stages : HorizontalLayout {
+            spacing: 10px;
+            height: 17px;
+
+            Text {
+                width: 140px;
+                text: stage.name;
+                color: stage.first-frame ? Theme.status-ok : Theme.text;
+                font-size: 11px;
+                vertical-alignment: center;
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+
+                Rectangle {
+                    x: parent.width * stage.start;
+                    y: 3px;
+                    width: max(2px, parent.width * (stage.end - stage.start));
+                    height: parent.height - 6px;
+                    border-radius: 2px;
+                    background: stage.first-frame ? Theme.status-ok : Theme.primary;
+                }
+            }
+
+            Text {
+                width: 70px;
+                text: stage.time;
+                color: Theme.text-muted;
+                font-size: 11px;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
+
+/// Live values of the running app (refreshed every second while this card is open and the page is shown).
+export component DebugRuntimeCard inherits DebugCard {
+    title: "Runtime";
+    summary: DebugUi.runtime-summary;
+    open: DebugUi.runtime-open;
+    toggled => { DebugUi.card-toggled("runtime"); }
+
+    if DebugUi.runtime-open : VerticalLayout {
+        spacing: 5px;
+
+        for info in DebugUi.runtime : InfoRow {
+            info: info;
+        }
+    }
+}

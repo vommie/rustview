@@ -96,7 +96,7 @@ pub struct MemoryFacts {
 pub struct HealthFacts {
     pub library: Option<Result<LibraryFacts, String>>,
     pub audit: Option<Result<AuditFacts, String>>,
-    pub thumbnails: Option<ThumbnailFacts>,
+    pub thumbnails: Option<Result<ThumbnailFacts, String>>,
     pub settings_file: Option<SettingsFileFacts>,
     pub space: Option<Result<SpaceFacts, String>>,
     pub root: Option<RootFacts>,
@@ -121,8 +121,16 @@ pub fn evaluate(facts: &HealthFacts) -> Vec<Check> {
     if let Some(audit) = &facts.audit {
         checks.push(audit_check(audit));
     }
-    if let Some(thumbnails) = facts.thumbnails {
-        checks.push(thumbnail_check(thumbnails));
+    if let Some(thumbnails) = &facts.thumbnails {
+        checks.push(match thumbnails {
+            Ok(thumbnails) => thumbnail_check(*thumbnails),
+            Err(error) => health(
+                "thumbnails",
+                Status::Problem,
+                "The thumbnails cannot be read",
+                error.clone(),
+            ),
+        });
     }
     if let Some(settings) = &facts.settings_file {
         checks.push(settings_check(settings));
@@ -163,14 +171,14 @@ fn library_check(library: &Result<LibraryFacts, String>) -> Check {
         Ok(lib) => {
             let size = lib
                 .file_bytes
-                .map(|bytes| format!("{} · ", format_bytes_metric(bytes)))
+                .map(|bytes| format!("{}, ", format_bytes_metric(bytes)))
                 .unwrap_or_default();
             health(
                 "library",
                 Status::Ok,
                 "Library database",
                 format!(
-                    "{size}{} media · {} folders · {} tags",
+                    "{size}{} media, {} folders, {} tags",
                     count(lib.media),
                     count(lib.folders),
                     count(lib.tags)
@@ -218,7 +226,7 @@ fn audit_check(audit: &Result<AuditFacts, String>) -> Check {
 
 fn thumbnail_check(thumbs: ThumbnailFacts) -> Check {
     let without = if thumbs.media_without > 0 {
-        format!(" · {} media without one", count(thumbs.media_without))
+        format!(", {} media without one", count(thumbs.media_without))
     } else {
         String::new()
     };
@@ -227,7 +235,7 @@ fn thumbnail_check(thumbs: ThumbnailFacts) -> Check {
         Status::Ok,
         "Thumbnails",
         format!(
-            "{} · {}{without}",
+            "{}, {}{without}",
             format_count(thumbs.thumbnails),
             format_bytes_metric(thumbs.bytes)
         ),
@@ -363,6 +371,15 @@ fn window_system_check(display: &DisplayFacts) -> Check {
     }
 }
 
+/// The GL version as the driver says it, with "OpenGL" in front unless it starts with it ("OpenGL ES 3.2 Mesa ...").
+pub fn gl_version_text(version: &str) -> String {
+    if version.starts_with("OpenGL") {
+        version.to_owned()
+    } else {
+        format!("OpenGL {version}")
+    }
+}
+
 /// Software OpenGL (Mesa's llvmpipe, softpipe, swrast): no graphics acceleration.
 pub fn is_software_renderer(renderer: &str) -> bool {
     let renderer = renderer.to_ascii_lowercase();
@@ -375,11 +392,7 @@ fn graphics_check(display: &DisplayFacts) -> Check {
     let Some(renderer) = &display.gl_renderer else {
         return health("graphics", Status::Info, "Graphics", "not known yet");
     };
-    let version = display
-        .gl_version
-        .as_ref()
-        .map(|v| format!("OpenGL {v}"))
-        .unwrap_or_default();
+    let version = display.gl_version.as_deref().map(gl_version_text).unwrap_or_default();
     if is_software_renderer(renderer) {
         let short = renderer.split_whitespace().next().unwrap_or(renderer);
         health(
@@ -438,11 +451,11 @@ mod tests {
                 elapsed_ms: 40,
                 problems: Vec::new(),
             })),
-            thumbnails: Some(ThumbnailFacts {
+            thumbnails: Some(Ok(ThumbnailFacts {
                 thumbnails: 47_980,
                 bytes: 2 << 30,
                 media_without: 230,
-            }),
+            })),
             settings_file: Some(SettingsFileFacts {
                 readable: Ok(()),
                 damaged_copy: None,
@@ -487,7 +500,7 @@ mod tests {
         );
         assert_eq!(
             find(&checks, "library").detail,
-            "1.00 GB · 48,210 media · 3,105 folders · 212 tags"
+            "1.00 GB, 48,210 media, 3,105 folders, 212 tags"
         );
         assert!(find(&checks, "thumbnails").detail.ends_with("230 media without one"));
     }
@@ -558,6 +571,15 @@ mod tests {
         display.in_app = false;
         let ids: Vec<&str> = in_memory(&display, None).iter().map(|c| c.id).collect();
         assert_eq!(ids, ["window_system"], "the command line does not know the graphics");
+    }
+
+    #[test]
+    fn the_gl_version_is_named_once() {
+        assert_eq!(
+            gl_version_text("4.6 (Core Profile) Mesa 26.2"),
+            "OpenGL 4.6 (Core Profile) Mesa 26.2"
+        );
+        assert_eq!(gl_version_text("OpenGL ES 3.2 Mesa 26.2"), "OpenGL ES 3.2 Mesa 26.2");
     }
 
     #[test]

@@ -20,6 +20,7 @@ pub mod hotkeys;
 pub mod image_edit;
 pub mod keymap;
 pub mod list_loader;
+pub mod log_window;
 pub mod media;
 pub mod models;
 pub mod multiview;

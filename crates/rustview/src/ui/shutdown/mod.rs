@@ -113,6 +113,7 @@ fn close_windows(t: &ShutdownTargets<'_>) {
         settings_dialog.close();
     }
     color_picker::shutdown();
+    crate::ui::log_window::close();
 
     if let Ok(dialog) = t.file_rename_dialog.try_borrow()
         && let Some(dialog) = dialog.as_ref()

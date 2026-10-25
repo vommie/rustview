@@ -134,6 +134,8 @@ export component SettingsWindow inherits Window {
     callback formats-set-all(int, bool);
     callback formats-filter-edited(string);
     callback formats-page-shown();
+    // Settings > Debug was opened (true) or left (false): its live values run only while it is shown.
+    callback debug-page-shown(bool);
 
     // Viewer options
     in-out property <bool> open-images-in-tab: true;
@@ -229,8 +231,11 @@ export component SettingsWindow inherits Window {
     // API options
     in-out property <bool> auto-complete-external-stubs: true;
 
-    // Debug options
+    // Debug options (the page's own state and actions are in the global `DebugUi`)
     in-out property <bool> obfuscate-logs: true;
+    in-out property <int> log-level-idx: 2; // 0 = errors, 1 = warnings, 2 = info, 3 = debug, 4 = trace
+    in-out property <bool> log-files: false;
+    in-out property <bool> mpv-log: false;
 
     // Callbacks to Rust backend
     callback browse-root-folder();
@@ -242,6 +247,7 @@ export component SettingsWindow inherits Window {
         if root.active-category == 4 {
             root.formats-page-shown();
         }
+        root.debug-page-shown(root.active-category == 11);
     }
 
     // The tooltips of this window follow the options being edited (the dialog is a window of its own with its own
@@ -485,6 +491,9 @@ export component SettingsWindow inherits Window {
 
                         if root.active-category == 11 : SettingsPageDebug {
                             obfuscate-logs <=> root.obfuscate-logs;
+                            log-level-idx <=> root.log-level-idx;
+                            log-files <=> root.log-files;
+                            mpv-log <=> root.mpv-log;
                         }
                     }
                 }
