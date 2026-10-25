@@ -15,6 +15,7 @@ use super::video_bar::reveal::{Phase, RevealInput};
 use super::video_bar::time_text;
 use super::video_bar::view::{DragPhase, VideoBarInput, VideoBarTarget, VideoBarView};
 use super::video_bar::volume::{self, VolumeIcon};
+use super::volume_feedback::VolumeInput;
 use crate::viewer::mpv_engine::SeekPrecision;
 use crate::viewer::multiview::follow::TileKey;
 use rustview_core::library::models::MediaId;
@@ -231,8 +232,9 @@ impl MultiviewInstance {
             return true;
         }
         let delta = f64::from(notches) * MULTIVIEW_VIDEO_WHEEL_VOLUME_STEP;
-        if let Err(e) = video.player.add_volume(if up { delta } else { -delta }) {
-            tracing::warn!(error = %e, "[Multiview: VideoBar] The wheel did not change the volume");
+        match video.player.add_volume(if up { delta } else { -delta }) {
+            Ok(()) => self.show_volume_feedback(index, VolumeInput::Wheel, Instant::now()),
+            Err(e) => tracing::warn!(error = %e, "[Multiview: VideoBar] The wheel did not change the volume"),
         }
         true
     }

@@ -8,7 +8,9 @@ use super::instance_commands::CommandResult;
 use super::model::TileKind;
 use super::player_prefs;
 use super::route::UiAction;
+use super::volume_feedback::{MuteInput, VolumeInput};
 use rustview_core::util::cast::Az;
+use std::time::Instant;
 
 /// How much louder or quieter one key press makes a video, in percent.
 const VOLUME_STEP: f64 = 5.0;
@@ -24,6 +26,7 @@ impl MultiviewInstance {
         }
         if command == PlayerCommand::Mute {
             self.toggle_mute_at(index);
+            self.show_mute_feedback(index, MuteInput::Hotkey, Instant::now());
             return Ok(UiAction::None);
         }
         let Some(video) = tile.video.as_ref() else {
@@ -52,8 +55,14 @@ impl MultiviewInstance {
             }
             PlayerCommand::Mute => Ok(()),
         };
-        if let Err(e) = result {
-            tracing::warn!(media_id = tile.media_id, ?command, error = %e, "[Multiview: Player] The player key failed");
+        match result {
+            Ok(()) if matches!(command, PlayerCommand::Volume { .. }) => {
+                self.show_volume_feedback(index, VolumeInput::Hotkey, Instant::now());
+            }
+            Ok(()) => {}
+            Err(e) => {
+                tracing::warn!(media_id = tile.media_id, ?command, error = %e, "[Multiview: Player] The player key failed");
+            }
         }
         Ok(UiAction::None)
     }

@@ -1,6 +1,6 @@
-//! Bitmaps that mpv draws over the picture of a player (`overlay-add`): the feedback icon of the Multiview and the corner marks
-//! of a selected video tile. The video is a native window Slint cannot draw over, so mpv does it on its OSD layer (no
-//! compositor, no X11 call; it works on Wayland and over a paused video too).
+//! Bitmaps that mpv draws over the picture of a player (`overlay-add`): the feedback icon of the Multiview, the corner marks
+//! of a selected video tile and the volume bar. The video is a native window Slint cannot draw over, so mpv does it on its OSD
+//! layer (no compositor, no X11 call; it works on Wayland and over a paused video too).
 
 use super::MpvPlayer;
 
@@ -8,6 +8,8 @@ use super::MpvPlayer;
 pub const FEEDBACK_OVERLAY_ID: u8 = 7;
 /// The four corner marks of the selected tile (top left, top right, bottom left, bottom right).
 pub const FOCUS_OVERLAY_IDS: [u8; 4] = [8, 9, 10, 11];
+/// The volume bar after a change of the volume by the wheel or a key (`volume_overlay`).
+pub const VOLUME_BAR_OVERLAY_ID: u8 = 12;
 
 impl MpvPlayer {
     /// Shows `width` x `height` premultiplied BGRA pixels as overlay `id`, with the top left corner at (`x`, `y`) of the window.

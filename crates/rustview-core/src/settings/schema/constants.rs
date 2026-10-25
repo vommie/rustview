@@ -593,6 +593,22 @@ pub const MULTIVIEW_TIME_BADGE_MARGIN_LOGICAL_PX: f32 = 5.0;
 /// One notch of the mouse wheel over a video or its volume bar changes the volume by this many percent.
 pub const MULTIVIEW_VIDEO_WHEEL_VOLUME_STEP: f64 = 5.0;
 
+/// The volume bar a video shows briefly after the wheel or a key changed its volume: the height of the bar and of the speaker
+/// icon left of it, in logical pixels (the bar never takes more than half the width of the video; a narrow one makes it smaller).
+pub const MULTIVIEW_VOLUME_BAR_HEIGHT_LOGICAL_PX: f32 = 24.0;
+
+/// The width of the bar itself (without the icon) where the video has room for it, in logical pixels.
+pub const MULTIVIEW_VOLUME_BAR_WIDTH_LOGICAL_PX: f32 = 240.0;
+
+/// The space between the speaker icon and the bar, in logical pixels.
+pub const MULTIVIEW_VOLUME_BAR_GAP_LOGICAL_PX: f32 = 4.0;
+
+/// The least distance of the volume bar from the bottom of the video, in logical pixels (above the control bar).
+pub const MULTIVIEW_VOLUME_BAR_BOTTOM_LOGICAL_PX: f32 = 72.0;
+
+/// The distance of the volume bar from the bottom of a tall video, as a share of the video's height.
+pub const MULTIVIEW_VOLUME_BAR_BOTTOM_SHARE: f32 = 0.12;
+
 // --- Fullscreen background ---
 /// "theme" (color of the app theme), "viewer" (the background of the viewer settings) or "custom" (`color`).
 pub const DEFAULT_FULLSCREEN_BACKGROUND_SOURCE: &str = "theme";

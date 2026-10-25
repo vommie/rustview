@@ -28,7 +28,7 @@ impl OverlayState {
         Self {
             icon: match pulse.icon {
                 FeedbackIcon::Rating(rating) => FeedbackIcon::Rating(rating.min(5)),
-                FeedbackIcon::Saved => FeedbackIcon::Saved,
+                other => other,
             },
             alpha: (pulse.alpha.clamp(0.0, 1.0) * 255.0).round().to_int::<u8>(),
             edge,
@@ -53,6 +53,11 @@ pub const SAVED_DISC: [u8; 3] = [0xa6, 0xe3, 0xa1];
 /// The share of the disc the save icon covers (the canvas draws it at the same share).
 pub const SAVED_ICON_SHARE: f64 = 0.56;
 
+/// The color of the speaker of the mute feedback, dark on the white disc of the rating icons.
+pub const SOUND_GLYPH: &str = "#1e1e2e";
+/// The white disc behind the speaker (the disc of the rating icons).
+pub const SOUND_DISC: [u8; 3] = [0xff, 0xff, 0xff];
+
 /// Straight RGBA pixels of `icon`, rasterized once per size.
 fn icon_pixels(icon: FeedbackIcon, edge: u32) -> Option<Arc<Vec<u8>>> {
     type Cache = Mutex<HashMap<(FeedbackIcon, u32), Arc<Vec<u8>>>>;
@@ -68,6 +73,11 @@ fn icon_pixels(icon: FeedbackIcon, edge: u32) -> Option<Arc<Vec<u8>>> {
         FeedbackIcon::Saved => {
             let glyph = (f64::from(edge) * SAVED_ICON_SHARE).round().to_int::<u32>().max(1);
             raster::render_rgba(Icon::Save, glyph, "#ffffff").map(|pixels| on_disc(&pixels, glyph, edge, SAVED_DISC))
+        }
+        FeedbackIcon::Sound { muted } => {
+            let glyph = (f64::from(edge) * SAVED_ICON_SHARE).round().to_int::<u32>().max(1);
+            let speaker = if muted { Icon::VolumeOff } else { Icon::VolumeOn };
+            raster::render_rgba(speaker, glyph, SOUND_GLYPH).map(|pixels| on_disc(&pixels, glyph, edge, SOUND_DISC))
         }
     };
     match rendered {

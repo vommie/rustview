@@ -34,6 +34,7 @@ impl Session {
             self.refresh();
             self.update_video_bars(true);
         }
+        self.arm_requested_feedback();
     }
 
     /// The mouse wheel over the video of tile `index`: the volume, with Ctrl mpv's zoom.
@@ -41,6 +42,7 @@ impl Session {
         if self.instance.lock().video_wheel(index, delta, ctrl) {
             self.update_video_bars(true);
         }
+        self.arm_requested_feedback();
     }
 
     /// A right click on the video of tile `index`: play or pause it.

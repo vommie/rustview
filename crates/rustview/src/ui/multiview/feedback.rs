@@ -1,6 +1,8 @@
 //! The feedback pulse of a Multiview on screen (`viewer::multiview::media_feedback`): every interaction with a medium that shows
-//! one (a rating key, a saved picture) starts it on the instance and then calls [`MultiviewHandle::feedback_started`]. The host
-//! that presents the instance draws it and owns a single-shot timer that runs only while a pulse is shown (`arm`).
+//! one (a rating key, a saved picture) starts it on the instance and then calls [`MultiviewHandle::feedback_started`]; the player
+//! keys and the wheel over a video (mute icon, volume bar) start it inside the instance, and the host asks
+//! `take_feedback_request` after them. The host that presents the instance draws it and owns a single-shot timer that runs
+//! only while a pulse is shown (`arm`).
 
 use super::handle::MultiviewHandle;
 use super::session::{self, Session};
@@ -35,6 +37,14 @@ impl Session {
     pub(super) fn feedback_changed(&mut self) {
         self.refresh();
         self.arm_feedback_timer();
+    }
+
+    /// An input the session does not follow itself (a player key, the wheel over a video) may have started a pulse or a volume
+    /// bar on the instance: arm the timer for it.
+    pub(super) fn arm_requested_feedback(&self) {
+        if self.instance.lock().take_feedback_request() {
+            self.arm_feedback_timer();
+        }
     }
 
     fn arm_feedback_timer(&self) {

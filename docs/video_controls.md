@@ -32,6 +32,13 @@ fullscreen and the tab view). The tab grid still leaves the pointer to mpv (its 
 - From round 3: the mouse wheel over a video changes the volume (5 % per notch; Ctrl + wheel zooms the video with mpv), a right
   click plays or pauses, a click selects the tile, double and middle click work as over pictures (through the canvas). Video
   zoom, panning, the minimap and the zoom slider like pictures: built in 0.4.12 (see below).
+- Volume feedback (0.5.2): when the wheel or a video player key (Louder/Quieter) changes the volume, a flat, semi-transparent volume bar
+  (a speaker icon of the bar's height left of a filled bar, the level like the slider: 100 % and more = full, dimmed while muted) shows
+  centered in the lower part of the video's picture, at most half its width, and holds and fades like the feedback pulse; a new change
+  restarts it. The control bar's slider shows none. The mute key shows the centered speaker icon (crossed out when muted) like the rating
+  icon; the mute buttons show none. Pure: `viewer/multiview/volume_feedback.rs` (inputs, pulses, geometry); drawn by mpv
+  (`volume_overlay.rs`, overlay id `VOLUME_BAR_OVERLAY_ID`); `instance_volume_feedback.rs`; the host arms its feedback timer after
+  `take_feedback_request`.
 
 ## Code
 

@@ -1,5 +1,6 @@
 //! The on-screen feedback of an interaction with a medium of a Multiview (pure, the clock is passed in): the one animation every
-//! such feedback uses, so they all look and time alike. Today: a rating given with the keyboard and a picture that was saved.
+//! such feedback uses, so they all look and time alike. Today: a rating given with the keyboard, a picture that was saved, a
+//! video muted or unmuted with its key, and the volume bar of a video (`volume_feedback`, which uses the same timing).
 //!
 //! A tile gets a pulse: an icon in its middle ([`FeedbackIcon`], [`ICON_EDGE`] logical pixels), full strength for [`HOLD`], then
 //! fading out for [`FADE`] (one second in all). A new pulse cancels the running one of the tile at once: the new icon starts at
@@ -27,6 +28,8 @@ pub enum FeedbackIcon {
     Rating(u8),
     /// The picture was saved.
     Saved,
+    /// A video was muted (crossed-out speaker) or unmuted (speaker) with the key.
+    Sound { muted: bool },
 }
 
 impl FeedbackIcon {
@@ -35,12 +38,43 @@ impl FeedbackIcon {
         match self {
             Self::Rating(rating) => i32::from(rating.min(5)),
             Self::Saved => SAVED_CODE,
+            Self::Sound { muted: false } => SOUND_ON_CODE,
+            Self::Sound { muted: true } => SOUND_OFF_CODE,
         }
     }
 }
 
 /// `FeedbackIcon::Saved` for the canvas.
 pub const SAVED_CODE: i32 = 6;
+/// `FeedbackIcon::Sound` (only ever on a video tile, so only mpv draws it).
+pub const SOUND_ON_CODE: i32 = 7;
+pub const SOUND_OFF_CODE: i32 = 8;
+
+/// The strength of a pulse that started at `started`: 1.0 during [`HOLD`], then fading to 0.0 over [`FADE`]; `None` once over.
+pub fn pulse_alpha(started: Instant, now: Instant) -> Option<f32> {
+    let age = now.saturating_duration_since(started);
+    if age < HOLD {
+        return Some(1.0);
+    }
+    let faded = age.saturating_sub(HOLD);
+    if faded >= FADE {
+        return None;
+    }
+    Some(1.0 - faded.as_secs_f32() / FADE.as_secs_f32())
+}
+
+/// How long until a pulse that started at `started` changes on screen: the rest of the hold, a frame during the fade, zero
+/// once it is over (it has to be dropped now).
+pub fn pulse_wakeup(started: Instant, now: Instant) -> Duration {
+    let age = now.saturating_duration_since(started);
+    if age < HOLD {
+        HOLD.saturating_sub(age)
+    } else if age < HOLD + FADE {
+        FRAME
+    } else {
+        Duration::ZERO
+    }
+}
 
 /// What is drawn on one tile right now.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -58,15 +92,7 @@ struct Pulse {
 
 impl Pulse {
     fn alpha(&self, now: Instant) -> Option<f32> {
-        let age = now.saturating_duration_since(self.started);
-        if age < HOLD {
-            return Some(1.0);
-        }
-        let faded = age.saturating_sub(HOLD);
-        if faded >= FADE {
-            return None;
-        }
-        Some(1.0 - faded.as_secs_f32() / FADE.as_secs_f32())
+        pulse_alpha(self.started, now)
     }
 }
 
@@ -122,20 +148,7 @@ impl MediaFeedback {
     /// How long until something changes on screen, `None` when no pulse is shown. While every pulse still holds that is the
     /// time until the first fade starts; during a fade it is the frame distance.
     pub fn wakeup(&self, now: Instant) -> Option<Duration> {
-        self.pulses
-            .values()
-            .map(|pulse| {
-                let age = now.saturating_duration_since(pulse.started);
-                if age < HOLD {
-                    HOLD.saturating_sub(age)
-                } else if age < HOLD + FADE {
-                    FRAME
-                } else {
-                    // Over: dropped by the next `expire`, which has to run now.
-                    Duration::ZERO
-                }
-            })
-            .min()
+        self.pulses.values().map(|pulse| pulse_wakeup(pulse.started, now)).min()
     }
 }
 
@@ -166,6 +179,17 @@ mod tests {
         assert!(late > 0.0 && late < 0.01, "{late}");
         assert_eq!(fb.view(1, t0 + ms(1000)), None);
         assert_eq!(fb.view(1, t0 + ms(5000)), None);
+    }
+
+    #[test]
+    fn the_sound_icons_have_codes_of_their_own() {
+        let codes = [
+            FeedbackIcon::Rating(5).code(),
+            FeedbackIcon::Saved.code(),
+            FeedbackIcon::Sound { muted: false }.code(),
+            FeedbackIcon::Sound { muted: true }.code(),
+        ];
+        assert_eq!(codes, [5, SAVED_CODE, SOUND_ON_CODE, SOUND_OFF_CODE]);
     }
 
     #[test]

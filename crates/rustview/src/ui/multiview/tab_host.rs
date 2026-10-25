@@ -84,6 +84,13 @@ pub fn feedback_changed() {
     arm_feedback_timer();
 }
 
+/// A player key or the wheel over a video may have started a pulse or a volume bar inside the instance: arm the timer for it.
+fn arm_requested_feedback(instance: &SharedInstance) {
+    if instance.lock().take_feedback_request() {
+        arm_feedback_timer();
+    }
+}
+
 fn arm_feedback_timer() {
     let Some(instance) = current_instance() else {
         return;
@@ -175,8 +182,9 @@ fn edit_key(code: i32) -> bool {
         return used;
     };
     let action = super::commands::run(&instance, command);
-    drop(instance);
     refresh();
+    arm_requested_feedback(&instance);
+    drop(instance);
     run(action);
     true
 }
@@ -360,6 +368,7 @@ fn video_bar_after(f: impl FnOnce(&mut MultiviewInstance) -> bool) {
         let shown_here = instance.lock().host_mode() == HostMode::TabView;
         update_video_bars(&instance, host_xid, shown_here);
     }
+    arm_requested_feedback(&instance);
 }
 
 /// A button of the primary bar was clicked.

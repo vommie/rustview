@@ -23,6 +23,7 @@ use super::media_feedback::MediaFeedback;
 use super::route::{HostMode, OriginKind};
 use super::teardown::{teardown_videos, teardown_videos_now};
 use super::tile::{TileSeed, TileState, VideoTile};
+use super::volume_feedback::VolumeFeedback;
 use crate::viewer::edit::tool_order::ToolOrder;
 use parking_lot::Mutex;
 use rustview_core::library::models::MediaId;
@@ -92,6 +93,11 @@ pub struct MultiviewInstance {
     pub(super) video_wheel_accum: f32,
     /// The icons of ratings given with the keyboard that are on screen right now.
     pub(super) feedback: MediaFeedback,
+    /// The volume bars of videos whose volume the wheel or a key changed, on screen right now.
+    pub(super) volume_feedback: VolumeFeedback,
+    /// A pulse or a volume bar was started by an input the host does not know about (a player key, the wheel): the host arms
+    /// its feedback timer (`take_feedback_request`).
+    pub(super) feedback_requested: bool,
     /// The open crop tools in the order they were opened (Esc cancels the oldest first).
     pub(super) crop_order: ToolOrder,
     /// The selected tile, the one the keys act on (`instance_focus`).
@@ -137,6 +143,8 @@ impl MultiviewInstance {
                 zoom_wheel_accum: 0.0,
                 video_wheel_accum: 0.0,
                 feedback: MediaFeedback::default(),
+                volume_feedback: VolumeFeedback::default(),
+                feedback_requested: false,
                 crop_order: ToolOrder::default(),
                 focus,
                 marks_revealed_until: None,
@@ -256,6 +264,7 @@ impl MultiviewInstance {
     /// afterwards.
     pub fn shutdown_now(&mut self) {
         self.feedback.clear();
+        self.volume_feedback.clear();
         let videos = self.take_videos();
         tracing::info!(
             instance = self.id,

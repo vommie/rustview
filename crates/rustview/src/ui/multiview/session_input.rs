@@ -126,6 +126,7 @@ impl Session {
     pub(super) fn command(&mut self, command: MultiviewCommand) -> UiAction {
         let action = super::commands::run(&self.instance, command);
         self.refresh();
+        self.arm_requested_feedback();
         action
     }
 

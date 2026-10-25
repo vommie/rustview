@@ -9,6 +9,13 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ## [Unreleased]
 
+### Added
+- **A volume bar shows when the mouse wheel or a key changes the volume of a video**: a flat, semi-transparent bar with a speaker icon
+  near the bottom of that video (at most half its width), in the fullscreen and in tabs, with one or several media. It fades out like the
+  rating icon, and every new change shows it again. Dragging the volume slider of the control bar shows no bar.
+- **The mute key shows a speaker icon** in the middle of the video (crossed out when it is muted), like the rating icon. The mute buttons
+  show none.
+
 ## [0.5.1] - 2026-10-25
 
 ### Fixed

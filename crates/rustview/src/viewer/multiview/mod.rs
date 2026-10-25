@@ -40,6 +40,7 @@ mod instance_sound;
 mod instance_tiles;
 mod instance_video_bar;
 mod instance_video_zoom;
+mod instance_volume_feedback;
 mod instance_zoom;
 pub mod key_labels;
 pub mod layout;
@@ -56,6 +57,8 @@ pub mod teardown;
 pub mod tile;
 pub mod video_bar;
 pub mod view;
+pub mod volume_feedback;
+pub mod volume_overlay;
 
 pub use instance_host::HostSurface;
 pub use instance_merge::ReleasedTiles;
