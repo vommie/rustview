@@ -95,6 +95,10 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 - **A click outside an open context menu also acts on what it hits**, as in KDE applications: it closes the menu and puts the cursor into a text field,
   selects the medium, presses the button or switches to the tab under the pointer; a right click opens the next menu there. Before, that click only closed
   the menu.
+- **In a Wayland session RustView runs through XWayland**, so videos play and everything works as on X11 (before, a Wayland session showed no video at
+  all). Without XWayland it still starts as a native Wayland program with those limits. `RUSTVIEW_WINDOW_SYSTEM=wayland` starts it as a native Wayland
+  program on purpose. Videos also no longer try mpv's Wayland drawing (`gpu-context`) where they cannot be embedded; X11 entries of your own `mpv.conf`
+  are kept.
 
 ### Removed
 - **The Prev and Next buttons of a tab's toolbar:** a tab always shows the media it was opened with (paging stays in a fullscreen opened from Browse).

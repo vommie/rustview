@@ -10,6 +10,7 @@ use std::time::Instant;
 
 mod controls;
 mod events;
+mod gpu_context;
 mod osd_text;
 pub mod overlay;
 mod playback;
@@ -199,6 +200,7 @@ impl MpvPlayer {
             .set_property("wid", wid.saturating_as::<i64>())
             .map_err(|e| ViewerError::Mpv(format!("Failed to set MPV 'wid' property: {e:?}")))?;
 
+        self.use_x11_gpu_contexts();
         if let Err(e) = self.mpv.set_property("vo", "gpu") {
             tracing::warn!(wid, error = ?e, "[MpvPlayer: Attach] Failed to switch the video output to 'gpu'");
         }
@@ -211,6 +213,25 @@ impl MpvPlayer {
         );
 
         Ok(())
+    }
+
+    /// Limits mpv to its X11 GPU contexts before the video output starts: the video is embedded into an X11 window, also in a
+    /// Wayland session (`XWayland`), where mpv would otherwise open a Wayland window of its own (`gpu_context`).
+    fn use_x11_gpu_contexts(&self) {
+        let current = self.mpv.get_property::<String>("gpu-context").unwrap_or_default();
+        let Some(contexts) = gpu_context::x11_gpu_contexts(&current) else {
+            return;
+        };
+        match self.mpv.set_property("gpu-context", contexts.as_str()) {
+            Ok(()) => tracing::debug!(
+                configured = %current,
+                used = %contexts,
+                "[MpvPlayer: Attach] GPU contexts limited to the X11 ones (the video is embedded into an X11 window)"
+            ),
+            Err(e) => {
+                tracing::warn!(error = ?e, "[MpvPlayer: Attach] Failed to limit the GPU contexts to the X11 ones");
+            }
+        }
     }
 
     /// Marks the player as shown in the tab grid (or not). The flag keeps a pause the grid causes from counting as the user's;

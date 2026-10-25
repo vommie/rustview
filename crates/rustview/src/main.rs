@@ -1,7 +1,7 @@
 use directories::ProjectDirs;
 use rustview::app::cli::{Cli, Command};
 use rustview::system::SystemDisplayService;
-use rustview::system::termination;
+use rustview::system::{termination, window_system};
 use rustview::ui::{MainWindow, UiBridge, shutdown};
 use rustview_core::library::Library;
 use rustview_core::settings::memory_budget::BYTES_PER_MB;
@@ -82,6 +82,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Ctrl+C, `kill` and a closed terminal run the same orderly shutdown as the close button (before any thread exists).
     termination::install_signal_handlers();
 
+    // X11, also in a Wayland session (XWayland), unless there is no X display: decided before any window exists.
+    let window_system = window_system::decide();
+    startup_clock::mark("WindowSystem");
+
     // Diagnostic System, Distro, Kernel, Session, and Monitor info emission (Runs ONLY ONCE at startup)
     SystemDisplayService::log_host_environment();
     startup_clock::mark("Diagnostics");
@@ -139,10 +143,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize Slint Window
     // The action bar of the Multiview floats in a window of its own; it has to be an override-redirect window, which Slint only
-    // lets us request before the first window is created.
-    slint::BackendSelector::new()
-        .with_winit_window_attributes_hook(rustview::ui::multiview::bar_overlay::window_attributes_hook)
-        .select()?;
+    // lets us request before the first window is created. The same goes for the window system winit opens.
+    let selector = slint::BackendSelector::new()
+        .with_winit_window_attributes_hook(rustview::ui::multiview::bar_overlay::window_attributes_hook);
+    window_system::select_backend(selector, window_system).select()?;
 
     startup_clock::mark("Backend");
     let main_window = MainWindow::new()?;

@@ -34,16 +34,11 @@ pub struct DndExportMetrics {
 pub struct SystemDndHandler;
 
 impl SystemDndHandler {
-    /// Detects whether the current Linux session is running on Wayland or X11.
+    /// The window system the drag comes from ("X11", "`XWayland`", "Wayland"): the one `RustView` runs on, not the session's guess
+    /// from the environment (under `XWayland` the drop is an XDND drop, which the compositor hands on to Wayland programs).
     #[inline]
     pub fn detect_session_type() -> &'static str {
-        if std::env::var_os("WAYLAND_DISPLAY").is_some()
-            || std::env::var("XDG_SESSION_TYPE").is_ok_and(|v| v.eq_ignore_ascii_case("wayland"))
-        {
-            "Wayland"
-        } else {
-            "X11"
-        }
+        super::window_system::current().label()
     }
 
     /// Converts a local filesystem path into an RFC 2483 compliant `file://` URI string.

@@ -249,8 +249,10 @@ impl SystemDisplayService {
     }
 
     /// Emits structured startup diagnostics covering host OS, Linux kernel, session architecture, and active displays.
-    /// Logs the host environment (distribution, kernel, session type). Reads two small files and the environment; no
-    /// subprocess, so it is cheap enough for the start of the launch (a crash report then says where it happened).
+    /// Logs the host environment (distribution, kernel, session type) and the window system `RustView` runs on: the session type
+    /// is what the environment says, `window_system` what the windows really use (in a Wayland session: `XWayland`). Reads two small
+    /// files and the environment; no subprocess, so it is cheap enough for the start of the launch (a crash report then says
+    /// where it happened).
     pub fn log_host_environment() {
         let distro = std::fs::read_to_string("/etc/os-release")
             .ok()
@@ -276,6 +278,7 @@ impl SystemDisplayService {
             distro = %distro,
             kernel = %kernel,
             session_type = %session_type,
+            window_system = super::window_system::current().label(),
             desktop = %desktop,
             display = %x11_display,
             wayland_display = %wayland_display,

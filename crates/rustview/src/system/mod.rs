@@ -6,6 +6,7 @@ pub mod error;
 pub mod file_handler;
 pub mod fs_access;
 pub mod termination;
+pub mod window_system;
 
 pub use clipboard::SystemClipboard;
 pub use desktop::{DesktopApp, DesktopIntegration};

@@ -9,6 +9,12 @@ pub(super) fn x11_error(error: impl std::fmt::Display) -> ViewerError {
     ViewerError::X11(error.to_string())
 }
 
+/// Opens one connection to the X server that `DISPLAY` names and closes it again: whether an X11 program can run here (in a
+/// Wayland session: whether `XWayland` answers).
+pub fn x11_display_answers() -> Result<(), ViewerError> {
+    Session::open("the window system check").map(drop)
+}
+
 /// A private connection to the X server and the root window of its default screen. Windows created on it vanish with it.
 pub(super) struct Session {
     pub(super) conn: RustConnection,

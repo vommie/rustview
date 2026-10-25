@@ -1,4 +1,5 @@
 use super::error::SystemHandlerError;
+use super::window_system::{self, Choice};
 use arboard::{Clipboard, ImageData};
 use image::ImageEncoder;
 use parking_lot::Mutex;
@@ -193,15 +194,13 @@ impl SystemClipboard {
         metrics.height = height;
         metrics.png_prep_us = t_prep.elapsed().as_micros();
 
-        // 3. Dispatch to Wayland / X11 native clipboard daemon using direct file handle
+        // 3. Dispatch to the clipboard tool of the window system RustView runs on, using a direct file handle. Under XWayland the
+        // X11 clipboard is handed on to Wayland programs by the compositor; wl-copy is the fallback there when xclip is missing.
         let t_cli = Instant::now();
-        let is_wayland = std::env::var_os("WAYLAND_DISPLAY").is_some()
-            || std::env::var("XDG_SESSION_TYPE").is_ok_and(|v| v.eq_ignore_ascii_case("wayland"));
-
-        let cli_success = if is_wayland {
-            Self::set_image_via_wl_copy(&png_path)
-        } else {
-            Self::set_image_via_xclip(&png_path)
+        let cli_success = match window_system::current() {
+            Choice::Wayland(_) => Self::set_image_via_wl_copy(&png_path),
+            Choice::XWayland => Self::set_image_via_xclip(&png_path) || Self::set_image_via_wl_copy(&png_path),
+            Choice::X11Session | Choice::NoDisplay => Self::set_image_via_xclip(&png_path),
         };
         metrics.cli_pipe_us = t_cli.elapsed().as_micros();
 

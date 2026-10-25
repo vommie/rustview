@@ -18,6 +18,7 @@ pub use error_handler::install_nonfatal_error_handler;
 pub use ghost::{GhostPixels, GhostWindow};
 pub use overlay_server::OverlayServer;
 pub use pointer::PointerProbe;
+pub use session::x11_display_answers;
 pub use subwindow::{SubwindowGeometry, ViewportBounds, X11VideoSubwindow, XRectangle};
 pub use windows::{
     find_window_by_pid_and_title, find_window_by_title, get_raw_window_xid, get_slint_window_xid,
