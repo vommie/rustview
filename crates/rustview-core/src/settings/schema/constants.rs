@@ -396,6 +396,35 @@ pub const MIN_VIEWER_VIDEO_JUMP_SECS: u32 = 1;
 
 pub const MAX_VIEWER_VIDEO_JUMP_SECS: u32 = 600;
 
+/// Support for the mpv script `ab_repeat.lua` (Settings > Viewer > Videos, `docs/mpv_ab_repeat.md`): look for it in the players.
+pub const DEFAULT_AB_REPEAT_ENABLED: bool = true;
+
+/// Let the script show its own on-screen messages in `RustView`'s players (as in mpv; off sets `ab_repeat-osd_messages=no`).
+pub const DEFAULT_AB_REPEAT_OSD_MESSAGES: bool = true;
+
+/// The colors of saved repeats in the playbar: "each" (each its own color) or "grey" (all grey, the active A-B yellow).
+pub const DEFAULT_AB_REPEAT_COLORS: &str = "each";
+
+/// A click on a saved repeat in the playbar loads it.
+pub const DEFAULT_AB_REPEAT_CLICK_LOADS: bool = true;
+
+/// The pointer over a saved repeat in the playbar shows its name / its times.
+pub const DEFAULT_AB_REPEAT_HOVER_NAME: bool = true;
+
+pub const DEFAULT_AB_REPEAT_HOVER_TIMES: bool = false;
+
+/// The A and B flags of the playbar can be dragged.
+pub const DEFAULT_AB_REPEAT_DRAG_FLAGS: bool = true;
+
+/// The load menu: "pages" (pages of `page_size` entries) or "scroll" (one list, `page_size` rows high).
+pub const DEFAULT_AB_REPEAT_MENU: &str = "pages";
+
+pub const DEFAULT_AB_REPEAT_PAGE_SIZE: u32 = 10;
+
+pub const MIN_AB_REPEAT_PAGE_SIZE: u32 = 5;
+
+pub const MAX_AB_REPEAT_PAGE_SIZE: u32 = 50;
+
 pub const DEFAULT_VIEWER_SHOW_TAB_RATING_BADGE: bool = false;
 
 pub const DEFAULT_VIEWER_BACKGROUND_MODE: &str = "Dark";
@@ -565,6 +594,9 @@ pub const DEFAULT_FULLSCREEN_PLAYER_SHOW_MS: bool = false;
 pub const DEFAULT_FULLSCREEN_PLAYER_SEEK: &str = "exact";
 
 /// How long the bar fades in or out.
+/// How long a key that moves a video (jumps, frame steps, the A-B repeat keys) shows its control bar, in milliseconds.
+pub const MULTIVIEW_VIDEO_BAR_PULSE_MS: u64 = 1500;
+
 pub const MULTIVIEW_VIDEO_BAR_FADE_MS: u64 = 150;
 
 /// Reveal "anywhere": how long the bar stays after the pointer stopped moving over the video.

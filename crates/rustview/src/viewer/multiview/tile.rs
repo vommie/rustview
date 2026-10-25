@@ -225,6 +225,13 @@ pub(super) fn connect_callbacks(
         let me = pause_owner.read().clone();
         pause_sink.post(me, PlayerEvent::PauseChanged { tile, paused });
     });
+    let tile = current_tile.clone();
+    let (ab_sink, ab_owner) = (Arc::clone(sink), Arc::clone(owner));
+    player.on_ab_repeat_changed(move |change| {
+        let tile = tile.load(Ordering::SeqCst);
+        let me = ab_owner.read().clone();
+        ab_sink.post(me, PlayerEvent::AbRepeat { tile, change });
+    });
     let tile = Arc::clone(current_tile);
     player.on_clicked(forward(sink, owner, move || {
         PlayerEvent::Clicked(tile.load(Ordering::SeqCst))

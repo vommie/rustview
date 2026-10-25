@@ -42,6 +42,8 @@ pub struct BarReveal {
     shown: bool,
     /// The bar fades out, and its window goes at this time.
     gone_at: Option<Instant>,
+    /// A key moved the video: the bar shows until this time, wherever the pointer is.
+    pulse_until: Option<Instant>,
 }
 
 impl BarReveal {
@@ -52,7 +54,12 @@ impl BarReveal {
             self.moved_at = Some(now);
         }
         self.last_pointer = input.pointer;
+        let pulsed = self.pulse_until.is_some_and(|until| now < until);
+        if !pulsed {
+            self.pulse_until = None;
+        }
         let wanted = input.forced
+            || pulsed
             || inside(input.bar)
             || match input.mode {
                 RevealMode::Bottom => {
@@ -81,6 +88,12 @@ impl BarReveal {
                 Phase::Hidden
             }
         }
+    }
+
+    /// A key moved the video (a jump, a frame step, an A-B repeat key; never the loop's own jumps): the bar shows until
+    /// `until`, like the volume bar after a wheel step.
+    pub fn pulse(&mut self, until: Instant) {
+        self.pulse_until = Some(self.pulse_until.map_or(until, |current| current.max(until)));
     }
 
     /// The bar goes at once (the host does not show it any more).

@@ -593,6 +593,14 @@ impl SettingsDiff {
             ));
         }
 
+        if old.viewer.videos.ab_repeat != new.viewer.videos.ab_repeat {
+            let ab = &new.viewer.videos.ab_repeat;
+            changes.push(format!(
+                "Viewer: videos.ab_repeat (enabled: {}, osd_messages: {}, colors: '{}', click_loads: {}, hover_name: {}, hover_times: {}, drag_flags: {}, menu: '{}', page_size: {})",
+                ab.enabled, ab.osd_messages, ab.colors, ab.click_loads, ab.hover_name, ab.hover_times, ab.drag_flags, ab.menu, ab.page_size
+            ));
+        }
+
         if old.viewer.tabs.show_rating_badge != new.viewer.tabs.show_rating_badge {
             changes.push(format!(
                 "Viewer: tabs.show_rating_badge ({} -> {})",

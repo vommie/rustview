@@ -96,6 +96,16 @@ fn route_event(handle: &MultiviewHandle, weak: &WeakInstance, event: PlayerEvent
             refresh_host(handle, mode);
             return;
         }
+        PlayerEvent::AbRepeat { tile, change } => {
+            let mode = {
+                let mut guard = instance.lock();
+                guard.on_ab_repeat_changed(tile, change);
+                guard.host_mode()
+            };
+            drop(instance);
+            refresh_host(handle, mode);
+            return;
+        }
         PlayerEvent::PauseChanged { tile, paused } => {
             let mode = {
                 let mut guard = instance.lock();

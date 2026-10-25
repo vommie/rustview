@@ -8,8 +8,10 @@ use crate::util::cast::SaturatingAs;
 use std::path::Path;
 
 mod edited_copy;
+mod move_observer;
 mod rename;
 mod transfer;
+pub use move_observer::set_move_observer;
 pub use rename::FilenameValidator;
 pub use rename::is_same_file_path;
 pub use transfer::robust_move_file;

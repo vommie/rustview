@@ -8,7 +8,8 @@ use super::layout::Rect;
 use super::model::TileKind;
 use super::route::HostMode;
 use super::tile::VideoTile;
-use super::video_bar::placement::{self, VideoBarPlacement};
+use super::video_bar::ab_view;
+use super::video_bar::placement::{self, AbRoom, VideoBarPlacement};
 use super::video_bar::prefs::{RevealMode, VideoBarPrefs};
 use super::video_bar::progress::ProgressTrack;
 use super::video_bar::reveal::{Phase, RevealInput};
@@ -16,6 +17,7 @@ use super::video_bar::time_text;
 use super::video_bar::view::{DragPhase, VideoBarInput, VideoBarTarget, VideoBarView};
 use super::video_bar::volume::{self, VolumeIcon};
 use super::volume_feedback::VolumeInput;
+use crate::viewer::ab_repeat::prefs as ab_prefs;
 use crate::viewer::mpv_engine::SeekPrecision;
 use crate::viewer::multiview::follow::TileKey;
 use rustview_core::library::models::MediaId;
@@ -76,11 +78,20 @@ impl MultiviewInstance {
                 video.bar.release();
                 continue;
             }
+            // The A-B group above the bar (strip, flags, labels) counts as the bar: the pointer there keeps it.
+            let keep = if !mini && video.player.ab_repeat().active() {
+                let room = (AbRoom::for_bar(prefs.height).above_bar(prefs.height) * scale)
+                    .round()
+                    .to_int::<i32>();
+                Rect::new(place.bar.x, place.bar.y - room, place.bar.w, place.bar.h + room)
+            } else {
+                place.bar
+            };
             let phase = video.bar.reveal.decide(
                 &RevealInput {
                     mode,
                     video: rect,
-                    bar: place.bar,
+                    bar: keep,
                     pointer,
                     margin_px: margin,
                     forced: video.bar.dragging(),
@@ -93,13 +104,18 @@ impl MultiviewInstance {
                 video.bar.set_hover(None);
                 continue;
             }
+            let view = bar_view(video, media_id, prefs, mini, now);
+            let placement = match &view.ab {
+                Some(ab) => place.with_room_above(ab_room_px(ab, prefs.height, scale)),
+                None => place,
+            };
             targets.push(VideoBarTarget {
                 key,
-                placement: place,
+                placement,
                 phase,
                 held: video.bar.dragging(),
                 mini,
-                view: bar_view(video, media_id, prefs, now),
+                view,
             });
         }
         targets
@@ -124,7 +140,7 @@ impl MultiviewInstance {
                     phase: DragPhase::Press,
                     ..
                 }
-        );
+        ) || matches!(&input, VideoBarInput::Ab(ab) if ab.is_press());
         let selected = pressed && self.select_tile(key);
         let media_id = self.tiles[index].media_id;
         match input {
@@ -133,12 +149,14 @@ impl MultiviewInstance {
                 return true;
             }
             VideoBarInput::Wheel { delta_y } => return self.video_wheel(index, delta_y, false) || selected,
+            VideoBarInput::Ab(ab) => return self.ab_input(index, ab) || selected,
             _ => {}
         }
         let Some(video) = self.tiles[index].video.as_mut() else {
             return selected;
         };
         let player = video.player.clone();
+        let name = input.name();
         let result = match input {
             VideoBarInput::PlayPause => player.toggle_pause(),
             VideoBarInput::ToggleMs => {
@@ -172,10 +190,10 @@ impl MultiviewInstance {
                 player.set_volume(level)
             }
             // Handled above.
-            VideoBarInput::Wheel { .. } | VideoBarInput::Speaker => Ok(()),
+            VideoBarInput::Wheel { .. } | VideoBarInput::Speaker | VideoBarInput::Ab(_) => Ok(()),
         };
         if let Err(e) = result {
-            tracing::warn!(media_id, ?input, error = %e, "[Multiview: VideoBar] The player did not take it");
+            tracing::warn!(media_id, input = name, error = %e, "[Multiview: VideoBar] The player did not take it");
         }
         true
     }
@@ -268,8 +286,18 @@ impl MultiviewInstance {
     }
 }
 
-/// What the bar of `video` (showing medium `media_id`) shows now.
-fn bar_view(video: &mut VideoTile, media_id: MediaId, prefs: &VideoBarPrefs, now: Instant) -> VideoBarView {
+/// The room the A-B group of `ab` needs above a bar of `bar_height` (logical), in physical pixels.
+fn ab_room_px(ab: &ab_view::AbBarView, bar_height: f32, scale: f32) -> i32 {
+    let popup = ab
+        .popup_size()
+        .map_or(0.0, |popup| placement::ab_popup_height(popup, bar_height));
+    ((AbRoom::for_bar(bar_height).above_bar(bar_height) + popup) * scale)
+        .round()
+        .to_int::<i32>()
+}
+
+/// What the bar of `video` (showing medium `media_id`) shows now (`mini`: the small bar of the tab grid).
+fn bar_view(video: &mut VideoTile, media_id: MediaId, prefs: &VideoBarPrefs, mini: bool, now: Instant) -> VideoBarView {
     let playback = video.player.playback();
     let ms = video.bar.ms_shown(media_id, prefs.show_ms);
     // With milliseconds the time of the observer (a tenth of a second) is too coarse: mpv is asked directly.
@@ -288,6 +316,17 @@ fn bar_view(video: &mut VideoTile, media_id: MediaId, prefs: &VideoBarPrefs, now
         .bar
         .hover()
         .map(|share| (share, time_text::clock(track.time_at(share), hours, ms)));
+    let ab = if mini {
+        None
+    } else {
+        ab_view::view(
+            &video.player.ab_repeat(),
+            track.duration_secs(),
+            &ab_prefs::current(),
+            &video.bar.ab,
+            (hours, ms),
+        )
+    };
     VideoBarView {
         playing: !playback.paused,
         times: time_text::texts(position, track.duration_secs(), ms),
@@ -297,5 +336,6 @@ fn bar_view(video: &mut VideoTile, media_id: MediaId, prefs: &VideoBarPrefs, now
         volume_icon: VolumeIcon::of(playback.volume, video.last_mute),
         muted: video.last_mute,
         hover,
+        ab,
     }
 }

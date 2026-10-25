@@ -270,6 +270,8 @@ impl UiBridge {
         crate::ui::hold_confirm::install(&window, app_settings.general.hold_to_confirm_ms);
         crate::ui::hotkeys::apply(&app_settings.hotkeys);
         crate::viewer::multiview::player_prefs::apply(&app_settings.viewer.videos);
+        crate::viewer::ab_repeat::prefs::apply(&app_settings.viewer.videos.ab_repeat);
+        rustview_core::library::file_operations::set_move_observer(crate::viewer::ab_repeat::moves::file_moved);
         crate::ui::hotkeys::main_window::install(&window);
         crate::ui::hotkeys::main_window::show_labels(&window);
         prefs::apply(&app_settings.fullscreen);

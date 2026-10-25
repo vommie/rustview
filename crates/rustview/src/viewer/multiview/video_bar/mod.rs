@@ -5,6 +5,9 @@
 //! action bars (`ui/multiview/video_bar`); `RustView` takes the pointer over videos, so mpv's own on-screen controller is off.
 //! Settings > Fullscreen > Player (`prefs`) choose its style, opacity, height, when it appears and whether it fades.
 
+pub mod ab_menu;
+pub mod ab_state;
+pub mod ab_view;
 pub mod placement;
 pub mod prefs;
 pub mod progress;

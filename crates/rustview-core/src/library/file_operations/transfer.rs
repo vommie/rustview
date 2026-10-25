@@ -198,6 +198,7 @@ impl FileOperations<'_> {
 
         if src_path.exists() {
             robust_move_file(&src_path, &dst_path)?;
+            super::move_observer::notify(&src_path, &dst_path);
 
             if let Ok(fs_meta) = std::fs::metadata(&dst_path) {
                 source_record.modification_time = fs_meta

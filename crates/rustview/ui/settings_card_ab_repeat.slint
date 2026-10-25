@@ -1,0 +1,153 @@
+import { Button, ComboBox, SpinBox } from "std-widgets.slint";
+import { Theme } from "styles.slint";
+import { SettingsCard } from "settings_card.slint";
+import { SettingsOptionRow, SettingsSwitchRow } from "settings_option_row.slint";
+import { TooltipArea } from "tooltips.slint";
+
+/// Settings > Viewer > Videos: support for the mpv script ab_repeat.lua (A-B repeats in the control bar of a video;
+/// `docs/mpv_ab_repeat.md`). The longer explanations are tooltips, so the card stays short.
+export component SettingsCardAbRepeat inherits VerticalLayout {
+    in-out property <bool> enabled: true;
+    in-out property <bool> osd-messages: true;
+    in-out property <int> colors-idx: 0; // 0 = each its own color, 1 = all grey
+    in-out property <bool> click-loads: true;
+    in-out property <bool> hover-name: true;
+    in-out property <bool> hover-times: false;
+    in-out property <bool> drag-flags: true;
+    in-out property <int> menu-idx: 0; // 0 = pages, 1 = scroll list
+    in-out property <int> page-size: 10;
+    // What the players (or the last check) found, and how it looks: 0 = not checked yet, 1 = found, 2 = incompatible,
+    // 3 = not found.
+    in property <string> status-text;
+    in property <int> status-level;
+    in property <string> status-tooltip;
+    in property <bool> checking;
+    callback check-again();
+
+    property <bool> usable: root.status-level != 2;
+    property <bool> on: root.enabled && root.usable;
+
+    SettingsCard {
+        title: "mpv script ab_repeat.lua";
+        description: "A-B repeats of your mpv script in the control bar of a video: set A and B, save, load and delete them.";
+
+        SettingsSwitchRow {
+            label: "Look for the script and support it";
+            tooltip: "RustView's players load your mpv configuration and scripts. When ab_repeat.lua runs in a player, the control bar of that video gets the A-B group (A, B, AB, Save, Load) and the playbar shows the saved repeats. The script does the work and saves the repeats in its own file (ab_repeat.json in mpv's configuration folder), so they are the same in mpv. The keys are on Settings > Hotkeys > MPV ab_repeat.lua.";
+            enabled: root.usable;
+            checked <=> root.enabled;
+        }
+
+        HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+            spacing: 8px;
+
+            VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 4px;
+                    background: root.status-level == 1 ? Theme.status-ok : root.status-level == 2 ? Theme.status-corrupt : Theme.text-muted;
+                }
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+                min-height: status.preferred-height;
+
+                status := Text {
+                    width: 100%;
+                    text: root.status-text;
+                    font-size: 11px;
+                    color: root.status-level == 2 ? Theme.status-corrupt : Theme.text-muted;
+                    wrap: word-wrap;
+                    vertical-alignment: center;
+                }
+
+                TooltipArea {
+                    width: 100%;
+                    height: 100%;
+                    text: root.status-tooltip;
+                }
+            }
+
+            Button {
+                text: root.checking ? "Checking..." : "Check again";
+                enabled: !root.checking;
+                clicked => { root.check-again(); }
+            }
+        }
+
+        SettingsSwitchRow {
+            label: "Show the script's messages in the video";
+            tooltip: "As in mpv: the script writes short texts over the video (\"A point set at ...\", \"Saved AB range ...\", the number of saved repeats when a video opens). Off: RustView switches all of them off for its players (ab_repeat-osd_messages=no); mpv itself is not changed. On: the script's own settings decide.";
+            enabled: root.on;
+            checked <=> root.osd-messages;
+        }
+
+        SettingsOptionRow {
+            label: "Saved repeats in the playbar";
+            tooltip: "Each saved repeat is a thin colored line above the progress bar; overlapping ones show as stronger color. Each keeps its color while RustView runs. Yellow always marks the A-B that is set now.";
+            enabled: root.on;
+
+            ComboBox {
+                width: 220px;
+                enabled: root.on;
+                model: ["Each its own color", "All grey"];
+                current-index <=> root.colors-idx;
+            }
+        }
+
+        SettingsSwitchRow {
+            label: "A click on a saved repeat loads it";
+            enabled: root.on;
+            checked <=> root.click-loads;
+        }
+
+        SettingsSwitchRow {
+            label: "The pointer over a saved repeat shows its name";
+            enabled: root.on;
+            checked <=> root.hover-name;
+        }
+
+        SettingsSwitchRow {
+            label: "The pointer over a saved repeat shows its times";
+            enabled: root.on;
+            checked <=> root.hover-times;
+        }
+
+        SettingsSwitchRow {
+            label: "The A and B flags of the playbar can be dragged";
+            tooltip: "Drag a flag to move its point; the script sets it there when you let go.";
+            enabled: root.on;
+            checked <=> root.drag-flags;
+        }
+
+        SettingsOptionRow {
+            label: "Menu of saved repeats";
+            tooltip: "Pages: the menu shows that many repeats per page and remembers the page of each video while RustView runs. Scroll list: one list, that many rows high.";
+            enabled: root.on;
+
+            HorizontalLayout {
+                spacing: 8px;
+
+                ComboBox {
+                    width: 140px;
+                    enabled: root.on;
+                    model: ["Pages", "Scroll list"];
+                    current-index <=> root.menu-idx;
+                }
+
+                SpinBox {
+                    width: 90px;
+                    enabled: root.on;
+                    minimum: 5;
+                    maximum: 50;
+                    value <=> root.page-size;
+                }
+            }
+        }
+    }
+}

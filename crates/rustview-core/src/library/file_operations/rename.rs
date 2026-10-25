@@ -141,6 +141,7 @@ impl FileOperations<'_> {
 
         if old_file_physically_exists {
             robust_move_file(&paths.old_path, &paths.new_path)?;
+            super::move_observer::notify(&paths.old_path, &paths.new_path);
 
             if let Ok(fs_meta) = std::fs::metadata(&paths.new_path) {
                 record.modification_time = fs_meta

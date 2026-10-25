@@ -9,8 +9,9 @@ use super::model::TileKind;
 use super::player_prefs;
 use super::route::UiAction;
 use super::volume_feedback::{MuteInput, VolumeInput};
+use rustview_core::settings::schema::MULTIVIEW_VIDEO_BAR_PULSE_MS;
 use rustview_core::util::cast::Az;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// How much louder or quieter one key press makes a video, in percent.
 const VOLUME_STEP: f64 = 5.0;
@@ -23,6 +24,9 @@ impl MultiviewInstance {
         let tile = &self.tiles[index];
         if tile.kind != TileKind::Video || tile.error.is_some() {
             return Err(HintKind::NotAVideo);
+        }
+        if let PlayerCommand::Ab(key) = command {
+            return self.ab_key(index, key);
         }
         if command == PlayerCommand::Mute {
             self.toggle_mute_at(index);
@@ -53,11 +57,20 @@ impl MultiviewInstance {
                     .player
                     .multiply_speed(if faster { SPEED_STEP } else { 1.0 / SPEED_STEP })
             }
-            PlayerCommand::Mute => Ok(()),
+            PlayerCommand::Mute | PlayerCommand::Ab(_) => Ok(()),
         };
         match result {
             Ok(()) if matches!(command, PlayerCommand::Volume { .. }) => {
                 self.show_volume_feedback(index, VolumeInput::Hotkey, Instant::now());
+            }
+            // A key that moved the video shows its control bar for a moment (the user sees where it is now).
+            Ok(()) if matches!(command, PlayerCommand::Jump { .. } | PlayerCommand::Frame { .. }) => {
+                if let Some(video) = self.tiles[index].video.as_mut() {
+                    video
+                        .bar
+                        .reveal
+                        .pulse(Instant::now() + Duration::from_millis(MULTIVIEW_VIDEO_BAR_PULSE_MS));
+                }
             }
             Ok(()) => {}
             Err(e) => {

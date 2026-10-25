@@ -81,6 +81,20 @@ pub struct DisplayFacts {
     pub mpv_context: Option<String>,
     /// Whether the facts come from the running app (otherwise graphics and mpv are not known).
     pub in_app: bool,
+    /// The mpv script `ab_repeat.lua` as the players found it (`None`: its support is switched off).
+    pub ab_repeat: Option<AbRepeatFacts>,
+}
+
+/// What the players (or Settings > Viewer > Videos, Check again) found about the mpv script `ab_repeat.lua`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AbRepeatFacts {
+    /// No video was opened yet.
+    Unknown,
+    /// Running with its interface (its version).
+    Found(String),
+    /// Running, but `RustView` cannot work with it (why).
+    Incompatible(String),
+    NotFound,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -160,10 +174,42 @@ pub fn in_memory(display: &DisplayFacts, memory: Option<MemoryFacts>) -> Vec<Che
             None => health("videos", Status::Info, "Videos", "no video was played yet"),
         });
     }
+    if display.in_app
+        && let Some(ab_repeat) = &display.ab_repeat
+    {
+        checks.push(ab_repeat_check(ab_repeat));
+    }
     if let Some(memory) = memory {
         checks.push(memory_check(memory));
     }
     checks
+}
+
+fn ab_repeat_check(facts: &AbRepeatFacts) -> Check {
+    const ID: &str = "ab_repeat";
+    match facts {
+        AbRepeatFacts::Found(version) => health(
+            ID,
+            Status::Ok,
+            format!("mpv script ab_repeat.lua {version}"),
+            "A-B repeats in the control bar of videos",
+        ),
+        AbRepeatFacts::Incompatible(reason) => health(
+            ID,
+            Status::Warning,
+            "mpv script ab_repeat.lua is incompatible",
+            format!(
+                "{reason} Replace the script in mpv's scripts folder (version 2.0 or newer, api=yes) and click Check again on Settings > Viewer > Videos."
+            ),
+        ),
+        AbRepeatFacts::NotFound => health(
+            ID,
+            Status::Info,
+            "mpv script ab_repeat.lua",
+            "not loaded by mpv: no A-B repeats in the control bar",
+        ),
+        AbRepeatFacts::Unknown => health(ID, Status::Info, "mpv script ab_repeat.lua", "no video was opened yet"),
+    }
 }
 
 fn library_check(library: &Result<LibraryFacts, String>) -> Check {
@@ -580,6 +626,21 @@ mod tests {
             "OpenGL 4.6 (Core Profile) Mesa 26.2"
         );
         assert_eq!(gl_version_text("OpenGL ES 3.2 Mesa 26.2"), "OpenGL ES 3.2 Mesa 26.2");
+    }
+
+    #[test]
+    fn the_ab_repeat_script_is_named_and_an_incompatible_one_warns() {
+        let mut display = display();
+        assert!(
+            in_memory(&display, None).iter().all(|c| c.id != "ab_repeat"),
+            "support switched off"
+        );
+        display.ab_repeat = Some(AbRepeatFacts::Incompatible("No interface.".into()));
+        let check = find(&in_memory(&display, None), "ab_repeat");
+        assert_eq!(check.status, Status::Warning);
+        assert!(check.detail.contains("Check again"));
+        display.ab_repeat = Some(AbRepeatFacts::Found("2.0".into()));
+        assert_eq!(find(&in_memory(&display, None), "ab_repeat").status, Status::Ok);
     }
 
     #[test]

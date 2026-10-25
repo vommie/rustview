@@ -1,5 +1,36 @@
 import { Theme } from "styles.slint";
 import { AppIcon, IconId } from "icons.slint";
+import { AbColors, AbGroup, AbLoadMenu, AbMenuRowView, AbSaveBubble, AbStripSegmentView } from "multiview_video_bar_ab.slint";
+import { GlobalTooltipLayer } from "global_tooltip_layer.slint";
+
+export { AbMenuRowView, AbStripSegmentView }
+
+/// What the A-B repeat group draws above the bar, in logical pixels of the window (width 0: not shown): the strip, the flags
+/// of A and B, the label of the repeat under the pointer and the open popup. They take the pointer, and without a compositing
+/// manager the window is cut to them.
+export struct AbRegionView {
+    strip-x: length,
+    strip-y: length,
+    strip-w: length,
+    strip-h: length,
+    strip-flank: length,
+    a-x: length,
+    a-y: length,
+    a-w: length,
+    a-h: length,
+    b-x: length,
+    b-y: length,
+    b-w: length,
+    b-h: length,
+    label-x: length,
+    label-y: length,
+    label-w: length,
+    label-h: length,
+    popup-x: length,
+    popup-y: length,
+    popup-w: length,
+    popup-h: length,
+}
 
 /// A stretch of the progress bar (`viewer::multiview::video_bar::progress`): shares of the bar's width and its kind.
 export struct VideoBarSpanView {
@@ -99,6 +130,81 @@ export component MultiviewVideoBarWindow inherits Window {
     in property <float> hover-share: 0;
     in property <string> hover-text;
 
+    // The A-B repeat group of the mpv script ab_repeat.lua (`video_bar::ab_view`); all of it only while `ab-shown`.
+    in property <bool> ab-shown: false;
+    // The room above the bar, from Rust (`placement::AbRoom`): the strip, one row for the flags and one for the label of the
+    // repeat under the pointer; the open popup on top.
+    in property <length> ab-strip-height: 12px;
+    in property <length> ab-strip-flank: 18px;
+    in property <length> ab-row-height: 16px;
+    in property <length> ab-popup-height: 0px;
+    in property <int> ab-a-look;
+    in property <int> ab-b-look;
+    in property <int> ab-loop-look;
+    in property <string> ab-a-tip;
+    in property <string> ab-b-tip;
+    in property <string> ab-loop-tip;
+    in property <bool> ab-save-enabled;
+    in property <string> ab-save-tip;
+    in property <int> ab-load-count;
+    in property <string> ab-load-tip;
+    in property <[AbStripSegmentView]> ab-strip;
+    in property <bool> ab-span-shown;
+    in property <float> ab-span-from;
+    in property <float> ab-span-to;
+    in property <bool> ab-span-looping;
+    in property <bool> ab-dim;
+    in property <bool> ab-a-flag-shown;
+    in property <float> ab-a-flag-share;
+    in property <string> ab-a-flag-text;
+    in property <bool> ab-a-flag-auto;
+    in property <bool> ab-b-flag-shown;
+    in property <float> ab-b-flag-share;
+    in property <string> ab-b-flag-text;
+    in property <bool> ab-b-flag-auto;
+    in property <bool> ab-flags-draggable: true;
+    in property <bool> ab-strip-clickable: true;
+    in property <bool> ab-label-shown;
+    in property <float> ab-label-share;
+    in property <string> ab-label-text;
+    // 0 = no popup, 1 = the save bubble, 2 = the load menu.
+    in property <int> ab-popup;
+    in-out property <string> ab-save-text;
+    in property <string> ab-save-placeholder;
+    in property <string> ab-save-hint;
+    in property <[AbMenuRowView]> ab-menu-rows;
+    in-out property <string> ab-menu-query;
+    in property <int> ab-menu-page;
+    in property <int> ab-menu-pages;
+    in property <bool> ab-menu-scroll;
+    in property <int> ab-menu-visible-rows: 1;
+    in property <string> ab-menu-status;
+    in property <int> ab-menu-renaming: -1;
+    in-out property <string> ab-menu-rename-text;
+    out property <AbRegionView> ab-region: {
+        strip-x: root.track-x - root.ab-strip-flank,
+        strip-y: root.ab-strip-top,
+        strip-w: root.ab-shown ? root.track-w + 2 * root.ab-strip-flank : 0px,
+        strip-h: root.ab-strip-height,
+        strip-flank: root.ab-strip-flank,
+        a-x: root.ab-a-left,
+        a-y: root.ab-flag-row-y,
+        a-w: root.ab-shown && root.ab-a-flag-shown ? root.ab-a-w : 0px,
+        a-h: root.ab-row-height,
+        b-x: root.ab-b-left,
+        b-y: root.ab-flag-row-y,
+        b-w: root.ab-shown && root.ab-b-flag-shown ? root.ab-b-w : 0px,
+        b-h: root.ab-row-height,
+        label-x: hover-label.x,
+        label-y: root.ab-label-row-y,
+        label-w: root.ab-shown && root.ab-label-shown ? hover-label.width : 0px,
+        label-h: root.ab-label-height,
+        popup-x: root.ab-popup-x,
+        popup-y: 0px,
+        popup-w: root.ab-popup > 0 ? root.ab-popup-width : 0px,
+        popup-h: root.ab-popup > 0 ? root.ab-popup-height : 0px,
+    };
+
     callback play-pause();
     callback toggle-ms();
     // The progress bar is pressed (0), dragged (1) or let go (2) at a share of its width.
@@ -112,6 +218,35 @@ export component MultiviewVideoBarWindow inherits Window {
     // The time bubble appeared, moved or went away (logical pixels in this window): without a compositing manager the shape
     // of the window has to include it.
     callback bubble-changed(bool /* visible */, length /* x */, length /* y */, length /* width */, length /* height */);
+    // The A-B repeat group: 0 = A, 1 = B, 2 = AB clicked, 3 = AB held, 4 = Save, 5 = Load.
+    callback ab-button(int);
+    callback ab-save-edited(string);
+    callback ab-save-commit(string);
+    callback ab-close-popup();
+    callback ab-menu-query-edited(string);
+    callback ab-menu-page-step(int);
+    callback ab-menu-pick(int);
+    callback ab-menu-delete(int);
+    callback ab-menu-delete-all();
+    callback ab-menu-rename(int);
+    callback ab-menu-rename-edited(string);
+    callback ab-menu-rename-commit(string);
+    callback ab-menu-rename-cancel();
+    callback ab-strip-hover(bool /* inside */, float /* share */);
+    callback ab-strip-click(float /* share */);
+    // The flag of A (0) or B (1) is pressed (0), dragged (1) or let go (2) at a share of the progress bar.
+    callback ab-flag(int, float, int);
+    callback ab-region-changed(AbRegionView);
+    callback tooltip-changed(bool /* visible */, length /* x */, length /* y */, length /* width */, length /* height */);
+
+    // The text field of the open popup gets the keyboard again (the window got the focus of the X server).
+    public function focus-ab-popup() {
+        if root.ab-popup == 1 {
+            save-bubble.focus-input();
+        } else if root.ab-popup == 2 {
+            load-menu.focus-input();
+        }
+    }
 
     // One "point" of the default bar (30 px high): every size below is a multiple of it.
     property <length> pt: root.bar-height / 30;
@@ -120,6 +255,56 @@ export component MultiviewVideoBarWindow inherits Window {
     property <length> pad: Math.round((root.pill ? 14 : 8) * root.pt / 1px) * 1px;
     property <length> gap: Math.round(8 * root.pt / 1px) * 1px;
     property <color> panel: Theme.fullscreen-background;
+    property <color> bar-fill: root.translucent ? root.panel.with-alpha(root.bar-opacity) : root.panel;
+
+    // The A-B group: its buttons and where its parts are (window coordinates).
+    property <length> ab-button-size: Math.round(root.bar-height * 0.86 / 1px) * 1px;
+    property <length> ab-icon-size: Math.round(root.bar-height * 0.56 / 1px) * 1px;
+    property <length> ab-group-width: root.ab-shown && !root.mini ? 5 * root.ab-button-size + 2 * Math.round(3 * root.pt / 1px) * 1px : 0px;
+    property <length> bar-top: root.height - root.bar-height;
+    property <length> ab-strip-top: root.bar-top - root.ab-strip-height;
+    property <length> ab-flag-row-y: root.ab-strip-top - root.ab-row-height;
+    property <length> ab-label-row-y: root.ab-flag-row-y - root.ab-row-height;
+    property <length> track-x: progress.absolute-position.x;
+    property <length> track-w: progress.width;
+    property <length> ab-font: Math.max(9px, Math.round(root.bar-height * 0.34 / 1px) * 1px);
+    property <length> ab-popup-width: root.ab-popup == 1
+        ? Math.min(Math.round(290 * root.pt / 1px) * 1px, root.width - 8px)
+        : Math.min(Math.round(520 * root.pt / 1px) * 1px, root.width - 8px);
+    property <length> ab-opener-x: ab-group.absolute-position.x + (root.ab-popup == 1 ? ab-group.save-center : ab-group.load-center);
+    property <length> ab-popup-x: Math.round(Math.clamp(root.ab-opener-x - root.ab-popup-width / 2, 4px, Math.max(4px, root.width - root.ab-popup-width - 4px)) / 1px) * 1px;
+    // The progress block inside the bar (the flags' stems end at its bottom).
+    property <length> block-bottom: root.bar-top + (root.bar-height + (root.bar-height - 2 * Math.round(6 * root.pt / 1px) * 1px)) / 2;
+    property <length> ab-lane: Math.max(3px, Math.round(root.ab-strip-height * 0.42 / 1px) * 1px);
+    property <length> ab-lane-y: root.ab-strip-top + Math.round((root.ab-strip-height - root.ab-lane) / 2 / 1px) * 1px + 1px;
+    // The flag labels: centered over their stems, or pushed apart (the left one to the left, the right one to the right) when
+    // they would touch; never outside the window.
+    property <length> ab-label-pad: Math.round(4 * root.pt / 1px) * 1px;
+    property <length> ab-label-height: root.ab-row-height - 2px;
+    property <length> ab-a-x: root.track-x + root.ab-a-flag-share * root.track-w;
+    property <length> ab-b-x: root.track-x + root.ab-b-flag-share * root.track-w;
+    property <length> ab-a-w: a-flag-text.preferred-width + 2 * root.ab-label-pad;
+    property <length> ab-b-w: b-flag-text.preferred-width + 2 * root.ab-label-pad;
+    property <bool> ab-a-first: root.ab-a-x <= root.ab-b-x;
+    property <length> ab-l-x: root.ab-a-first ? root.ab-a-x : root.ab-b-x;
+    property <length> ab-l-w: root.ab-a-first ? root.ab-a-w : root.ab-b-w;
+    property <length> ab-r-x: root.ab-a-first ? root.ab-b-x : root.ab-a-x;
+    property <length> ab-r-w: root.ab-a-first ? root.ab-b-w : root.ab-a-w;
+    property <length> ab-label-gap: Math.round(4 * root.pt / 1px) * 1px;
+    property <bool> ab-crowded: root.ab-a-flag-shown && root.ab-b-flag-shown
+        && root.ab-l-x + root.ab-l-w / 2 + root.ab-label-gap > root.ab-r-x - root.ab-r-w / 2;
+    property <length> ab-l-left: root.ab-crowded
+        ? Math.min(root.ab-l-x - root.ab-l-w + 3px, (root.ab-l-x + root.ab-r-x) / 2 - root.ab-label-gap / 2 - root.ab-l-w)
+        : root.ab-l-x - root.ab-l-w / 2;
+    property <length> ab-r-left: root.ab-crowded
+        ? Math.max(root.ab-r-x - 3px, (root.ab-l-x + root.ab-r-x) / 2 + root.ab-label-gap / 2)
+        : root.ab-r-x - root.ab-r-w / 2;
+    property <length> ab-a-left: Math.round(Math.clamp(root.ab-a-first ? root.ab-l-left : root.ab-r-left, 0px, Math.max(0px, root.width - root.ab-a-w)) / 1px) * 1px;
+    property <length> ab-b-left: Math.round(Math.clamp(root.ab-a-first ? root.ab-r-left : root.ab-l-left, 0px, Math.max(0px, root.width - root.ab-b-w)) / 1px) * 1px;
+    property <color> ab-a-color: root.ab-a-look == 1 ? Theme.accent : Theme.primary;
+    property <color> ab-b-color: root.ab-b-look == 1 ? Theme.accent : Theme.primary;
+
+    changed ab-region => { root.ab-region-changed(root.ab-region); }
 
     content := Rectangle {
         opacity: !root.translucent || root.revealed ? 1 : 0;
@@ -131,7 +316,7 @@ export component MultiviewVideoBarWindow inherits Window {
             width: root.width;
             height: root.bar-height;
             border-radius: root.pill ? root.bar-height / 2 : 0px;
-            background: root.translucent ? root.panel.with-alpha(root.bar-opacity) : root.panel;
+            background: root.bar-fill;
 
             TouchArea {
                 scroll-event(event) => {
@@ -142,7 +327,7 @@ export component MultiviewVideoBarWindow inherits Window {
 
             HorizontalLayout {
                 padding-left: root.pad;
-                padding-right: root.pad;
+                padding-right: root.mini ? Math.max(0px, root.pad - root.gap) : root.pad;
                 spacing: root.gap;
 
                 BarIconButton {
@@ -177,6 +362,20 @@ export component MultiviewVideoBarWindow inherits Window {
                             width: (span.to - span.from) * parent.width;
                             height: 100%;
                             background: span.kind == 0 ? Theme.primary : Theme.text-muted;
+                        }
+
+                        if root.ab-shown && root.ab-dim : Rectangle {
+                            x: 0;
+                            width: root.ab-span-from * parent.width;
+                            height: 100%;
+                            background: #000000.with-alpha(0.45);
+                        }
+
+                        if root.ab-shown && root.ab-dim : Rectangle {
+                            x: root.ab-span-to * parent.width;
+                            width: (1 - root.ab-span-to) * parent.width;
+                            height: 100%;
+                            background: #000000.with-alpha(0.45);
                         }
 
                         if root.hover-shown : Rectangle {
@@ -217,13 +416,45 @@ export component MultiviewVideoBarWindow inherits Window {
                     }
                 }
 
-                if !root.mini : BarTime {
-                    text: root.remaining-text;
-                    template: root.remaining-template;
-                    font-size: root.font-size;
-                    text-color: Theme.text-muted;
-                    alignment: left;
-                    clicked => { root.toggle-ms(); }
+                // The remaining time and the A-B group: always there (the group's id has to be reachable for its popups), empty
+                // and without width in the small bar of the tab grid (the right padding makes up for the layout's spacing).
+                HorizontalLayout {
+                    spacing: root.ab-group-width > 0 ? root.gap : 0px;
+
+                    if !root.mini : BarTime {
+                        text: root.remaining-text;
+                        template: root.remaining-template;
+                        font-size: root.font-size;
+                        text-color: Theme.text-muted;
+                        alignment: left;
+                        clicked => { root.toggle-ms(); }
+                    }
+
+                    VerticalLayout {
+                        alignment: center;
+
+                        ab-group := AbGroup {
+                            width: root.ab-group-width;
+                            height: root.ab-group-width > 0 ? root.ab-button-size + 2 * Math.round(2 * root.pt / 1px) * 1px : 0px;
+                            visible: root.ab-group-width > 0;
+                            pt: root.pt;
+                            button-size: root.ab-button-size;
+                            icon-size: root.ab-icon-size;
+                            a-look: root.ab-a-look;
+                            b-look: root.ab-b-look;
+                            loop-look: root.ab-loop-look;
+                            save-enabled: root.ab-save-enabled;
+                            save-open: root.ab-popup == 1;
+                            load-count: root.ab-load-count;
+                            load-open: root.ab-popup == 2;
+                            a-tip: root.ab-a-tip;
+                            b-tip: root.ab-b-tip;
+                            loop-tip: root.ab-loop-tip;
+                            save-tip: root.ab-save-tip;
+                            load-tip: root.ab-load-tip;
+                            button(code) => { root.ab-button(code); }
+                        }
+                    }
                 }
 
                 if !root.mini : BarIconButton {
@@ -293,6 +524,237 @@ export component MultiviewVideoBarWindow inherits Window {
             }
         }
 
+
+        // ---- The A-B repeat group above the progress bar (only while `ab-shown`).
+
+        // The strip of saved repeats: a tab that grows out of the bar over the progress bar, its flanks curving into the bar.
+        Path {
+            visible: root.ab-shown;
+            property <float> h: (root.ab-strip-height + 1px) / 1px;
+            property <float> f: root.ab-strip-flank / 1px;
+            property <float> c: root.ab-strip-height / 2 / 1px;
+            property <float> w: (root.track-w + 2 * root.ab-strip-flank) / 1px;
+            x: root.track-x - root.ab-strip-flank;
+            y: root.ab-strip-top;
+            width: Math.max(1px, root.track-w + 2 * root.ab-strip-flank);
+            height: root.ab-strip-height + 1px;
+            viewbox-width: Math.max(1, self.w);
+            viewbox-height: self.h;
+            // From the bottom left: the concave flank up to the top corner, the corner, the top, the other corner and flank.
+            commands: "M 0 " + self.h + " Q " + self.f + " " + self.h + " " + self.f + " " + self.c
+                + " Q " + self.f + " 0 " + (self.f + self.c) + " 0"
+                + " L " + (self.w - self.f - self.c) + " 0 Q " + (self.w - self.f) + " 0 " + (self.w - self.f) + " " + self.c
+                + " Q " + (self.w - self.f) + " " + self.h + " " + self.w + " " + self.h + " Z";
+            fill: root.bar-fill;
+        }
+
+        // Saved repeats: one thin row, every repeat slightly translucent, so overlapping ones show as stronger color.
+        for segment in root.ab-strip : Rectangle {
+            visible: root.ab-shown;
+            x: root.track-x + segment.from * root.track-w;
+            y: root.ab-lane-y;
+            width: Math.max(2px, (segment.to - segment.from) * root.track-w);
+            height: root.ab-lane;
+            border-radius: root.ab-lane / 2;
+            background: AbColors.of(segment.color).with-alpha(0.55);
+        }
+
+        // The current A-B: yellow while it loops, blue while it does not.
+        Rectangle {
+            visible: root.ab-shown && root.ab-span-shown;
+            x: root.track-x + root.ab-span-from * root.track-w;
+            y: root.ab-lane-y;
+            width: Math.max(2px, (root.ab-span-to - root.ab-span-from) * root.track-w);
+            height: root.ab-lane;
+            border-radius: root.ab-lane / 2;
+            background: root.ab-span-looping ? Theme.accent : Theme.primary.with-alpha(0.8);
+        }
+
+        strip-touch := TouchArea {
+            visible: root.ab-shown;
+            x: root.track-x;
+            y: root.ab-strip-top;
+            width: root.track-w;
+            height: root.ab-strip-height;
+            mouse-cursor: root.ab-label-shown && root.ab-strip-clickable ? pointer : default;
+            property <float> share: Math.clamp(self.mouse-x / Math.max(1px, self.width), 0, 1);
+            changed mouse-x => {
+                if self.has-hover {
+                    root.ab-strip-hover(true, self.share);
+                }
+            }
+            changed has-hover => { root.ab-strip-hover(self.has-hover, self.share); }
+            clicked => { root.ab-strip-click(self.share); }
+        }
+
+        // The stems of the flags, from the label row down to the bottom of the progress block (dashed: set by the script).
+        for i in (root.ab-shown && root.ab-a-flag-shown ? Math.ceil((root.block-bottom - root.ab-flag-row-y - root.ab-label-height) / 4px) : 0) : Rectangle {
+            x: Math.round(root.ab-a-x / 1px) * 1px - 1px;
+            y: root.ab-flag-row-y + root.ab-label-height + i * 4px;
+            width: 2px;
+            height: root.ab-a-flag-auto ? 2px : 4px;
+            background: root.ab-a-color;
+        }
+
+        for i in (root.ab-shown && root.ab-b-flag-shown ? Math.ceil((root.block-bottom - root.ab-flag-row-y - root.ab-label-height) / 4px) : 0) : Rectangle {
+            x: Math.round(root.ab-b-x / 1px) * 1px - 1px;
+            y: root.ab-flag-row-y + root.ab-label-height + i * 4px;
+            width: 2px;
+            height: root.ab-b-flag-auto ? 2px : 4px;
+            background: root.ab-b-color;
+        }
+
+        a-flag := Rectangle {
+            visible: root.ab-shown && root.ab-a-flag-shown;
+            x: root.ab-a-left;
+            y: root.ab-flag-row-y;
+            width: root.ab-a-w;
+            height: root.ab-label-height;
+            border-radius: Math.round(3 * root.pt / 1px) * 1px;
+            background: root.ab-a-flag-auto ? root.bar-fill : root.ab-a-color;
+            border-width: root.ab-a-flag-auto ? 1px : 0px;
+            border-color: root.ab-a-color;
+
+            a-flag-text := Text {
+                text: root.ab-a-flag-text;
+                font-size: root.ab-font;
+                font-weight: 700;
+                color: root.ab-a-flag-auto ? root.ab-a-color : Theme.fullscreen-background;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            TouchArea {
+                enabled: root.ab-flags-draggable;
+                mouse-cursor: root.ab-flags-draggable ? ew-resize : default;
+                property <float> share: Math.clamp((self.absolute-position.x + self.mouse-x - root.track-x) / Math.max(1px, root.track-w), 0, 1);
+                pointer-event(event) => {
+                    if event.button == PointerEventButton.left {
+                        if event.kind == PointerEventKind.down {
+                            root.ab-flag(0, self.share, 0);
+                        } else if event.kind == PointerEventKind.up {
+                            root.ab-flag(0, self.share, 2);
+                        }
+                    }
+                }
+                changed mouse-x => {
+                    if self.pressed {
+                        root.ab-flag(0, self.share, 1);
+                    }
+                }
+            }
+        }
+
+        b-flag := Rectangle {
+            visible: root.ab-shown && root.ab-b-flag-shown;
+            x: root.ab-b-left;
+            y: root.ab-flag-row-y;
+            width: root.ab-b-w;
+            height: root.ab-label-height;
+            border-radius: Math.round(3 * root.pt / 1px) * 1px;
+            background: root.ab-b-flag-auto ? root.bar-fill : root.ab-b-color;
+            border-width: root.ab-b-flag-auto ? 1px : 0px;
+            border-color: root.ab-b-color;
+
+            b-flag-text := Text {
+                text: root.ab-b-flag-text;
+                font-size: root.ab-font;
+                font-weight: 700;
+                color: root.ab-b-flag-auto ? root.ab-b-color : Theme.fullscreen-background;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            TouchArea {
+                enabled: root.ab-flags-draggable;
+                mouse-cursor: root.ab-flags-draggable ? ew-resize : default;
+                property <float> share: Math.clamp((self.absolute-position.x + self.mouse-x - root.track-x) / Math.max(1px, root.track-w), 0, 1);
+                pointer-event(event) => {
+                    if event.button == PointerEventButton.left {
+                        if event.kind == PointerEventKind.down {
+                            root.ab-flag(1, self.share, 0);
+                        } else if event.kind == PointerEventKind.up {
+                            root.ab-flag(1, self.share, 2);
+                        }
+                    }
+                }
+                changed mouse-x => {
+                    if self.pressed {
+                        root.ab-flag(1, self.share, 1);
+                    }
+                }
+            }
+        }
+
+        // The saved repeat under the pointer: its name (and times), small, following the pointer.
+        hover-label := Rectangle {
+            visible: root.ab-shown && root.ab-label-shown;
+            property <length> pointer-x: root.track-x + root.ab-label-share * root.track-w;
+            width: label-text.preferred-width + 2 * root.ab-label-pad;
+            height: root.ab-label-height;
+            x: Math.round(Math.clamp(self.pointer-x - self.width / 2, 0px, Math.max(0px, root.width - self.width)) / 1px) * 1px;
+            y: root.ab-label-row-y;
+            border-radius: self.height / 2;
+            background: #11111b.with-alpha(0.88);
+
+            label-text := Text {
+                text: root.ab-label-text;
+                font-size: root.ab-font;
+                color: Theme.text;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        // The popups of Save and Load, at the top of the window (Rust makes the window that much taller while one is open).
+        save-bubble := AbSaveBubble {
+            visible: root.ab-popup == 1;
+            x: root.ab-popup-x;
+            y: 0;
+            width: root.ab-popup-width;
+            height: root.ab-popup-height;
+            pt: root.pt;
+            font-size: root.ab-font + 1px;
+            placeholder: root.ab-save-placeholder;
+            hint: root.ab-save-hint;
+            caret-center: root.ab-opener-x - root.ab-popup-x;
+            text <=> root.ab-save-text;
+            edited(text) => { root.ab-save-edited(text); }
+            commit(text) => { root.ab-save-commit(text); }
+            cancel => { root.ab-close-popup(); }
+        }
+
+        load-menu := AbLoadMenu {
+            visible: root.ab-popup == 2;
+            x: root.ab-popup-x;
+            y: 0;
+            width: root.ab-popup-width;
+            height: root.ab-popup-height;
+            pt: root.pt;
+            font-size: root.ab-font + 1px;
+            icon-size: Math.round(14 * root.pt / 1px) * 1px;
+            rows: root.ab-menu-rows;
+            query <=> root.ab-menu-query;
+            page: root.ab-menu-page;
+            pages: root.ab-menu-pages;
+            scroll: root.ab-menu-scroll;
+            visible-rows: root.ab-menu-visible-rows;
+            status: root.ab-menu-status;
+            renaming: root.ab-menu-renaming;
+            rename-text <=> root.ab-menu-rename-text;
+            caret-center: root.ab-opener-x - root.ab-popup-x;
+            query-edited(text) => { root.ab-menu-query-edited(text); }
+            page-step(delta) => { root.ab-menu-page-step(delta); }
+            pick(index) => { root.ab-menu-pick(index); }
+            rename(index) => { root.ab-menu-rename(index); }
+            rename-edited(text) => { root.ab-menu-rename-edited(text); }
+            rename-commit(text) => { root.ab-menu-rename-commit(text); }
+            rename-cancel => { root.ab-menu-rename-cancel(); }
+            delete(index) => { root.ab-menu-delete(index); }
+            delete-all => { root.ab-menu-delete-all(); }
+            cancel => { root.ab-close-popup(); }
+        }
+
         // The time under the pointer, above the progress bar (and above a drag on it).
         bubble := Rectangle {
             property <length> pointer-x: progress.x + root.hover-share * progress.width;
@@ -300,7 +762,7 @@ export component MultiviewVideoBarWindow inherits Window {
             width: bubble-text.preferred-width + 2 * Math.round(6 * root.pt / 1px) * 1px;
             height: root.bubble-height - Math.round(4 * root.pt / 1px) * 1px;
             x: Math.round(Math.clamp(self.pointer-x - self.width / 2, 0px, Math.max(0px, root.width - self.width)) / 1px) * 1px;
-            y: 0px;
+            y: (root.ab-shown ? root.ab-strip-top : root.bar-top) - root.bubble-height;
             border-radius: Math.round(4 * root.pt / 1px) * 1px;
             background: root.translucent ? root.panel.with-alpha(Math.max(root.bar-opacity, 0.85)) : root.panel;
 
@@ -315,6 +777,12 @@ export component MultiviewVideoBarWindow inherits Window {
             changed visible => { root.bubble-changed(self.visible, self.x, self.y, self.width, self.height); }
             changed x => { root.bubble-changed(self.visible, self.x, self.y, self.width, self.height); }
             changed width => { root.bubble-changed(self.visible, self.x, self.y, self.width, self.height); }
+        }
+    }
+
+    GlobalTooltipLayer {
+        state-changed(visible, x, y, w, h) => {
+            root.tooltip-changed(visible, x, y, w, h);
         }
     }
 }

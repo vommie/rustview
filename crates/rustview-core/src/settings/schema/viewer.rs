@@ -1,6 +1,11 @@
 //! Viewer and fullscreen (Multiview) settings.
 
 use super::{
+    DEFAULT_AB_REPEAT_CLICK_LOADS, DEFAULT_AB_REPEAT_COLORS, DEFAULT_AB_REPEAT_DRAG_FLAGS, DEFAULT_AB_REPEAT_ENABLED,
+    DEFAULT_AB_REPEAT_HOVER_NAME, DEFAULT_AB_REPEAT_HOVER_TIMES, DEFAULT_AB_REPEAT_MENU,
+    DEFAULT_AB_REPEAT_OSD_MESSAGES, DEFAULT_AB_REPEAT_PAGE_SIZE, MAX_AB_REPEAT_PAGE_SIZE, MIN_AB_REPEAT_PAGE_SIZE,
+};
+use super::{
     DEFAULT_FULLSCREEN_BACKGROUND_COLOR, DEFAULT_FULLSCREEN_BACKGROUND_SOURCE, DEFAULT_FULLSCREEN_ENABLE_FALLBACK_RULE,
     DEFAULT_FULLSCREEN_ENABLE_SPECIFIC_MONITOR, DEFAULT_FULLSCREEN_FALLBACK_TARGET,
     DEFAULT_FULLSCREEN_HIDE_IDLE_CURSOR, DEFAULT_FULLSCREEN_HIDE_SELECTION_WITH_CURSOR,
@@ -55,6 +60,8 @@ pub struct ViewerVideoSettings {
     pub jump_secs: u32,
     /// Added in 0.4.6: how far the long jump keys move, in seconds.
     pub jump_long_secs: u32,
+    /// Added in 0.5.4: support for the mpv script `ab_repeat.lua`.
+    pub ab_repeat: AbRepeatSettings,
 }
 
 impl Default for ViewerVideoSettings {
@@ -64,7 +71,56 @@ impl Default for ViewerVideoSettings {
             allow_multiple_tabs: DEFAULT_VIEWER_ALLOW_MULTIPLE_VIDEO_TABS,
             jump_secs: DEFAULT_VIEWER_VIDEO_JUMP_SECS,
             jump_long_secs: DEFAULT_VIEWER_VIDEO_JUMP_LONG_SECS,
+            ab_repeat: AbRepeatSettings::default(),
         }
+    }
+}
+
+/// Support for the mpv script `ab_repeat.lua` (A-B repeats in the control bar of a video; `docs/mpv_ab_repeat.md`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AbRepeatSettings {
+    /// Look for the script in the players.
+    pub enabled: bool,
+    /// Let the script show its own on-screen messages.
+    pub osd_messages: bool,
+    /// "each" or "grey".
+    pub colors: String,
+    pub click_loads: bool,
+    pub hover_name: bool,
+    pub hover_times: bool,
+    pub drag_flags: bool,
+    /// "pages" or "scroll".
+    pub menu: String,
+    pub page_size: u32,
+}
+
+impl Default for AbRepeatSettings {
+    fn default() -> Self {
+        Self {
+            enabled: DEFAULT_AB_REPEAT_ENABLED,
+            osd_messages: DEFAULT_AB_REPEAT_OSD_MESSAGES,
+            colors: DEFAULT_AB_REPEAT_COLORS.to_owned(),
+            click_loads: DEFAULT_AB_REPEAT_CLICK_LOADS,
+            hover_name: DEFAULT_AB_REPEAT_HOVER_NAME,
+            hover_times: DEFAULT_AB_REPEAT_HOVER_TIMES,
+            drag_flags: DEFAULT_AB_REPEAT_DRAG_FLAGS,
+            menu: DEFAULT_AB_REPEAT_MENU.to_owned(),
+            page_size: DEFAULT_AB_REPEAT_PAGE_SIZE,
+        }
+    }
+}
+
+impl AbRepeatSettings {
+    /// Unknown names fall back to the defaults; the page size stays in its range.
+    pub fn sanitize(&mut self) {
+        if !matches!(self.colors.as_str(), "each" | "grey") {
+            DEFAULT_AB_REPEAT_COLORS.clone_into(&mut self.colors);
+        }
+        if !matches!(self.menu.as_str(), "pages" | "scroll") {
+            DEFAULT_AB_REPEAT_MENU.clone_into(&mut self.menu);
+        }
+        self.page_size = self.page_size.clamp(MIN_AB_REPEAT_PAGE_SIZE, MAX_AB_REPEAT_PAGE_SIZE);
     }
 }
 

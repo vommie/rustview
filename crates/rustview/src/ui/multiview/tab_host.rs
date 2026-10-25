@@ -215,6 +215,11 @@ pub fn shown_has_video() -> bool {
     current_instance().is_some_and(|instance| instance.lock().has_video())
 }
 
+/// Whether the selected video of the shown tab runs the mpv script `ab_repeat.lua` (its key area applies then).
+pub fn shown_ab_repeat_active() -> bool {
+    current_instance().is_some_and(|instance| instance.lock().ab_repeat_active())
+}
+
 /// The key of a primary bar button (Settings > Hotkeys), like a click on it.
 pub fn primary_key(action: PrimaryActionId) {
     on_primary_action(action.code());

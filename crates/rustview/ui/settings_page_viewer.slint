@@ -1,6 +1,7 @@
 import { CheckBox, ComboBox, SpinBox } from "std-widgets.slint";
 import { Theme } from "styles.slint";
 import { SettingsCard } from "settings_card.slint";
+import { SettingsCardAbRepeat } from "settings_card_ab_repeat.slint";
 
 export component SettingsPageViewer inherits VerticalLayout {
     spacing: 12px;
@@ -10,6 +11,21 @@ export component SettingsPageViewer inherits VerticalLayout {
     in-out property <bool> open-videos-in-tab: true;
     in-out property <bool> allow-multiple-video-tabs: true;
     in-out property <int> video-jump-secs: 5;
+    // The mpv script ab_repeat.lua (`settings_card_ab_repeat.slint`).
+    in-out property <bool> ab-enabled: true;
+    in-out property <bool> ab-osd-messages: true;
+    in-out property <int> ab-colors-idx: 0;
+    in-out property <bool> ab-click-loads: true;
+    in-out property <bool> ab-hover-name: true;
+    in-out property <bool> ab-hover-times: false;
+    in-out property <bool> ab-drag-flags: true;
+    in-out property <int> ab-menu-idx: 0;
+    in-out property <int> ab-page-size: 10;
+    in property <string> ab-status-text;
+    in property <int> ab-status-level;
+    in property <string> ab-status-tooltip;
+    in property <bool> ab-checking;
+    callback ab-check-again();
     in-out property <int> video-jump-long-secs: 60;
     in-out property <bool> show-tab-rating-badge: false;
     in-out property <int> background-mode-idx: 0; // 0 = Dark, 1 = Deep Black, 2 = Checkerboard
@@ -109,6 +125,23 @@ export component SettingsPageViewer inherits VerticalLayout {
             color: Theme.text-muted;
             wrap: word-wrap;
         }
+    }
+
+    SettingsCardAbRepeat {
+        enabled <=> root.ab-enabled;
+        osd-messages <=> root.ab-osd-messages;
+        colors-idx <=> root.ab-colors-idx;
+        click-loads <=> root.ab-click-loads;
+        hover-name <=> root.ab-hover-name;
+        hover-times <=> root.ab-hover-times;
+        drag-flags <=> root.ab-drag-flags;
+        menu-idx <=> root.ab-menu-idx;
+        page-size <=> root.ab-page-size;
+        status-text: root.ab-status-text;
+        status-level: root.ab-status-level;
+        status-tooltip: root.ab-status-tooltip;
+        checking: root.ab-checking;
+        check-again => { root.ab-check-again(); }
     }
 
     SettingsCard {

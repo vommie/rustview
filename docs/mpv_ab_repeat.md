@@ -1,11 +1,11 @@
-# Support for the mpv script ab_repeat.lua (investigation, 2026-10-25)
+# Support for the mpv script ab_repeat.lua (built in 0.5.4)
 
 The user's mpv script `~/.config/mpv/scripts/ab_repeat.lua` sets A-B repeats and saves, loads and deletes them in
 `~/.config/mpv/ab_repeat.json`. RustView's players load the user's mpv config and scripts (`MpvPlayer::new`: `config=yes`,
 `load-scripts=yes`, `config-dir` = `$XDG_CONFIG_HOME/mpv`), so the script already runs in every RustView player, but
-`input-vo-keyboard=no` means its keys never reach it. This page holds what was tested before the feature is designed; the
-design was decided in the questionnaire `2026-10-25-rustview-ab-repeat` (`~/claude/feedback/questionnaires/rustview/`, saved
-2026-10-25); the decisions are the next chapter.
+`input-vo-keyboard=no` means its keys never reach it. The design was decided in the questionnaire `2026-10-25-rustview-ab-repeat`
+(`~/claude/feedback/questionnaires/rustview/`, saved 2026-10-25); the decisions, how it is built and what was tested before
+follow.
 
 Tested with mpv 0.41.0 (libmpv of the VM), the VM's real `~/.config/mpv` (test-only, so as close to production as possible),
 native mpv (CLI, `--input-ipc-server`, real X11 keys through `xdotool`) and RustView 0.5.3 in the test environment
@@ -76,7 +76,33 @@ jumps of an active loop do not.
 
 **Side finding:** RustView turns mpv's OSC off again after the user's `mpv.conf` was read (a separate commit).
 
-## The script
+## How it is built (0.5.4)
+
+**The script (2.0, the user's file `~/.config/mpv/scripts/ab_repeat.lua`; the 1.x original is kept as
+`~/.config/mpv/ab_repeat.lua.orig-2026-10-25`).** Its keys and menus in mpv are unchanged. New, all described at its top:
+`options.read_options(CONFIG, "ab_repeat")` (so `script-opts/ab_repeat.conf` and `--script-opts=ab_repeat-...` work, with
+runtime updates), the options `osd_messages` (a master switch for its OSD texts) and `api` (the interface, default on), the
+identity `user-data/ab_repeat/info` {name, version, api 1, client, db, config}, the state `user-data/ab_repeat/state` {a, b,
+a_auto, b_auto, valid, loop, active, busy}, the saved list `user-data/ab_repeat/ranges` {path, revision, cause, list}, a loop
+on/off of its own (`toggle-loop`, `loop on|off`), B not after A = invalid (no loop), seeking outside A-B while it loops is pulled
+back to A, and the commands `set-a [t]`, `set-b [t]`, `clear`, `jump-a`, `save [name]`, `load|delete <index> <a> <b>`,
+`rename <index> <a> <b> <name>`, `delete-all`, `next-range`, `prev-range`, `reload`, `move-path <old> <new>` and
+`ping <token>` (a barrier: `user-data/ab_repeat/pong`). New key bindings without keys: `toggle-loop`, `jump-to-a`,
+`next-range`, `prev-range`.
+
+**RustView.** `viewer/ab_repeat/` (protocol, `support` = which script counts as compatible and what was found last, stable
+`colors`, `prefs`, `moves`), `viewer/mpv_engine/ab_repeat.rs` (observes the three paths as JSON strings, decides the support
+at the first loaded file, sends commands, forwards a saved-list change of one player to every other player of the file as
+`reload`, `probe` = a headless mpv for Check again, `move_paths`), the bar (`docs/video_controls.md`), the keys
+(`docs/hotkeys.md`), Settings > Viewer > Videos (`settings_card_ab_repeat.slint`, `settings_dialog/ab_repeat_card.rs`,
+`AbRepeatSettings`), a check on Settings > Debug (`health::ab_repeat_check`) and the move observer of the library
+(`file_operations::set_move_observer`): a renamed or moved file whose path has saved repeats has them moved by the script
+(through a running player or a headless mpv; RustView reads the script's JSON for that check only, on that explicit action, and
+never writes it). The script's OSD texts stay as in mpv unless "Show the script's messages" is off (then
+`ab_repeat-osd_messages=no` for RustView's players). Not covered: renamed folders (their files keep their old keys) and paths
+through symbolic links (the script keys them as given).
+
+## The script (as found, 1.x)
 
 - Client name `ab_repeat` (from the file name). Bindings (all `mp.add_key_binding`, i.e. weak: `input.conf` beats them, mpv's
   built-in defaults do not): `set-a-point` Home, `set-b-point` End, `reset-points` Del, `save-ab-range` Ctrl+s,
@@ -152,7 +178,7 @@ Ctrl+S, type a name, Enter, quit, then `grep -E 'ab_repeat|Run command: (script-
 - The script's OSD texts (A/B set, the name prompt, the menus, "Saved AB range: ...", "N stored AB range(s) found") are drawn by
   mpv inside RustView's video window (seen in the test screenshots).
 
-## A small API in the script (prototype, scratch copy only)
+## A small API in the script (the prototype that led to 2.0)
 
 A scratch copy of the script with ~80 added lines was tested (the user's script is unchanged; extending it needs the user's
 OK): `user-data/ab_repeat/api` (version + the `CONFIG` table), `user-data/ab_repeat/state` (`a`, `b`, `looping`, `busy`),
@@ -172,7 +198,7 @@ JSON reading of its own.
   independently.
 - The user's `mpv.conf` beats the options `MpvPlayer::new` sets before `mpv_initialize`: with `osc=yes` in it, RustView's players
   run with `osc=true` (seen in the test; RustView sets `osc=no`). The OSC stays invisible because mpv never sees the pointer,
-  but it runs. Not part of this feature; noted for a follow-up.
+  but it runs. Fixed separately: `MpvPlayer::new` switches it off again after the config was read (unloads the script).
 - `MpvPlayer::set_osd_text` sets `osd-border-style=background-box` for the tab grid's time badge, which then also boxes the
   script's OSD texts in that player.
 

@@ -52,6 +52,23 @@ fullscreen and the tab view). The tab grid still leaves the pointer to mpv (its 
   action bars (`bar_overlay::register_overlay_xid`). Hosts: `session_video_bar.rs` (fullscreen) and `tab_host.rs` (tab view).
 - Settings: `FullscreenPlayerSettings` (`fullscreen.player`), card `ui/settings_card_player.slint` + `settings_dialog/player_bar.rs`.
 
+## A-B repeats of the mpv script ab_repeat.lua (questionnaire 2026-10-25, built in 0.5.4)
+
+While the user's mpv script ab_repeat.lua runs in a video's player (Settings > Viewer > Videos), the bar gets an A-B group in
+a capsule between the remaining time and the sound: A, B, AB (a click switches the loop on and off, holding it clears A and B),
+Save (a name bubble) and Load (the menu of saved repeats, with a badge of their number). Above the progress bar a tab grows out
+of the bar (same color, curved flanks like a Chrome tab, a third of the bar high and at least 12 px; without a compositing
+manager the window is cut to its outline, `bar_placement::tab_region`): one thin row of the saved repeats in translucent colors
+(overlaps show stronger), the current A-B in yellow (blue while its loop is off), the flags of A and B with their times (labels
+pushed apart when they would touch, dashed when the script set the point itself) and the name (and times) of the repeat under
+the pointer. While a repeat loops, the progress bar outside A-B is darker. Everything the user does is a command of the script
+(`docs/mpv_ab_repeat.md`); the bar only shows what the script publishes. Code: `video_bar/{ab_view,ab_state,ab_menu}.rs` (pure),
+`instance_ab_repeat.rs`, `ui/multiview_video_bar_ab.slint` and the A-B part of `ui/multiview_video_bar_window.slint` and
+`ui/multiview/video_bar/window.rs` (popups get the keyboard of the X server while they are open, a press outside closes them).
+
+A key that moves a video (the jump and frame keys, the A-B repeat keys) shows the bar for 1.5 s (`BarReveal::pulse`), like the
+volume bar after a wheel step; the script's own jumps of a loop do not.
+
 ## Tab-Grid items (questionnaire 2026-10-24, `~/claude/feedback/2026-10-24-rustview-tab-grid`; built in 0.4.8)
 
 - The mouse over a video item is RustView's too, like over a picture item: click opens the tab, Ctrl+click and Shift+click select,

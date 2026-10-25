@@ -16,13 +16,19 @@ An action belongs to one area; the same key may mean different things in areas t
 | Tab | a Multiview shown in a tab (acts on the selected medium) |
 | Fullscreen | the Multiview fullscreen window (acts on the selected medium) |
 | Video player | the selected video in a tab or the fullscreen (comes first while the Multiview holds a video) |
+| MPV ab_repeat.lua | the selected video while its player runs the mpv script ab_repeat.lua (comes before Video player; since 0.5.4, `docs/mpv_ab_repeat.md`) |
 
-Conflicts are checked between areas that can be active at the same time: General with Browse, Tab-Grid, Tab and Video player; Tab and
-Fullscreen each with Video player. The one allowed overlap: a Video player key may also page in the Fullscreen (paging only
+Conflicts are checked between areas that can be active at the same time: General with Browse, Tab-Grid, Tab, Video player and
+MPV ab_repeat.lua; Tab and Fullscreen each with Video player and MPV ab_repeat.lua; Video player with MPV ab_repeat.lua. The one allowed overlap: a Video player key may also page in the Fullscreen (paging only
 works for a single image, the player only for a video). Tab and Fullscreen are separate areas (user: they are not quite the
 same, e.g. only the fullscreen of a Browse view pages or becomes a tab) with similar defaults.
 
 ## Rules (user decisions)
+- MPV ab_repeat.lua (questionnaire 2026-10-25): the script's own keys are not taken over (Delete deletes the medium in RustView,
+  Ctrl+S saves an image edit). Defaults: Set A = Home, Set B = End, Clear A and B = Ctrl+Delete; Save (the name bubble), the menu
+  of saved repeats, Jump to A and next/previous saved repeat have no key. The keys act on the selected video only, and only
+  while the script runs in its player (`MultiviewInstance::ab_repeat_active`); they send the script's commands
+  (`PlayerCommand::Ab`, `instance_ab_repeat.rs`) and show the control bar for a moment.
 - One row per action and area (Rename in Browse and Rename in Tab are two rows).
 - Browse refuses plain printable keys (letters, digits, Space): they belong to type-ahead find.
 - Rating keys need Ctrl everywhere (the plain digits of the tab view are gone).

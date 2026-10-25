@@ -29,6 +29,12 @@ pub enum HintKind {
     NotOffered,
     /// A video player key while the selected medium is a picture (or a video that does not play).
     NotAVideo,
+    /// A key of the area "MPV `ab_repeat.lua`" while the script is not active in the selected video's player.
+    AbRepeatOff,
+    /// Saving an A-B repeat without a valid A and B.
+    AbNoRange,
+    /// The load menu or next/previous repeat on a video without saved repeats.
+    AbNoSavedRepeats,
 }
 
 impl HintKind {
@@ -45,6 +51,9 @@ impl HintKind {
             Self::NotRateable => "This medium cannot be rated",
             Self::NotOffered => "Not available for this medium",
             Self::NotAVideo => "Select a video",
+            Self::AbRepeatOff => "The mpv script ab_repeat.lua is not active here",
+            Self::AbNoRange => "Set A and B first",
+            Self::AbNoSavedRepeats => "No saved repeats for this video",
         }
     }
 

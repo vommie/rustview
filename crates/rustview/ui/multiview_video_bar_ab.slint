@@ -1,0 +1,787 @@
+// The A-B repeat group of a video's control bar (mpv script ab_repeat.lua, `viewer::multiview::video_bar::ab_view`): the
+// capsule with its five buttons, the save bubble and the load menu. The strip of saved repeats and the flags above the
+// progress bar are drawn by the bar window itself (they follow the progress bar). Every size comes from `pt` (one point of
+// the default bar) or from Rust (`placement::AbRoom`), so the window and Rust agree on the room the popups take.
+
+import { Theme } from "styles.slint";
+import { AppIcon, IconId } from "icons.slint";
+import { HoldConfirm, HoldLogic, HoldRing } from "hold.slint";
+import { TooltipHost } from "tooltips.slint";
+
+/// A saved repeat in the strip: shares of the progress bar and its palette color (-1: grey).
+export struct AbStripSegmentView {
+    from: float,
+    to: float,
+    color: int,
+}
+
+/// A row of the load menu (`ab_view::MenuRowView`); `index` is its place in the saved list.
+export struct AbMenuRowView {
+    index: int,
+    number: int,
+    name: string,
+    times: string,
+    length: string,
+    from: float,
+    to: float,
+    color: int,
+    current: bool,
+}
+
+/// The colors of saved repeats (yellow, `Theme.accent`, is the active A-B and never one of them).
+export global AbColors {
+    out property <[color]> palette: [#f38ba8, #a6e3a1, #fab387, #cba6f7, #94e2d5, #f5c2e7, #89dceb, #eba0ac];
+    out property <color> grey: #9399b2;
+
+    public pure function of(index: int) -> color {
+        return index < 0 ? self.grey : self.palette[Math.mod(index, 8)];
+    }
+}
+
+/// An icon button of the group: its color says its state, a disabled one takes no pointer and shows no hover.
+component AbButton inherits Rectangle {
+    in property <IconId> icon;
+    in property <color> tint: Theme.text;
+    in property <bool> enabled: true;
+    // A popup of this button is open: highlighted like an opener.
+    in property <bool> open;
+    in property <length> icon-size;
+    in property <string> tip;
+    // A small number in the corner (the saved repeats of the load button; 0 = none).
+    in property <int> badge;
+    in property <length> pt;
+    callback clicked();
+
+    border-radius: Math.round(5 * root.pt / 1px) * 1px;
+    background: root.open ? Colors.white.with-alpha(0.16) : touch.has-hover && root.enabled ? Colors.white.with-alpha(0.10) : transparent;
+
+    AppIcon {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        icon: root.icon;
+        size: root.icon-size;
+        color: !root.enabled ? Theme.text-muted.with-alpha(0.45) : touch.has-hover && !root.open ? root.tint.brighter(0.25) : root.tint;
+    }
+
+    if root.badge > 0 : Rectangle {
+        x: parent.width - self.width + Math.round(2 * root.pt / 1px) * 1px;
+        y: Math.round(1 * root.pt / 1px) * 1px;
+        height: Math.round(11 * root.pt / 1px) * 1px;
+        width: Math.max(self.height, badge-text.preferred-width + Math.round(5 * root.pt / 1px) * 1px);
+        border-radius: self.height / 2;
+        background: Theme.primary;
+
+        badge-text := Text {
+            text: root.badge > 99 ? "99+" : "\{root.badge}";
+            font-size: Math.round(8 * root.pt / 1px) * 1px;
+            font-weight: 700;
+            color: Theme.fullscreen-background;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => { root.clicked(); }
+    }
+
+    TooltipHost {
+        text: root.tip;
+    }
+}
+
+/// The AB button: a click switches the loop of a valid A-B on or off, holding it clears A and B (hold to confirm, at least
+/// 0.6 s even when holding is switched off elsewhere).
+component AbLoopButton inherits Rectangle {
+    // 0 = no valid A-B (disabled, crossed out), 1 = can play (blue), 2 = plays (yellow).
+    in property <int> look;
+    in property <length> icon-size;
+    in property <string> tip;
+    in property <length> pt;
+    callback clicked();
+    callback held();
+
+    property <bool> enabled: root.look > 0;
+    property <duration> hold: Math.max(HoldConfirm.duration, 600ms);
+    property <bool> fired;
+    property <bool> holding: touch.pressed && root.enabled && !root.fired;
+
+    border-radius: Math.round(5 * root.pt / 1px) * 1px;
+    clip: true;
+    background: touch.has-hover && root.enabled ? Colors.white.with-alpha(0.10) : transparent;
+
+    Rectangle {
+        x: 0;
+        width: root.holding ? parent.width : 0;
+        height: parent.height;
+        background: HoldConfirm.color.with-alpha(0.35);
+        animate width { duration: root.holding ? root.hold : 150ms; easing: linear; }
+    }
+
+    AppIcon {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        icon: root.look == 0 ? IconId.ab-loop-off : IconId.ab-loop;
+        size: root.icon-size;
+        color: root.look == 0 ? Theme.text-muted.with-alpha(0.45) : root.look == 2 ? Theme.accent : Theme.primary;
+    }
+
+    Timer {
+        interval: root.hold;
+        running: root.holding;
+        triggered => {
+            root.fired = true;
+            root.held();
+        }
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down {
+                root.fired = false;
+            }
+        }
+        clicked => {
+            if !root.fired {
+                root.clicked();
+            }
+        }
+    }
+
+    TooltipHost {
+        text: root.tip;
+        hold: root.enabled;
+    }
+}
+
+/// The capsule with A, B, AB, Save and Load, between the remaining time and the sound.
+export component AbGroup inherits Rectangle {
+    in property <length> pt;
+    in property <length> button-size;
+    in property <length> icon-size;
+    // 0 = not set, 1 = set while it loops (yellow), 2 = set while it does not (blue).
+    in property <int> a-look;
+    in property <int> b-look;
+    in property <int> loop-look;
+    in property <bool> save-enabled;
+    in property <bool> save-open;
+    in property <int> load-count;
+    in property <bool> load-open;
+    in property <string> a-tip;
+    in property <string> b-tip;
+    in property <string> loop-tip;
+    in property <string> save-tip;
+    in property <string> load-tip;
+    // Where the centers of Save and Load are (the carets of their popups point there), relative to the group.
+    out property <length> save-center: save.x + save.width / 2;
+    out property <length> load-center: load.x + load.width / 2;
+    // 0 = A, 1 = B, 2 = AB clicked, 3 = AB held, 4 = Save, 5 = Load.
+    callback button(int);
+
+    property <length> inset: Math.round(3 * root.pt / 1px) * 1px;
+
+    width: 5 * root.button-size + 2 * root.inset;
+    border-radius: self.height / 2;
+    background: Colors.white.with-alpha(0.07);
+    border-width: 1px;
+    border-color: Colors.white.with-alpha(0.14);
+
+    pure function point-tint(look: int) -> color {
+        return look == 1 ? Theme.accent : look == 2 ? Theme.primary : Theme.text;
+    }
+
+    HorizontalLayout {
+        padding-left: root.inset;
+        padding-right: root.inset;
+        alignment: center;
+
+        VerticalLayout {
+            alignment: center;
+            AbButton {
+                width: root.button-size;
+                height: root.button-size;
+                pt: root.pt;
+                icon: IconId.ab-set-a;
+                icon-size: root.icon-size;
+                tint: root.point-tint(root.a-look);
+                tip: root.a-tip;
+                clicked => { root.button(0); }
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            AbButton {
+                width: root.button-size;
+                height: root.button-size;
+                pt: root.pt;
+                icon: IconId.ab-set-b;
+                icon-size: root.icon-size;
+                tint: root.point-tint(root.b-look);
+                tip: root.b-tip;
+                clicked => { root.button(1); }
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            AbLoopButton {
+                width: root.button-size;
+                height: root.button-size;
+                pt: root.pt;
+                look: root.loop-look;
+                icon-size: root.icon-size;
+                tip: root.loop-tip;
+                clicked => { root.button(2); }
+                held => { root.button(3); }
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            save := AbButton {
+                width: root.button-size;
+                height: root.button-size;
+                pt: root.pt;
+                icon: IconId.ab-save;
+                icon-size: root.icon-size;
+                enabled: root.save-enabled || root.save-open;
+                open: root.save-open;
+                tint: root.save-open ? Theme.accent : Theme.text;
+                tip: root.save-tip;
+                clicked => { root.button(4); }
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            load := AbButton {
+                width: root.button-size;
+                height: root.button-size;
+                pt: root.pt;
+                icon: IconId.ab-load;
+                icon-size: root.icon-size;
+                enabled: root.load-count > 0 || root.load-open;
+                open: root.load-open;
+                badge: root.load-count;
+                tint: root.load-open ? Theme.accent : Theme.text;
+                tip: root.load-tip;
+                clicked => { root.button(5); }
+            }
+        }
+    }
+}
+
+/// The caret of a popup, pointing down at its opener (`x` = its center inside the popup).
+component AbCaret inherits Path {
+    in property <color> fill-color;
+    in property <length> center;
+    in property <length> size;
+
+    x: root.center - root.size;
+    width: 2 * root.size;
+    height: root.size + 1px;
+    viewbox-width: 14;
+    viewbox-height: 8;
+    commands: "M 0 1 L 7 8 L 14 1 L 14 0 L 0 0 Z";
+    fill: root.fill-color;
+}
+
+/// A text field of a popup: the text, a placeholder while it is empty, Enter, Esc and losing the focus.
+component AbTextField inherits Rectangle {
+    in property <length> pt;
+    in property <string> placeholder;
+    in-out property <string> text;
+    in property <length> font-size;
+    out property <bool> has-focus: input.has-focus;
+    callback edited(string);
+    callback accepted(string);
+    callback escaped();
+
+    border-radius: Math.round(4 * root.pt / 1px) * 1px;
+    background: Theme.background;
+    border-width: 1px;
+    border-color: input.has-focus ? Theme.primary : Theme.border;
+
+    public function focus-input() {
+        input.focus();
+    }
+
+    keys := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.escaped();
+                return accept;
+            }
+            return reject;
+        }
+
+        input := TextInput {
+            x: Math.round(6 * root.pt / 1px) * 1px;
+            width: parent.width - 2 * self.x;
+            height: parent.height;
+            vertical-alignment: center;
+            single-line: true;
+            font-size: root.font-size;
+            color: Theme.text;
+            selection-background-color: Theme.primary.with-alpha(0.4);
+            text <=> root.text;
+            edited => { root.edited(self.text); }
+            accepted => { root.accepted(self.text); }
+        }
+    }
+
+    if root.text == "" : Text {
+        x: input.x;
+        width: input.width;
+        height: parent.height;
+        text: root.placeholder;
+        font-size: root.font-size;
+        color: Theme.text-muted.with-alpha(0.6);
+        vertical-alignment: center;
+        overflow: elide;
+    }
+}
+
+/// The bubble above Save: a name for the repeat and the save button. A hint shows (and only then takes room) when the name
+/// or the range is saved already.
+export component AbSaveBubble inherits Rectangle {
+    in property <length> pt;
+    in property <length> font-size;
+    in property <string> placeholder;
+    in property <string> hint;
+    in property <length> caret-center;
+    in-out property <string> text;
+    in property <color> fill: Theme.surface;
+    callback edited(string);
+    callback commit(string);
+    callback cancel();
+
+    property <length> pad: Math.round(6 * root.pt / 1px) * 1px;
+    property <length> line: Math.round(26 * root.pt / 1px) * 1px;
+    property <length> caret: Math.round(7 * root.pt / 1px) * 1px;
+    property <length> body-height: self.height - root.caret;
+
+    public function focus-input() {
+        field.focus-input();
+    }
+
+    background: transparent;
+
+    body := Rectangle {
+        y: 0;
+        height: root.body-height;
+        border-radius: Math.round(6 * root.pt / 1px) * 1px;
+        background: root.fill;
+        border-width: 1px;
+        border-color: Theme.border;
+
+        VerticalLayout {
+            padding: root.pad;
+            spacing: Math.round(4 * root.pt / 1px) * 1px;
+
+            HorizontalLayout {
+                spacing: Math.round(6 * root.pt / 1px) * 1px;
+                height: root.line;
+
+                field := AbTextField {
+                    pt: root.pt;
+                    placeholder: root.placeholder;
+                    text <=> root.text;
+                    font-size: root.font-size;
+                    edited(text) => { root.edited(text); }
+                    accepted(text) => { root.commit(text); }
+                    escaped => { root.cancel(); }
+                }
+
+                Rectangle {
+                    width: root.line + Math.round(10 * root.pt / 1px) * 1px;
+                    border-radius: Math.round(4 * root.pt / 1px) * 1px;
+                    background: save-touch.has-hover ? Theme.primary.brighter(0.15) : Theme.primary;
+
+                    AppIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon: IconId.check;
+                        size: Math.round(16 * root.pt / 1px) * 1px;
+                        color: Theme.fullscreen-background;
+                    }
+
+                    save-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.commit(root.text); }
+                    }
+
+                    TooltipHost {
+                        text: "Save (Enter)";
+                    }
+                }
+            }
+
+            if root.hint != "" : Text {
+                text: root.hint;
+                font-size: root.font-size - 1px;
+                color: Theme.accent;
+                overflow: elide;
+            }
+        }
+    }
+
+    AbCaret {
+        y: root.body-height - 1px;
+        center: root.caret-center;
+        size: root.caret;
+        fill-color: root.fill;
+    }
+}
+
+/// A button of the menu that has to be held (delete, delete all).
+component AbHoldButton inherits Rectangle {
+    in property <IconId> icon;
+    in property <string> label;
+    in property <string> tip;
+    in property <length> pt;
+    in property <length> icon-size;
+    in property <length> font-size;
+    callback confirmed();
+
+    border-radius: Math.round(4 * root.pt / 1px) * 1px;
+    clip: true;
+    background: touch.has-hover ? Colors.white.with-alpha(0.08) : transparent;
+
+    logic := HoldLogic {
+        pressed: touch.pressed;
+        confirmed => { root.confirmed(); }
+    }
+
+    HoldRing {
+        progress: logic.progress;
+        flash: logic.flash;
+        ring: false;
+    }
+
+    HorizontalLayout {
+        x: logic.nudge;
+        padding-left: Math.round(4 * root.pt / 1px) * 1px;
+        padding-right: Math.round(4 * root.pt / 1px) * 1px;
+        spacing: Math.round(4 * root.pt / 1px) * 1px;
+        alignment: center;
+
+        VerticalLayout {
+            alignment: center;
+            AppIcon {
+                icon: root.icon;
+                size: root.icon-size;
+                color: touch.has-hover ? HoldConfirm.color : HoldConfirm.color.with-alpha(0.8);
+            }
+        }
+
+        if root.label != "" : Text {
+            text: root.label;
+            font-size: root.font-size;
+            color: HoldConfirm.color;
+            vertical-alignment: center;
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down {
+                logic.pressed-down();
+            }
+        }
+        clicked => { logic.released-click(); }
+    }
+
+    TooltipHost {
+        text: root.tip;
+        hold: true;
+    }
+}
+
+/// A row of the load menu.
+component AbMenuRow inherits Rectangle {
+    in property <AbMenuRowView> entry;
+    in property <bool> renaming;
+    in-out property <string> rename-text;
+    in property <length> pt;
+    in property <length> font-size;
+    in property <length> icon-size;
+    callback pick();
+    callback rename();
+    callback rename-edited(string);
+    callback rename-commit(string);
+    callback rename-cancel();
+    callback delete();
+
+    border-radius: Math.round(4 * root.pt / 1px) * 1px;
+    background: root.entry.current ? Theme.accent.with-alpha(0.16) : pick-touch.has-hover ? Colors.white.with-alpha(0.06) : transparent;
+
+    pick-touch := TouchArea {
+        mouse-cursor: pointer;
+        enabled: !root.renaming;
+        clicked => { root.pick(); }
+    }
+
+    HorizontalLayout {
+        padding-left: Math.round(6 * root.pt / 1px) * 1px;
+        padding-right: Math.round(2 * root.pt / 1px) * 1px;
+        spacing: Math.round(6 * root.pt / 1px) * 1px;
+
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: Math.round(4 * root.pt / 1px) * 1px;
+                height: Math.round(14 * root.pt / 1px) * 1px;
+                border-radius: self.width / 2;
+                background: AbColors.of(root.entry.color);
+            }
+        }
+
+        Text {
+            width: Math.round(18 * root.pt / 1px) * 1px;
+            text: "\{root.entry.number}";
+            font-size: root.font-size - 1px;
+            color: Theme.text-muted;
+            horizontal-alignment: right;
+            vertical-alignment: center;
+        }
+
+        if !root.renaming : Text {
+            horizontal-stretch: 1;
+            min-width: Math.round(60 * root.pt / 1px) * 1px;
+            text: root.entry.name;
+            font-size: root.font-size;
+            color: root.entry.current ? Theme.accent : Theme.text;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        if root.renaming : VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            rename-field := AbTextField {
+                height: Math.round(22 * root.pt / 1px) * 1px;
+                pt: root.pt;
+                placeholder: root.entry.name;
+                text <=> root.rename-text;
+                font-size: root.font-size;
+                edited(text) => { root.rename-edited(text); }
+                accepted(text) => { root.rename-commit(text); }
+                escaped => { root.rename-cancel(); }
+                init => { self.focus-input(); }
+            }
+        }
+
+        // Where the repeat lies in the video.
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: Math.round(80 * root.pt / 1px) * 1px;
+                height: Math.round(4 * root.pt / 1px) * 1px;
+                border-radius: self.height / 2;
+                background: Colors.white.with-alpha(0.16);
+
+                Rectangle {
+                    x: root.entry.from * parent.width;
+                    width: Math.max(2px, (root.entry.to - root.entry.from) * parent.width);
+                    height: parent.height;
+                    border-radius: parent.border-radius;
+                    background: AbColors.of(root.entry.color);
+                }
+            }
+        }
+
+        Text {
+            text: root.entry.times;
+            font-size: root.font-size - 1px;
+            color: Theme.text-muted;
+            vertical-alignment: center;
+        }
+
+        Text {
+            min-width: Math.round(34 * root.pt / 1px) * 1px;
+            text: root.entry.length;
+            font-size: root.font-size - 1px;
+            color: Theme.text-muted;
+            horizontal-alignment: right;
+            vertical-alignment: center;
+        }
+
+        AbButton {
+            width: Math.round(24 * root.pt / 1px) * 1px;
+            pt: root.pt;
+            icon: IconId.rename;
+            icon-size: root.icon-size;
+            tip: "Rename";
+            clicked => { root.rename(); }
+        }
+
+        AbHoldButton {
+            width: Math.round(24 * root.pt / 1px) * 1px;
+            pt: root.pt;
+            icon: IconId.delete;
+            icon-size: root.icon-size;
+            font-size: root.font-size;
+            tip: "Delete this saved repeat";
+            confirmed => { root.delete(); }
+        }
+    }
+}
+
+/// The load menu: a search, the saved repeats (pages or a scroll list) and "delete all". Rust sizes it
+/// (`placement::ab_popup_height`) from the same row heights.
+export component AbLoadMenu inherits Rectangle {
+    in property <length> pt;
+    in property <length> font-size;
+    in property <length> icon-size;
+    in property <[AbMenuRowView]> rows;
+    in-out property <string> query;
+    in property <int> page;
+    in property <int> pages;
+    in property <bool> scroll;
+    in property <int> visible-rows;
+    in property <string> status;
+    in property <int> renaming: -1;
+    in-out property <string> rename-text;
+    in property <length> caret-center;
+    in property <color> fill: Theme.surface;
+    callback query-edited(string);
+    callback page-step(int);
+    callback pick(int);
+    callback rename(int);
+    callback rename-edited(string);
+    callback rename-commit(string);
+    callback rename-cancel();
+    callback delete(int);
+    callback delete-all();
+    callback cancel();
+
+    property <length> pad: Math.round(6 * root.pt / 1px) * 1px;
+    property <length> gap: Math.round(4 * root.pt / 1px) * 1px;
+    property <length> field: Math.round(26 * root.pt / 1px) * 1px;
+    property <length> row-height: Math.round(26 * root.pt / 1px) * 1px;
+    property <length> footer: Math.round(24 * root.pt / 1px) * 1px;
+    property <length> caret: Math.round(7 * root.pt / 1px) * 1px;
+    property <length> body-height: self.height - root.caret;
+
+    /// The search gets the keyboard (when the menu opens, and when the window got the focus of the X server).
+    public function focus-input() {
+        if root.renaming < 0 {
+            search.focus-input();
+        }
+    }
+
+    background: transparent;
+
+    body := Rectangle {
+        y: 0;
+        height: root.body-height;
+        border-radius: Math.round(6 * root.pt / 1px) * 1px;
+        background: root.fill;
+        border-width: 1px;
+        border-color: Theme.border;
+
+        VerticalLayout {
+            padding: root.pad;
+            spacing: root.gap;
+
+            search := AbTextField {
+                height: root.field;
+                pt: root.pt;
+                placeholder: "Search (name)";
+                text <=> root.query;
+                font-size: root.font-size;
+                edited(text) => { root.query-edited(text); }
+                escaped => { root.cancel(); }
+            }
+
+            list := Flickable {
+                height: root.visible-rows * root.row-height;
+                content-height: root.rows.length * root.row-height;
+                interactive: root.scroll;
+
+                for row[i] in root.rows : AbMenuRow {
+                    y: i * root.row-height;
+                    width: list.width;
+                    height: root.row-height;
+                    entry: row;
+                    renaming: row.index == root.renaming;
+                    rename-text <=> root.rename-text;
+                    pt: root.pt;
+                    font-size: root.font-size;
+                    icon-size: root.icon-size;
+                    pick => { root.pick(row.index); }
+                    rename => { root.rename(row.index); }
+                    rename-edited(text) => { root.rename-edited(text); }
+                    rename-commit(text) => { root.rename-commit(text); }
+                    rename-cancel => { root.rename-cancel(); }
+                    delete => { root.delete(row.index); }
+                }
+            }
+
+            HorizontalLayout {
+                height: root.footer;
+                spacing: root.gap;
+
+                Text {
+                    horizontal-stretch: 1;
+                    text: root.status;
+                    font-size: root.font-size - 1px;
+                    color: Theme.text-muted;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+
+                if !root.scroll && root.pages > 1 : AbButton {
+                    width: root.footer;
+                    pt: root.pt;
+                    icon: IconId.chevron-left;
+                    icon-size: root.icon-size;
+                    enabled: root.page > 0;
+                    tip: "Previous page";
+                    clicked => { root.page-step(-1); }
+                }
+
+                if !root.scroll && root.pages > 1 : Text {
+                    text: "Page " + (root.page + 1) + " of " + root.pages;
+                    font-size: root.font-size - 1px;
+                    color: Theme.text-muted;
+                    vertical-alignment: center;
+                }
+
+                if !root.scroll && root.pages > 1 : AbButton {
+                    width: root.footer;
+                    pt: root.pt;
+                    icon: IconId.chevron-right;
+                    icon-size: root.icon-size;
+                    enabled: root.page + 1 < root.pages;
+                    tip: "Next page";
+                    clicked => { root.page-step(1); }
+                }
+
+                AbHoldButton {
+                    pt: root.pt;
+                    icon: IconId.delete;
+                    label: "Delete all";
+                    icon-size: root.icon-size;
+                    font-size: root.font-size - 1px;
+                    tip: "Delete every saved repeat of this video";
+                    confirmed => { root.delete-all(); }
+                }
+            }
+        }
+    }
+
+    AbCaret {
+        y: root.body-height - 1px;
+        center: root.caret-center;
+        size: root.caret;
+        fill-color: root.fill;
+    }
+}

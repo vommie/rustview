@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
+pub mod ab_repeat;
 mod controls;
 mod events;
 mod gpu_context;
@@ -66,6 +67,11 @@ pub struct MpvPlayer {
     click_callbacks: Arc<RwLock<Vec<MpvClickCallback>>>,
     mute_callbacks: Arc<RwLock<Vec<MpvMuteCallback>>>,
     pause_callbacks: Arc<RwLock<Vec<MpvPauseCallback>>>,
+    /// What the player knows about the mpv script `ab_repeat.lua` (`viewer::ab_repeat`), and who listens to its changes.
+    ab: Arc<RwLock<ab_repeat::AbSnapshot>>,
+    ab_callbacks: Arc<RwLock<Vec<ab_repeat::MpvAbCallback>>>,
+    /// The player in the list of `ab_repeat` (forwarding changes of saved repeats, applying settings).
+    ab_registration: u64,
     observer_handle: Mutex<Option<std::thread::JoinHandle<()>>>,
 }
 
@@ -93,7 +99,7 @@ impl MpvPlayer {
             let _ = init.set_property("osd-bar", "yes");
 
             // 4. Configure OSC behavior: Disable top deadzone so HUD triggers across 100% of video height
-            let _ = init.set_property("script-opts", "osc-deadzonesize=0,osc-minmousemove=0");
+            let _ = init.set_property("script-opts", ab_repeat::script_opts().as_str());
 
             // 5. Native input handling
             let _ = init.set_property("input-default-bindings", "yes");
@@ -129,7 +135,7 @@ impl MpvPlayer {
         .map_err(|e| ViewerError::Mpv(format!("Failed to initialize libmpv2 context: {e:?}")))?;
 
         // Ensure OSC deadzone is completely zeroed out
-        let _ = mpv_instance.set_property("script-opts", "osc-deadzonesize=0,osc-minmousemove=0");
+        let _ = mpv_instance.set_property("script-opts", ab_repeat::script_opts().as_str());
 
         // The user's mpv.conf is read after the options above (`osc=yes` there loads mpv's controller again, which never sees
         // the pointer but runs); setting it now unloads that script.
@@ -139,7 +145,7 @@ impl MpvPlayer {
                     "[MpvPlayer: Init] mpv's on-screen controller switched off again (the user's mpv.conf had it on)"
                 ),
                 Err(e) => {
-                    tracing::warn!(error = ?e, "[MpvPlayer: Init] mpv's on-screen controller could not be switched off")
+                    tracing::warn!(error = ?e, "[MpvPlayer: Init] mpv's on-screen controller could not be switched off");
                 }
             }
         }
@@ -190,6 +196,10 @@ impl MpvPlayer {
         let click_callbacks: Arc<RwLock<Vec<MpvClickCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let mute_callbacks: Arc<RwLock<Vec<MpvMuteCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let pause_callbacks: Arc<RwLock<Vec<MpvPauseCallback>>> = Arc::new(RwLock::new(Vec::new()));
+        let ab = Arc::new(RwLock::new(ab_repeat::AbSnapshot::default()));
+        let ab_callbacks: Arc<RwLock<Vec<ab_repeat::MpvAbCallback>>> = Arc::new(RwLock::new(Vec::new()));
+        let ab_registration = ab_repeat::register(&mpv_arc, &ab, &ab_callbacks);
+        ab_repeat::watch(&mpv_arc, &ab, crate::viewer::ab_repeat::prefs::current().enabled);
 
         let player = Self {
             mpv: mpv_arc.clone(),
@@ -206,6 +216,9 @@ impl MpvPlayer {
             click_callbacks: click_callbacks.clone(),
             mute_callbacks: mute_callbacks.clone(),
             pause_callbacks: pause_callbacks.clone(),
+            ab,
+            ab_callbacks,
+            ab_registration,
             observer_handle: Mutex::new(None),
         };
 
@@ -319,6 +332,7 @@ impl MpvPlayer {
 impl Drop for MpvPlayer {
     fn drop(&mut self) {
         LIVE_PLAYERS.fetch_sub(1, Ordering::Relaxed);
+        ab_repeat::unregister(self.ab_registration);
         self.observer_running.store(false, Ordering::Release);
         let _ = self.mpv.command("quit", &[]);
     }

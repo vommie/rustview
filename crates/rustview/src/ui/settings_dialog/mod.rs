@@ -1,3 +1,4 @@
+mod ab_repeat_card;
 mod confirmations;
 mod debug_page;
 mod formats_page;
@@ -253,6 +254,7 @@ impl SettingsDialogController {
         window.set_allow_multiple_video_tabs(settings.viewer.videos.allow_multiple_tabs);
         window.set_video_jump_secs(settings.viewer.videos.jump_secs.saturating_as::<i32>());
         window.set_video_jump_long_secs(settings.viewer.videos.jump_long_secs.saturating_as::<i32>());
+        ab_repeat_card::populate(window, &settings.viewer.videos.ab_repeat);
         window.set_viewer_show_tab_rating_badge(settings.viewer.tabs.show_rating_badge);
         window.set_viewer_background_mode_idx(match settings.viewer.background_mode.to_lowercase().as_str() {
             "deep black" | "black" => 1,
@@ -478,6 +480,7 @@ impl SettingsDialogController {
     fn register_callbacks(&self, window: &SettingsWindow) {
         let w_weak = window.as_weak();
         image_edit_page::register_callbacks(window);
+        ab_repeat_card::install(window);
 
         // The summary and the warnings follow the budget controls while the dialog is open (the machine is read once).
         let system = SystemMemory::read();
@@ -691,6 +694,7 @@ impl SettingsDialogController {
                 };
                 current.viewer.videos.jump_secs = jump(w.get_video_jump_secs());
                 current.viewer.videos.jump_long_secs = jump(w.get_video_jump_long_secs());
+                ab_repeat_card::save(&w, &mut current.viewer.videos.ab_repeat);
                 current.viewer.tabs.show_rating_badge = w.get_viewer_show_tab_rating_badge();
                 current.viewer.background_mode = match w.get_viewer_background_mode_idx() {
                     1 => "Deep Black".to_string(),

@@ -19,6 +19,7 @@ pub mod follow;
 pub mod hint;
 pub mod image_decode;
 pub mod instance;
+mod instance_ab_repeat;
 mod instance_actions;
 mod instance_clone;
 mod instance_commands;

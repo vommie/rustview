@@ -64,7 +64,11 @@ pub fn show_labels(window: &MainWindow) {
 pub fn dispatch(window: &MainWindow, trigger: &Trigger<'_>, typing: bool) -> bool {
     let mode = window.get_active_view_mode();
     let areas: &[Area] = match mode {
-        // The video player keys come first while the tab holds a video (they share keys with nothing of the tab).
+        // The video player keys come first while the tab holds a video (they share keys with nothing of the tab), the keys of
+        // the mpv script ab_repeat.lua while it runs in the selected video's player.
+        TAB_VIEW if crate::ui::multiview::tab_host::shown_ab_repeat_active() => {
+            &[Area::General, Area::AbRepeat, Area::Player, Area::Tab]
+        }
         TAB_VIEW if crate::ui::multiview::tab_host::shown_has_video() => &[Area::General, Area::Player, Area::Tab],
         TAB_VIEW => &[Area::General, Area::Tab],
         TAB_GRID => &[Area::General, Area::Grid, Area::Browse],

@@ -30,6 +30,11 @@ pub enum PlayerEvent {
         paused: bool,
     },
     CtrlClick,
+    /// The mpv script `ab_repeat.lua` in the player of this tile published a change (its support, A-B or saved repeats).
+    AbRepeat {
+        tile: TileKey,
+        change: crate::viewer::mpv_engine::ab_repeat::AbChange,
+    },
     ImageDecoded {
         tile: TileKey,
         result: DecodedImage,

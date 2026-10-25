@@ -4,7 +4,7 @@
 
 use super::area::Area;
 use crate::ui::tabs::grid::mark::{GridKey, Step};
-use crate::viewer::multiview::command::PlayerCommand;
+use crate::viewer::multiview::command::{AbKey, PlayerCommand};
 use crate::viewer::multiview::media_actions::MediaActionId;
 use crate::viewer::multiview::primary_actions::PrimaryActionId;
 
@@ -178,6 +178,14 @@ actions! {
     PlayerVolumeDown: Player, "player.volume_down", "Quieter", ["Control+DownArrow"], REPEAT;
     PlayerSlower: Player, "player.slower", "Slower", ["OpenBracket"], REPEAT;
     PlayerFaster: Player, "player.faster", "Faster", ["CloseBracket"], REPEAT;
+    AbSetA: AbRepeat, "ab_repeat.set_a", "Set A (the start of the repeat)", ["Home"];
+    AbSetB: AbRepeat, "ab_repeat.set_b", "Set B (the end of the repeat)", ["End"];
+    AbClear: AbRepeat, "ab_repeat.clear", "Clear A and B", ["Control+Delete"];
+    AbSave: AbRepeat, "ab_repeat.save", "Save the repeat (the name bubble of the control bar)", [];
+    AbLoadMenu: AbRepeat, "ab_repeat.load_menu", "Saved repeats (the menu of the control bar)", [];
+    AbJumpToA: AbRepeat, "ab_repeat.jump_a", "Jump to A", [];
+    AbNext: AbRepeat, "ab_repeat.next", "Next saved repeat", [];
+    AbPrevious: AbRepeat, "ab_repeat.previous", "Previous saved repeat", [];
 }
 
 impl Action {
@@ -286,6 +294,14 @@ impl Action {
             Self::PlayerVolumeDown => PlayerCommand::Volume { louder: false },
             Self::PlayerSlower => PlayerCommand::Speed { faster: false },
             Self::PlayerFaster => PlayerCommand::Speed { faster: true },
+            Self::AbSetA => PlayerCommand::Ab(AbKey::SetA),
+            Self::AbSetB => PlayerCommand::Ab(AbKey::SetB),
+            Self::AbClear => PlayerCommand::Ab(AbKey::Clear),
+            Self::AbSave => PlayerCommand::Ab(AbKey::Save),
+            Self::AbLoadMenu => PlayerCommand::Ab(AbKey::LoadMenu),
+            Self::AbJumpToA => PlayerCommand::Ab(AbKey::JumpToA),
+            Self::AbNext => PlayerCommand::Ab(AbKey::NextRange),
+            Self::AbPrevious => PlayerCommand::Ab(AbKey::PreviousRange),
             _ => return None,
         })
     }

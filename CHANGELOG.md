@@ -10,6 +10,26 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 ## [Unreleased]
 
 ### Added
+- **A-B repeats of the mpv script ab_repeat.lua in the control bar of videos**: when your mpv script ab_repeat.lua (version 2.0
+  with its interface) runs in a video's player, the control bar gets an A-B group in a capsule after the remaining time: set A,
+  set B, AB (a click switches the repeat on and off, holding it clears A and B), save (a small bubble for the name, Enter saves,
+  with a hint when the name or the range is saved already) and the menu of saved repeats (search, pages or a scroll list,
+  a mini bar per entry showing where it lies, rename, delete and delete all by holding, the running one highlighted; a badge on
+  the button counts them). Above the progress bar a tab grows out of the bar with every saved repeat as a thin colored line
+  (overlaps show stronger, the colors stay while RustView runs), the current A-B in yellow, flags with the times of A and B
+  (dragging one moves its point, a point the script set by itself is dashed), and the name of the repeat under the pointer;
+  a click on a line loads that repeat and plays it. While a repeat loops, the rest of the progress bar is darker. Everything goes
+  through the script, so a repeat behaves exactly as in mpv and the saved repeats are the same in both. Several players of the
+  same file keep their lists in step, and renaming or moving a video in RustView takes its saved repeats along.
+- **Keys for A-B repeats** (Settings > Hotkeys > MPV ab_repeat.lua, only while the script runs): set A (Home), set B (End), clear
+  (Ctrl+Delete), and without a default key the save bubble, the menu of saved repeats, jump to A and the next or previous saved
+  repeat.
+- **Settings > Viewer > Videos, card "mpv script ab_repeat.lua"**: look for the script (on by default; an incompatible script is
+  named as an error, Check again looks again without restarting RustView), whether the script shows its own messages in the
+  video, the colors of the saved repeats, what clicks, the pointer and dragging do in the playbar, and how the menu pages.
+  Settings > Debug names the script too.
+- **Jumping with a key shows the control bar for a moment**: the jump and frame keys of the video player and the A-B repeat keys
+  show the bar of the video for 1.5 s, so the new position is visible.
 - **A volume bar shows when the mouse wheel or a key changes the volume of a video**: a flat, semi-transparent bar with a speaker icon
   near the bottom of that video (at most half its width), in the fullscreen and in tabs, with one or several media. It fades out like the
   rating icon, and every new change shows it again. Dragging the volume slider of the control bar shows no bar.

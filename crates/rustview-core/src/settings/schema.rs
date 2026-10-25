@@ -16,6 +16,7 @@ pub use constants::*;
 pub use debug::{DebugPageState, DebugSettings, LogWindowState};
 pub use hotkeys::HotkeysPageState;
 pub use image_edit::{CropSettings, FormatPresets, ImageEditSettings, LastExport, SaveSettings};
+pub use viewer::AbRepeatSettings;
 pub use viewer::FullscreenBackgroundSettings;
 pub use viewer::FullscreenMediaBarSettings;
 pub use viewer::FullscreenPlayerSettings;

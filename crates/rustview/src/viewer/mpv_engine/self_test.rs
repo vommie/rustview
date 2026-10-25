@@ -35,7 +35,7 @@ pub struct SelfTestOutcome {
     pub failure: Option<String>,
 }
 
-fn user_config_dir() -> Option<PathBuf> {
+pub(super) fn user_config_dir() -> Option<PathBuf> {
     let dir = directories::BaseDirs::new()?.config_dir().join("mpv");
     dir.is_dir().then_some(dir)
 }

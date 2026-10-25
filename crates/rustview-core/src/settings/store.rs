@@ -130,6 +130,7 @@ impl SettingsStore {
         videos.jump_long_secs = videos
             .jump_long_secs
             .clamp(MIN_VIEWER_VIDEO_JUMP_SECS, MAX_VIEWER_VIDEO_JUMP_SECS);
+        videos.ab_repeat.sanitize();
 
         // Formats: canonical ids in table order, without duplicates or ids no format has
         settings.formats.disabled_formats = settings.formats.format_mask().disabled_ids();

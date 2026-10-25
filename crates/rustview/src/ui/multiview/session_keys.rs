@@ -29,11 +29,14 @@ pub(super) fn dispatch(trigger: &Trigger<'_>) -> bool {
         return false;
     };
     // The video player keys come first while the fullscreen shows a video (Left and Right page only a single picture).
-    let has_video = session::instance().is_some_and(|instance| instance.lock().has_video());
-    let areas: &[Area] = if has_video {
-        &[Area::Player, Area::Fullscreen]
-    } else {
-        &[Area::Fullscreen]
+    let (has_video, ab_repeat) = session::instance().map_or((false, false), |instance| {
+        let guard = instance.lock();
+        (guard.has_video(), guard.ab_repeat_active())
+    });
+    let areas: &[Area] = match (has_video, ab_repeat) {
+        (true, true) => &[Area::AbRepeat, Area::Player, Area::Fullscreen],
+        (true, false) => &[Area::Player, Area::Fullscreen],
+        _ => &[Area::Fullscreen],
     };
     let action = match resolve(trigger, areas, false) {
         Resolved::Pass => return false,

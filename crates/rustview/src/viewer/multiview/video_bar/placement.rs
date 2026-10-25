@@ -8,7 +8,7 @@ use rustview_core::settings::schema::{
     MULTIVIEW_VIDEO_BAR_MIN_VIDEO_WIDTH_LOGICAL_PX, MULTIVIEW_VIDEO_BAR_MINI_HEIGHT_LOGICAL_PX,
     MULTIVIEW_VIDEO_BAR_MINI_MIN_VIDEO_WIDTH_LOGICAL_PX, MULTIVIEW_VIDEO_BAR_PILL_INSET_LOGICAL_PX,
 };
-use rustview_core::util::cast::FloatToInt;
+use rustview_core::util::cast::{Az, FloatToInt};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VideoBarPlacement {
@@ -21,6 +21,57 @@ pub struct VideoBarPlacement {
 /// The height of the time bubble above the bar, in logical pixels (it grows with the bar).
 pub fn bubble_height(bar_height: f32) -> f32 {
     (bar_height * 0.8).round() + 4.0
+}
+
+/// The room of the A-B repeat group above the bar, in logical pixels (`ui/multiview_video_bar_window.slint` draws into it):
+/// the strip of saved repeats (a third of the bar, at least 12 px), a row for the flags of A and B and a row for the label of
+/// the repeat under the pointer.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AbRoom {
+    pub strip: f32,
+    pub row: f32,
+    /// How far the concave flank at each end of the strip's tab reaches out into the bar (like a Chrome tab).
+    pub flank: f32,
+}
+
+impl AbRoom {
+    pub fn for_bar(bar_height: f32) -> Self {
+        let strip = (bar_height / 3.0).round().max(12.0);
+        Self {
+            strip,
+            row: (bar_height * 0.54).round().max(14.0),
+            flank: (strip * 1.5).round(),
+        }
+    }
+
+    /// The whole room above the bar (the time bubble above the strip fits into it as well).
+    pub fn above_bar(self, bar_height: f32) -> f32 {
+        (self.strip + 2.0 * self.row).max(self.strip + bubble_height(bar_height))
+    }
+}
+
+/// The heights of the popups of the A-B group in logical pixels (the same sizes the window lays them out with).
+pub fn ab_popup_height(popup: AbPopupSize, bar_height: f32) -> f32 {
+    let pt = bar_height / 30.0;
+    let p = |points: f32| (points * pt).round();
+    match popup {
+        AbPopupSize::Save { hint } => 2.0 * p(6.0) + p(26.0) + if hint { p(4.0) + p(18.0) } else { 0.0 } + p(7.0),
+        AbPopupSize::Load { rows } => {
+            2.0 * p(6.0) + p(26.0) + p(4.0) + rows.max(1).az::<f32>() * p(26.0) + p(4.0) + p(24.0) + p(7.0)
+        }
+    }
+}
+
+/// Which popup of the A-B group is open, as far as its height is concerned.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AbPopupSize {
+    Save {
+        hint: bool,
+    },
+    /// How many rows the menu is high.
+    Load {
+        rows: usize,
+    },
 }
 
 /// The bar for the video window `video`, `None` when the video is too small to carry one.
@@ -70,6 +121,24 @@ fn place_with(video: Rect, style: BarStyle, bar_height: f32, min_width: f32, sca
 }
 
 impl VideoBarPlacement {
+    /// The window grows upward so that `room` (physical pixels) is free above the bar (the A-B group, its popups).
+    pub fn with_room_above(self, room: i32) -> Self {
+        let have = self.bar.y - self.window.y;
+        if room <= have {
+            return self;
+        }
+        let extra = room - have;
+        Self {
+            window: Rect::new(
+                self.window.x,
+                self.window.y - extra,
+                self.window.w,
+                self.window.h + extra,
+            ),
+            bar: self.bar,
+        }
+    }
+
     /// The same placement moved by (`dx`, `dy`): from coordinates of the host window to coordinates of the screen.
     pub fn translated(self, dx: i32, dy: i32) -> Self {
         let shift = |r: Rect| Rect::new(r.x + dx, r.y + dy, r.w, r.h);
@@ -103,6 +172,24 @@ mod tests {
         let mini = place_mini(video, 1.0).unwrap();
         assert_eq!(mini.bar, Rect::new(0, 68, 150, 22));
         assert!(place_mini(Rect::new(0, 0, 100, 90), 1.0).is_none());
+    }
+
+    #[test]
+    fn the_a_b_group_makes_room_above_the_bar() {
+        let room = AbRoom::for_bar(30.0);
+        assert_eq!((room.strip, room.row, room.flank), (12.0, 16.0, 18.0));
+        assert!((room.above_bar(30.0) - 44.0).abs() < f32::EPSILON);
+        let bar = place(Rect::new(100, 50, 800, 450), BarStyle::Bar, 30.0, 1.0).unwrap();
+        let grown = bar.with_room_above(44 + 120);
+        assert_eq!(grown.bar, bar.bar);
+        assert_eq!(grown.window, Rect::new(100, 470 - 164, 800, 164 + 30));
+        assert_eq!(bar.with_room_above(10), bar, "never smaller");
+        let menu = ab_popup_height(AbPopupSize::Load { rows: 10 }, 30.0);
+        assert!((menu - (12.0 + 26.0 + 4.0 + 260.0 + 4.0 + 24.0 + 7.0)).abs() < f32::EPSILON);
+        assert!(
+            ab_popup_height(AbPopupSize::Save { hint: true }, 30.0)
+                > ab_popup_height(AbPopupSize::Save { hint: false }, 30.0)
+        );
     }
 
     #[test]

@@ -1,6 +1,7 @@
 //! What the control bar of one video tile remembers (pure): whether its times show milliseconds, the drag on its progress
 //! bar, the seek that is on its way, the last audible level and when it shows.
 
+use super::ab_state::AbBarState;
 use super::reveal::BarReveal;
 use super::volume;
 use rustview_core::library::models::MediaId;
@@ -36,6 +37,8 @@ pub struct VideoBarState {
     /// The pointer is over the progress bar: where, as a share of the bar.
     hover: Option<f32>,
     last_audible: Option<f64>,
+    /// The A-B repeat group (popups, the strip under the pointer, a dragged flag).
+    pub ab: AbBarState,
 }
 
 impl VideoBarState {
@@ -53,9 +56,10 @@ impl VideoBarState {
         self.ms_switched = Some((media, shown));
     }
 
-    /// A drag on the progress bar runs, or the volume slider is dragged: the bar stays whatever the pointer does.
+    /// A drag on the progress bar runs, the volume slider or an A-B flag is dragged, or an A-B popup is open: the bar stays
+    /// whatever the pointer does.
     pub fn dragging(&self) -> bool {
-        self.drag.is_some() || self.volume_drag
+        self.drag.is_some() || self.volume_drag || self.ab.holds_bar()
     }
 
     /// The progress bar is pressed or dragged to `share` (`released`: let go there). `seek` is how the video goes to `secs`
@@ -115,6 +119,7 @@ impl VideoBarState {
         self.drag = None;
         self.volume_drag = false;
         self.hover = None;
+        self.ab.release();
         self.reveal.reset();
     }
 }

@@ -139,6 +139,10 @@ impl UiBridge {
 
                 if diff_clone.viewer_settings_changed {
                     crate::viewer::multiview::player_prefs::apply(&new_clone.viewer.videos);
+                    let before = crate::viewer::ab_repeat::prefs::apply(&new_clone.viewer.videos.ab_repeat);
+                    if before != crate::viewer::ab_repeat::prefs::current() {
+                        crate::viewer::mpv_engine::ab_repeat::apply_prefs();
+                    }
                     let bg_mode_idx = match new_clone.viewer.background_mode.to_lowercase().as_str() {
                         "deep black" | "black" => 1,
                         "transparent checkerboard" | "checkerboard" => 2,

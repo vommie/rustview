@@ -8,7 +8,9 @@ use crate::viewer::ViewerError;
 use std::sync::atomic::{AtomicBool, Ordering};
 use x11rb::protocol::shape::{self, ConnectionExt as _};
 use x11rb::protocol::xfixes::ConnectionExt as _;
-use x11rb::protocol::xproto::{AtomEnum, ClipOrdering, ConfigureWindowAux, ConnectionExt as _, StackMode, Window};
+use x11rb::protocol::xproto::{
+    AtomEnum, ClipOrdering, ConfigureWindowAux, ConnectionExt as _, InputFocus, StackMode, Window,
+};
 
 /// The mouse buttons that count as "held down" in the modifier mask of a pointer query (buttons 1 to 3).
 const BUTTONS: u16 = (1 << 8) | (1 << 9) | (1 << 10);
@@ -160,6 +162,18 @@ impl OverlayServer {
                 .session
                 .conn
                 .configure_window(window, &ConfigureWindowAux::new().stack_mode(StackMode::ABOVE));
+            self.session.flush();
+        }
+    }
+
+    /// Gives the keyboard to `window` (an override-redirect window the window manager never focuses itself: the text field of a
+    /// bar's popup). Going back is the same call with the host's top level window.
+    pub fn focus(&self, window: u64) {
+        if let Some(window) = Self::window(window) {
+            let _ = self
+                .session
+                .conn
+                .set_input_focus(InputFocus::PARENT, window, x11rb::CURRENT_TIME);
             self.session.flush();
         }
     }

@@ -75,6 +75,23 @@ pub enum PlayerCommand {
     Speed {
         faster: bool,
     },
+    /// A key of the area "MPV `ab_repeat.lua`" (only while the script is active in the selected video's player).
+    Ab(AbKey),
+}
+
+/// The keys of the mpv script `ab_repeat.lua` (Settings > Hotkeys > MPV `ab_repeat.lua`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AbKey {
+    SetA,
+    SetB,
+    Clear,
+    /// Opens the save bubble of the control bar.
+    Save,
+    /// Opens the load menu of the control bar.
+    LoadMenu,
+    JumpToA,
+    NextRange,
+    PreviousRange,
 }
 
 impl MultiviewCommand {

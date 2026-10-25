@@ -15,16 +15,19 @@ pub enum Area {
     Fullscreen,
     /// The selected video in a tab or the fullscreen (mpv takes no keys; `RustView` drives the player).
     Player,
+    /// The selected video while its player runs the mpv script `ab_repeat.lua` (`viewer::ab_repeat`).
+    AbRepeat,
 }
 
 impl Area {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::General,
         Self::Browse,
         Self::Grid,
         Self::Tab,
         Self::Fullscreen,
         Self::Player,
+        Self::AbRepeat,
     ];
 
     /// The prefix of its actions' ids in `settings.json`.
@@ -36,6 +39,7 @@ impl Area {
             Self::Tab => "tab",
             Self::Fullscreen => "fullscreen",
             Self::Player => "player",
+            Self::AbRepeat => "ab_repeat",
         }
     }
 
@@ -48,6 +52,7 @@ impl Area {
             Self::Tab => "Multiview in a Tab",
             Self::Fullscreen => "Multiview in the Fullscreen",
             Self::Player => "Video Player",
+            Self::AbRepeat => "MPV ab_repeat.lua",
         }
     }
 
@@ -60,6 +65,9 @@ impl Area {
             Self::Tab => "In a tab; the keys act on the selected medium.",
             Self::Fullscreen => "In the fullscreen; the keys act on the selected medium.",
             Self::Player => "On the selected video in a tab or the fullscreen.",
+            Self::AbRepeat => {
+                "A-B repeats of the mpv script ab_repeat.lua, on the selected video while the script runs in its player."
+            }
         }
     }
 
@@ -69,14 +77,14 @@ impl Area {
             (self, other),
             (
                 Self::General,
-                Self::General | Self::Browse | Self::Grid | Self::Tab | Self::Player
+                Self::General | Self::Browse | Self::Grid | Self::Tab | Self::Player | Self::AbRepeat
             ) | (Self::Browse, Self::General | Self::Browse)
                 | (Self::Grid, Self::General | Self::Grid)
-                | (Self::Tab, Self::General | Self::Tab | Self::Player)
-                | (Self::Fullscreen, Self::Fullscreen | Self::Player)
+                | (Self::Tab, Self::General | Self::Tab | Self::Player | Self::AbRepeat)
+                | (Self::Fullscreen, Self::Fullscreen | Self::Player | Self::AbRepeat)
                 | (
-                    Self::Player,
-                    Self::General | Self::Tab | Self::Fullscreen | Self::Player
+                    Self::Player | Self::AbRepeat,
+                    Self::General | Self::Tab | Self::Fullscreen | Self::Player | Self::AbRepeat
                 )
         )
     }

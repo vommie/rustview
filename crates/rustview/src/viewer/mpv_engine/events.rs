@@ -1,6 +1,6 @@
 //! Subscriber callbacks and the mpv event observer thread.
 
-use super::{CLICK_MESSAGE, MpvPlayer};
+use super::{CLICK_MESSAGE, MpvPlayer, ab_repeat};
 use crate::viewer::types::MpvPlaybackState;
 use rustview_core::settings::schema::{MPV_OBSERVER_ACTIVE_POLL_MS, MPV_OBSERVER_IDLE_POLL_MS};
 use rustview_core::util::cast::Az;
@@ -89,6 +89,8 @@ impl MpvPlayer {
         let mute_callbacks = self.mute_callbacks.clone();
         let pause_callbacks = self.pause_callbacks.clone();
         let current_file = self.current_file_path.clone();
+        let ab = self.ab.clone();
+        let ab_callbacks = self.ab_callbacks.clone();
 
         let observer = std::thread::Builder::new()
             .name("mpv-event-observer".into())
@@ -118,6 +120,24 @@ impl MpvPlayer {
                             Ok(libmpv2::events::Event::ClientMessage(args)) if args.first() == Some(&CLICK_MESSAGE) => {
                                 for cb in click_callbacks.read().clone() {
                                     cb();
+                                }
+                            }
+                            Ok(libmpv2::events::Event::PropertyChange {
+                                change: libmpv2::events::PropertyData::Str(json),
+                                reply_userdata,
+                                ..
+                            }) => {
+                                if let Some(change) = ab_repeat::on_property(&mpv, &ab, reply_userdata, json) {
+                                    for cb in ab_callbacks.read().clone() {
+                                        cb(change);
+                                    }
+                                }
+                            }
+                            Ok(libmpv2::events::Event::FileLoaded) => {
+                                if let Some(change) = ab_repeat::settle(&mpv, &ab) {
+                                    for cb in ab_callbacks.read().clone() {
+                                        cb(change);
+                                    }
                                 }
                             }
                             Ok(libmpv2::events::Event::LogMessage {

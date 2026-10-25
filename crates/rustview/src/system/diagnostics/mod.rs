@@ -5,7 +5,7 @@ pub mod graphics;
 
 use crate::system::window_system::{self, Choice, REQUEST_VARIABLE, WaylandReason};
 use rustview_core::diagnostics::dependencies::{self, WindowSystemKind};
-use rustview_core::diagnostics::health::{self, DisplayFacts, HealthFacts, MemoryFacts};
+use rustview_core::diagnostics::health::{self, AbRepeatFacts, DisplayFacts, HealthFacts, MemoryFacts};
 use rustview_core::diagnostics::{Check, CheckReport, collect};
 use rustview_core::library::Library;
 use rustview_core::settings::MemoryPlan;
@@ -58,7 +58,23 @@ pub fn display_facts(in_app: bool) -> DisplayFacts {
         gl_version: gl.map(|info| info.version.clone()),
         mpv_context: graphics::mpv_context(),
         in_app,
+        ab_repeat: ab_repeat_facts(),
     }
+}
+
+/// The mpv script `ab_repeat.lua` as the players found it (memory only; `None` while its support is switched off).
+fn ab_repeat_facts() -> Option<AbRepeatFacts> {
+    use crate::viewer::ab_repeat::support::{self, Support};
+    if !crate::viewer::ab_repeat::prefs::current().enabled {
+        return None;
+    }
+    let found = support::last();
+    Some(match &found {
+        Support::Unknown => AbRepeatFacts::Unknown,
+        Support::Compatible { version, .. } => AbRepeatFacts::Found(version.clone()),
+        Support::Incompatible(_) => AbRepeatFacts::Incompatible(found.describe()),
+        Support::NotFound => AbRepeatFacts::NotFound,
+    })
 }
 
 /// The RAM budget as the health check sees it.

@@ -144,6 +144,20 @@ export component SettingsWindow inherits Window {
     in-out property <bool> allow-multiple-video-tabs: true;
     in-out property <int> video-jump-secs: 5;
     in-out property <int> video-jump-long-secs: 60;
+    in-out property <bool> ab-enabled: true;
+    in-out property <bool> ab-osd-messages: true;
+    in-out property <int> ab-colors-idx: 0;
+    in-out property <bool> ab-click-loads: true;
+    in-out property <bool> ab-hover-name: true;
+    in-out property <bool> ab-hover-times: false;
+    in-out property <bool> ab-drag-flags: true;
+    in-out property <int> ab-menu-idx: 0;
+    in-out property <int> ab-page-size: 10;
+    in property <string> ab-status-text;
+    in property <int> ab-status-level;
+    in property <string> ab-status-tooltip;
+    in property <bool> ab-checking;
+    callback ab-check-again();
     in-out property <bool> viewer-show-tab-rating-badge: false;
     in-out property <int> viewer-background-mode-idx: 0;
 
@@ -396,6 +410,20 @@ export component SettingsWindow inherits Window {
                             allow-multiple-video-tabs <=> root.allow-multiple-video-tabs;
                             video-jump-secs <=> root.video-jump-secs;
                             video-jump-long-secs <=> root.video-jump-long-secs;
+                            ab-enabled <=> root.ab-enabled;
+                            ab-osd-messages <=> root.ab-osd-messages;
+                            ab-colors-idx <=> root.ab-colors-idx;
+                            ab-click-loads <=> root.ab-click-loads;
+                            ab-hover-name <=> root.ab-hover-name;
+                            ab-hover-times <=> root.ab-hover-times;
+                            ab-drag-flags <=> root.ab-drag-flags;
+                            ab-menu-idx <=> root.ab-menu-idx;
+                            ab-page-size <=> root.ab-page-size;
+                            ab-status-text: root.ab-status-text;
+                            ab-status-level: root.ab-status-level;
+                            ab-status-tooltip: root.ab-status-tooltip;
+                            ab-checking: root.ab-checking;
+                            ab-check-again => { root.ab-check-again(); }
                             show-tab-rating-badge <=> root.viewer-show-tab-rating-badge;
                             background-mode-idx <=> root.viewer-background-mode-idx;
                         }
