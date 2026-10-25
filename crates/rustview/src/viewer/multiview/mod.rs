@@ -56,6 +56,7 @@ pub mod route;
 pub mod teardown;
 pub mod tile;
 pub mod video_bar;
+pub mod video_placement;
 pub mod view;
 pub mod volume_feedback;
 pub mod volume_overlay;

@@ -9,11 +9,14 @@ use super::instance::MultiviewInstance;
 use super::layout::Rect;
 use super::model::TileKind;
 use super::route::HostMode;
-use crate::viewer::XRectangle;
+use super::tile::VideoTile;
+use super::video_placement::VideoPlacement;
 use crate::viewer::multiview::bar_placement::xrectangle;
 use crate::viewer::zoom::mpv_view::{self, MpvView};
 use crate::viewer::zoom::prefs as zoom_prefs;
 use crate::viewer::zoom::state::ZoomState;
+use crate::viewer::{SubwindowGeometry, ViewportBounds, XRectangle};
+use rustview_core::settings::schema::MULTIVIEW_MIN_VIDEO_WINDOW_PX;
 use rustview_core::util::cast::FloatToInt;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::time::{Duration, Instant};
@@ -40,7 +43,7 @@ impl MultiviewInstance {
         self.sync_zoom_frames();
     }
 
-    /// Where the window of the video of tile `index` goes: the room of the tile while the video is zoomed (it uses the free space
+    /// Where the window of the video of tile `index` shows: the room of the tile while the video is zoomed (it uses the free space
     /// around it, like a picture), else the place of the medium.
     pub(super) fn video_window_rect(&self, index: usize) -> Option<Rect> {
         let tile = self.tiles.get(index)?;
@@ -53,7 +56,20 @@ impl MultiviewInstance {
         }
     }
 
-    /// Brings every video in line with its zoom: the window in its room (or back on its place), mpv's view, the cutouts of the
+    /// Where the video of tile `index` goes (`video_placement`): in the fullscreen and the tab view mpv's own window always
+    /// covers the room of the tile and is clipped to `video_window_rect`, so zooming never resizes it; elsewhere both are the
+    /// place of the medium.
+    pub(super) fn video_placement(&self, index: usize) -> Option<VideoPlacement> {
+        let window = self.video_window_rect(index)?;
+        let frame = if matches!(self.host.surface.mode, HostMode::Fullscreen | HostMode::TabView) {
+            self.host_room(index)?
+        } else {
+            window
+        };
+        Some(VideoPlacement::new(frame, window))
+    }
+
+    /// Brings every video in line with its zoom: the clip of its window (the room or its place), mpv's view, the cutouts of the
     /// minimap and the stills it shows. Only what changed reaches mpv and the X server. Called after every change of a zoom and
     /// on every tick of the host.
     pub(super) fn sync_video_zoom(&mut self, now: Instant) {
@@ -64,7 +80,8 @@ impl MultiviewInstance {
             if self.tiles[index].kind != TileKind::Video {
                 continue;
             }
-            let window = self.video_window_rect(index);
+            let placement = self.video_placement(index);
+            let home = self.host_content(index);
             let cut = if interactive {
                 self.video_cutouts(index)
             } else {
@@ -74,29 +91,25 @@ impl MultiviewInstance {
             let (Some(video), zoom) = (tile.video.as_mut(), tile.zoom.as_ref()) else {
                 continue;
             };
-            let view = match (zoom, window) {
-                (Some(zoom), Some(window)) if interactive && zoom.is_active() => zoom
-                    .image_rect()
-                    .and_then(|rect| mpv_view::view_for(zoom.image(), (window.w, window.h), rect))
-                    .unwrap_or(MpvView::FIT),
+            let view = match (placement, home) {
+                (Some(placement), Some(home)) if interactive => view_in(zoom, &placement, home),
                 _ => MpvView::FIT,
             };
-            if !video.zoom_view.unwrap_or(MpvView::FIT).same_as(&view) {
-                video.player.set_view(&view);
-                video.zoom_view = Some(view);
+            let moved = placement
+                .filter(|p| interactive && video.placement != Some(*p))
+                .filter(|p| p.window.w >= MULTIVIEW_MIN_VIDEO_WINDOW_PX && p.window.h >= MULTIVIEW_MIN_VIDEO_WINDOW_PX);
+            // mpv draws its next frame on its own thread: a clip that grows waits for the new view, one that shrinks goes first,
+            // so the moment in between shows a little less of the new picture instead of mpv's background.
+            let view_first = moved.is_some_and(|p| p.grows_from(video.placement.as_ref()));
+            if view_first {
+                apply_view(video, &view);
             }
-            if let Some(window) = window
-                && video.zoom_window != Some(window)
-                && interactive
-            {
-                video.window.move_resize(
-                    window.x,
-                    window.y,
-                    window.w.max(1).saturating_as_u32(),
-                    window.h.max(1).saturating_as_u32(),
-                );
-                video.zoom_window = Some(window);
+            if let Some(placement) = moved {
+                place_video_window(video, placement);
                 recut.push(index);
+            }
+            if !view_first {
+                apply_view(video, &view);
             }
             if video.minimap_cut != cut {
                 video.minimap_cut = cut;
@@ -193,6 +206,52 @@ impl MultiviewInstance {
         });
         Some((view.rect, bubble))
     }
+}
+
+/// The view that puts the picture where the zoom wants it inside the frame of `placement` (at 100 % its fitted place `home`,
+/// the medium's place in host pixels, which is also the answer while mpv has not reported the size yet).
+fn view_in(zoom: Option<&ZoomState>, placement: &VideoPlacement, home: Rect) -> MpvView {
+    let frame = (placement.frame.w, placement.frame.h);
+    zoom.and_then(|z| mpv_view::view_for(z.image(), frame, z.image_rect()?))
+        .unwrap_or_else(|| placement.home_view(home))
+}
+
+/// Hands `view` to mpv unless it shows that already.
+fn apply_view(video: &mut VideoTile, view: &MpvView) {
+    if !video.zoom_view.unwrap_or(MpvView::FIT).same_as(view) {
+        video.player.set_view(view);
+        video.zoom_view = Some(*view);
+    }
+}
+
+/// Puts the window of `video` at `placement`: mpv's window at the frame, the container clipping it to the visible part. Both
+/// change in one go; the video window keeps its place on the screen while the container changes (static gravity).
+pub(super) fn place_video_window(video: &mut VideoTile, placement: VideoPlacement) {
+    let VideoPlacement { frame, window } = placement;
+    video.window.update_geometry_and_clip(
+        SubwindowGeometry {
+            x: frame.x,
+            y: frame.y,
+            width: frame.w.max(1).saturating_as_u32(),
+            height: frame.h.max(1).saturating_as_u32(),
+        },
+        ViewportBounds {
+            x: window.x,
+            y: window.y,
+            width: window.w.max(1).saturating_as_u32(),
+            height: window.h.max(1).saturating_as_u32(),
+        },
+    );
+    note_placement(video, placement);
+}
+
+/// Records where the window of `video` is now, and lets subtitles use the black borders only while the whole window shows.
+pub(super) fn note_placement(video: &mut VideoTile, placement: VideoPlacement) {
+    let whole = placement.shows_all();
+    if video.placement.is_none_or(|old| old.shows_all() != whole) {
+        video.player.set_subtitle_margins(whole);
+    }
+    video.placement = Some(placement);
 }
 
 /// Window sizes are physical pixels and never negative.

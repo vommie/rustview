@@ -87,14 +87,17 @@ impl MultiviewInstance {
                     return None;
                 }
                 let view = self.volume_feedback.view(tile.key, now)?;
-                let window = self.video_window_rect(index)?;
+                let placement = self.video_placement(index)?;
+                let window = placement.window;
                 let size = (window.w.saturating_as::<u32>(), window.h.saturating_as::<u32>());
-                // A zoomed video fills its window; otherwise mpv letterboxes the picture inside it.
-                let picture = if tile.zoom.as_ref().is_some_and(ZoomState::is_active) {
+                // A zoomed video fills its window; otherwise the picture is letterboxed in the visible part of mpv's window.
+                let mut picture = if tile.zoom.as_ref().is_some_and(ZoomState::is_active) {
                     fitted_picture(size, 0.0)
                 } else {
                     fitted_picture(size, tile.aspect)
                 };
+                picture.x += i64::from(window.x - placement.frame.x);
+                picture.y += i64::from(window.y - placement.frame.y);
                 place_bar(picture, dpi).map(|geometry| VolumeOverlayState::new(view, geometry))
             })
             .collect();

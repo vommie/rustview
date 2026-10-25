@@ -86,7 +86,10 @@ impl MultiviewInstance {
         let dpi = self.host.surface.dpi;
         let edge = (f64::from(ICON_EDGE) * f64::from(dpi)).round().to_int::<u32>().max(8);
         let projection = self.host.projection;
-        for (tile, placed) in self.tiles.iter_mut().zip(&self.layout.tiles) {
+        let frames: Vec<Option<Rect>> = (0..self.tiles.len())
+            .map(|i| self.video_placement(i).map(|p| p.frame))
+            .collect();
+        for ((tile, placed), frame) in self.tiles.iter_mut().zip(&self.layout.tiles).zip(frames) {
             let Some(video) = tile.video.as_mut() else {
                 continue;
             };
@@ -95,9 +98,11 @@ impl MultiviewInstance {
             } else {
                 None
             };
-            let Rect { w, h, .. } = projection.rect(placed.content);
-            let wanted =
-                pulse.map(|p| OverlayState::new(p, edge, (w.saturating_as::<u32>(), h.saturating_as::<u32>())));
+            // Centered on the medium's place, wherever mpv's window starts.
+            let Rect { x, y, w, h } = projection.rect(placed.content);
+            let offset = frame.map_or((0, 0), |f| (i64::from(x - f.x), i64::from(y - f.y)));
+            let wanted = pulse
+                .map(|p| OverlayState::new(p, edge, (w.saturating_as::<u32>(), h.saturating_as::<u32>())).at(offset));
             if video.feedback_overlay == wanted {
                 continue;
             }

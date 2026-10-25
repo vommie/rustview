@@ -86,15 +86,22 @@ impl CornerMarks {
 
     /// The parts of the marks that lie inside a window at `window` (host coordinates), in the coordinates of the window.
     pub fn in_window(&self, window: Rect) -> WindowMarks {
+        self.in_clipped_window(window, window)
+    }
+
+    /// The parts of the marks that show through `window` (host coordinates), the visible part of mpv's window `frame`, in the
+    /// coordinates of the frame (where mpv draws them).
+    pub fn in_clipped_window(&self, window: Rect, frame: Rect) -> WindowMarks {
         WindowMarks {
             marks: *self,
             window,
+            frame,
             parts: Corner::ALL.map(|corner| {
                 let square = self.square(corner);
                 intersection(square, window).map(|cut| MarkPart {
                     corner,
                     cut: Rect::new(cut.x - square.x, cut.y - square.y, cut.w, cut.h),
-                    at: (cut.x - window.x, cut.y - window.y),
+                    at: (cut.x - frame.x, cut.y - frame.y),
                 })
             }),
         }
@@ -141,6 +148,8 @@ pub struct MarkPart {
 pub struct WindowMarks {
     pub marks: CornerMarks,
     pub window: Rect,
+    /// mpv's window, of which `window` is the visible part.
+    pub frame: Rect,
     pub parts: [Option<MarkPart>; 4],
 }
 
@@ -285,6 +294,19 @@ mod tests {
             grown,
             "a new window size sends the marks again"
         );
+    }
+
+    #[test]
+    fn a_clipped_window_draws_the_visible_parts_where_they_are_in_mpvs_larger_window() {
+        // An unzoomed video whose mpv window covers the whole view but shows only from y = 100 on: the top marks are clipped
+        // away, the bottom ones are drawn at the bottom of mpv's window.
+        let view = Rect::new(0, 0, 640, 1080);
+        let marks = CornerMarks::new(view, 24, 2).unwrap();
+        let shown = marks.in_clipped_window(Rect::new(0, 100, 640, 980), view);
+        assert_eq!(shown.parts[0], None);
+        assert_eq!(shown.parts[1], None);
+        assert_eq!(shown.parts[2].unwrap().at, (0, 1056));
+        assert_eq!(shown.parts[3].unwrap().at, (616, 1056));
     }
 
     #[test]

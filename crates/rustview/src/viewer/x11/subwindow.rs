@@ -9,7 +9,7 @@ use x11rb::connection::{Connection, RequestConnection};
 use x11rb::protocol::shape::{self, ConnectionExt as _};
 use x11rb::protocol::xproto::{
     ChangeWindowAttributesAux, ClipOrdering, ConfigureWindowAux, ConnectionExt as _, CreateGCAux, CreateWindowAux,
-    Cursor, Rectangle, Window, WindowClass,
+    Cursor, Gravity, Rectangle, Window, WindowClass,
 };
 
 /// A rectangle in window coordinates (`x`, `y` and size), as the X protocol has it.
@@ -106,7 +106,10 @@ impl X11VideoSubwindow {
 
         // Black windows without a border, depth, class and visual of the parent (like `XCreateSimpleWindow`).
         let attributes = CreateWindowAux::new().background_pixel(0).border_pixel(0);
-        let create = |id: Window, window_parent: Window, wx: i32, wy: i32| {
+        // The video window keeps its place on the screen when the container moves and resizes in one request (a zoom that
+        // leaves or reaches 100 % only changes what the container clips), so its pixels never jump to a stale place.
+        let video_attributes = attributes.win_gravity(Gravity::STATIC);
+        let create = |id: Window, window_parent: Window, wx: i32, wy: i32, attributes: &CreateWindowAux| {
             session.conn.create_window(
                 x11rb::COPY_FROM_PARENT.saturating_as::<u8>(),
                 id,
@@ -118,14 +121,14 @@ impl X11VideoSubwindow {
                 0,
                 WindowClass::COPY_FROM_PARENT,
                 x11rb::COPY_FROM_PARENT,
-                &attributes,
+                attributes,
             )
         };
-        create(container, parent, x, y)
+        create(container, parent, x, y, &attributes)
             .map_err(x11_error)?
             .check()
             .map_err(|e| ViewerError::X11(format!("Failed to create X11 container subwindow: {e}")))?;
-        create(subwindow, container, 0, 0)
+        create(subwindow, container, 0, 0, &video_attributes)
             .map_err(x11_error)?
             .check()
             .map_err(|e| ViewerError::X11(format!("Failed to create X11 video subwindow: {e}")))?;
@@ -201,6 +204,8 @@ impl X11VideoSubwindow {
             self.current_container_w = width;
             self.current_container_h = height;
             self.place(self.container, x, y, width, height);
+            // The static gravity of the video window may have moved it inside the container: place it again in any case.
+            self.current_sub_w = 0;
         }
     }
 

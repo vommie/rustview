@@ -21,6 +21,8 @@ pub struct OverlayState {
     pub alpha: u8,
     pub edge: u32,
     pub window: (u32, u32),
+    /// Where that window starts inside mpv's window (the medium's place in the larger window of an unzoomed video).
+    pub offset: (i64, i64),
 }
 
 impl OverlayState {
@@ -33,12 +35,19 @@ impl OverlayState {
             alpha: (pulse.alpha.clamp(0.0, 1.0) * 255.0).round().to_int::<u8>(),
             edge,
             window,
+            offset: (0, 0),
         }
     }
 
-    /// Top left corner of the icon in the window: the icon is centered.
+    /// The same, centered in a window that starts at `offset` inside mpv's window.
+    pub fn at(self, offset: (i64, i64)) -> Self {
+        Self { offset, ..self }
+    }
+
+    /// Top left corner of the icon in mpv's window: the icon is centered in its window.
     pub fn origin(&self) -> (i64, i64) {
-        centered_origin(self.window, self.edge)
+        let (x, y) = centered_origin(self.window, self.edge);
+        (x + self.offset.0, y + self.offset.1)
     }
 }
 

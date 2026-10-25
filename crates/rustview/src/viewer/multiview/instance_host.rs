@@ -7,8 +7,10 @@
 use super::container::{Container, Projection, gutter_floor, lone_medium_fills_host};
 use super::instance::MultiviewInstance;
 use super::instance_layout::layout_params;
+use super::instance_video_zoom::{note_placement, place_video_window};
 use super::layout::{GutterKind, LayoutParams, Rect};
 use super::route::HostMode;
+use super::video_placement::VideoPlacement;
 use super::view::{GutterView, HostedView, TileView};
 use crate::viewer::{SubwindowGeometry, ViewportBounds, XRectangle};
 use rustview_core::settings::schema::{MULTIVIEW_GUTTER_LOGICAL_PX, MULTIVIEW_MIN_VIDEO_WINDOW_PX};
@@ -297,19 +299,24 @@ impl MultiviewInstance {
     fn place_windows(&mut self) {
         let projection = self.host.projection;
         let (mode, clip) = (self.host.surface.mode, self.host.surface.clip);
-        // A zoomed video uses the room of its tile (`instance_video_zoom`).
-        let rects: Vec<Option<Rect>> = (0..self.tiles.len()).map(|i| self.video_window_rect(i)).collect();
-        for ((tile, placed), zoomed) in self.tiles.iter_mut().zip(&self.layout.tiles).zip(rects) {
+        // A video in the fullscreen or the tab view draws into the room of its tile and shows its place, or all of the room
+        // while zoomed (`instance_video_zoom`).
+        let placements: Vec<Option<VideoPlacement>> = (0..self.tiles.len()).map(|i| self.video_placement(i)).collect();
+        for ((tile, placed), placement) in self.tiles.iter_mut().zip(&self.layout.tiles).zip(placements) {
             let Some(video) = tile.video.as_mut() else {
                 continue;
             };
-            let r = zoomed.unwrap_or_else(|| projection.rect(placed.content));
+            let placement = placement.unwrap_or_else(|| {
+                let r = projection.rect(placed.content);
+                VideoPlacement::new(r, r)
+            });
+            let r = placement.window;
             if r.w < MULTIVIEW_MIN_VIDEO_WINDOW_PX || r.h < MULTIVIEW_MIN_VIDEO_WINDOW_PX {
                 video.window.hide();
                 continue;
             }
-            video.zoom_window = Some(r);
             if let (HostMode::TabGrid, Some(clip)) = (mode, clip) {
+                note_placement(video, placement);
                 video.window.update_geometry_and_clip(
                     SubwindowGeometry {
                         x: r.x,
@@ -326,9 +333,7 @@ impl MultiviewInstance {
                 );
             } else {
                 video.window.show();
-                video
-                    .window
-                    .move_resize(r.x, r.y, r.w.saturating_as::<u32>(), r.h.saturating_as::<u32>());
+                place_video_window(video, placement);
             }
         }
     }

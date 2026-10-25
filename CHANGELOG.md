@@ -16,6 +16,12 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 - **The mute key shows a speaker icon** in the middle of the video (crossed out when it is muted), like the rating icon. The mute buttons
   show none.
 
+### Fixed
+- **Zooming a video no longer flickers when it leaves 100 % or comes back to it**: for one frame the video showed up stretched or at the
+  wrong place. In the fullscreen and in tabs the video now always draws into the whole area of its tile and is only cut to its place while
+  it is not zoomed, so starting or ending a zoom never resizes the video's own window. The rating icon now stays centered on the video
+  while it is zoomed, too.
+
 ## [0.5.1] - 2026-10-25
 
 ### Fixed

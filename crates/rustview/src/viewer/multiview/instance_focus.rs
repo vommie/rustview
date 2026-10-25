@@ -183,8 +183,8 @@ impl MultiviewInstance {
         for index in 0..self.tiles.len() {
             let wanted = match marked {
                 Some((key, marks)) if key == self.tiles[index].key => self
-                    .video_window_rect(index)
-                    .map(|window| marks.in_window(window))
+                    .video_placement(index)
+                    .map(|placement| marks.in_clipped_window(placement.window, placement.frame))
                     .filter(focus_overlay::WindowMarks::any),
                 _ => None,
             };

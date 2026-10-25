@@ -30,6 +30,15 @@ impl MpvPlayer {
         }
     }
 
+    /// Whether subtitles may sit in the black borders of the window (`sub-use-margins`): only while the whole window shows. A
+    /// window that is larger than its visible part (a video at 100 % in the room of its tile) would put them where they are
+    /// clipped away.
+    pub fn set_subtitle_margins(&self, on: bool) {
+        if let Err(e) = self.mpv.set_property("sub-use-margins", on) {
+            tracing::debug!(error = ?e, "[MpvPlayer: Zoom] mpv did not take the subtitle margins");
+        }
+    }
+
     /// The whole picture again: no zoom, no panning.
     pub fn reset_video_zoom(&self) {
         for property in [

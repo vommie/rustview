@@ -13,6 +13,7 @@ use super::layout::Rect;
 use super::media_actions::MediaActionId;
 use super::model::{AspectSource, TileKind};
 use super::video_bar::state::VideoBarState;
+use super::video_placement::VideoPlacement;
 use super::volume_overlay::VolumeOverlayState;
 use crate::ui::button_feedback::ButtonFeedback;
 use crate::viewer::XRectangle;
@@ -61,8 +62,8 @@ pub struct VideoTile {
     pub time_badge: Option<OsdText>,
     /// The view mpv was given last (`None`: never, i.e. the plain fitted video).
     pub zoom_view: Option<MpvView>,
-    /// Where the zoom placed the window last (host pixels).
-    pub zoom_window: Option<Rect>,
+    /// Where the window was placed last: mpv's frame and the part of it that shows (host pixels).
+    pub placement: Option<VideoPlacement>,
     /// The minimap (and its bubble) cut out of the window right now, host pixels.
     pub minimap_cut: Vec<XRectangle>,
     /// A still for the minimap is being taken, and when the last one was asked for.
@@ -283,7 +284,7 @@ pub fn create_video(
         bar: VideoBarState::default(),
         time_badge: None,
         zoom_view: None,
-        zoom_window: None,
+        placement: None,
         minimap_cut: Vec::new(),
         still_pending: false,
         still_at: None,
