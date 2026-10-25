@@ -130,7 +130,8 @@ impl MultiviewInstance {
     /// Videos start with the aspect ratio of the library record; once mpv knows the real display size, correct it.
     pub(super) fn probe_aspects(&mut self) {
         let mut changed = false;
-        for tile in &mut self.tiles {
+        let mut sizes: Vec<(usize, (u32, u32))> = Vec::new();
+        for (index, tile) in self.tiles.iter_mut().enumerate() {
             if tile.aspect_source == AspectSource::Probed {
                 continue;
             }
@@ -154,6 +155,9 @@ impl MultiviewInstance {
                 continue;
             };
             tile.aspect_source = AspectSource::Probed;
+            // The zoom works on the picture as displayed: a rotated video has its sides swapped.
+            let (w, h) = (u32::try_from(width).unwrap_or(0), u32::try_from(height).unwrap_or(0));
+            sizes.push((index, if rotate.rem_euclid(180) == 90 { (h, w) } else { (w, h) }));
             if aspect_differs(aspect, tile.aspect) {
                 tracing::info!(
                     media_id = tile.media_id,
@@ -167,6 +171,9 @@ impl MultiviewInstance {
         }
         if changed {
             self.apply_layout();
+        }
+        for (index, size) in sizes {
+            self.ensure_video_zoom(index, size);
         }
     }
 }

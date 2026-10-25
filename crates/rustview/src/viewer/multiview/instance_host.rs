@@ -297,15 +297,18 @@ impl MultiviewInstance {
     fn place_windows(&mut self) {
         let projection = self.host.projection;
         let (mode, clip) = (self.host.surface.mode, self.host.surface.clip);
-        for (tile, placed) in self.tiles.iter_mut().zip(&self.layout.tiles) {
+        // A zoomed video uses the room of its tile (`instance_video_zoom`).
+        let rects: Vec<Option<Rect>> = (0..self.tiles.len()).map(|i| self.video_window_rect(i)).collect();
+        for ((tile, placed), zoomed) in self.tiles.iter_mut().zip(&self.layout.tiles).zip(rects) {
             let Some(video) = tile.video.as_mut() else {
                 continue;
             };
-            let r = projection.rect(placed.content);
+            let r = zoomed.unwrap_or_else(|| projection.rect(placed.content));
             if r.w < MULTIVIEW_MIN_VIDEO_WINDOW_PX || r.h < MULTIVIEW_MIN_VIDEO_WINDOW_PX {
                 video.window.hide();
                 continue;
             }
+            video.zoom_window = Some(r);
             if let (HostMode::TabGrid, Some(clip)) = (mode, clip) {
                 video.window.update_geometry_and_clip(
                     SubwindowGeometry {
@@ -333,8 +336,10 @@ impl MultiviewInstance {
     /// Cuts the overlays of the host (menus, tooltips) out of the video window of tile `index`. The action bar is not one
     /// of them: it floats in a window of its own above the Multiview and is blended with the video by the compositor.
     pub(super) fn apply_cutouts(&mut self, index: usize) {
-        let rects = self.host.surface.overlay_cutouts.clone();
+        let mut rects = self.host.surface.overlay_cutouts.clone();
         if let Some(video) = self.tiles.get_mut(index).and_then(|t| t.video.as_mut()) {
+            // The minimap of a zoomed video (and the slider bubble on it), drawn by the canvas below the window.
+            rects.extend_from_slice(&video.minimap_cut);
             video.window.clip_cutout_rectangles(&rects);
         }
     }

@@ -14,9 +14,11 @@ use super::media_actions::MediaActionId;
 use super::model::{AspectSource, TileKind};
 use super::video_bar::state::VideoBarState;
 use crate::ui::button_feedback::ButtonFeedback;
+use crate::viewer::XRectangle;
 use crate::viewer::edit::save_badge::SaveBadge;
 use crate::viewer::edit::tile_edit::{EditSource, TileEdit};
 use crate::viewer::mpv_engine::OsdText;
+use crate::viewer::zoom::mpv_view::MpvView;
 use crate::viewer::zoom::state::ZoomState;
 use crate::viewer::{MpvPlayer, X11VideoSubwindow, install_nonfatal_error_handler};
 use parking_lot::RwLock;
@@ -27,6 +29,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Instant;
 
 /// The Multiview that the events of a player go to. The callbacks are installed once when the player is created and read this at
 /// every call, so a tile that moves to another Multiview (a merge of tabs) takes its running player along and only points the
@@ -53,6 +56,15 @@ pub struct VideoTile {
     pub bar: VideoBarState,
     /// The time badge mpv draws over the picture in the tab grid right now, if any.
     pub time_badge: Option<OsdText>,
+    /// The view mpv was given last (`None`: never, i.e. the plain fitted video).
+    pub zoom_view: Option<MpvView>,
+    /// Where the zoom placed the window last (host pixels).
+    pub zoom_window: Option<Rect>,
+    /// The minimap (and its bubble) cut out of the window right now, host pixels.
+    pub minimap_cut: Vec<XRectangle>,
+    /// A still for the minimap is being taken, and when the last one was asked for.
+    pub still_pending: bool,
+    pub still_at: Option<Instant>,
 }
 
 /// What is known about a medium before its tile exists (from the in-memory library state, never from the drive).
@@ -266,6 +278,11 @@ pub fn create_video(
         focus_overlay: None,
         bar: VideoBarState::default(),
         time_badge: None,
+        zoom_view: None,
+        zoom_window: None,
+        minimap_cut: Vec::new(),
+        still_pending: false,
+        still_at: None,
     })
 }
 

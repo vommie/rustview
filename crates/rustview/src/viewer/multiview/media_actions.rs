@@ -347,7 +347,7 @@ fn open_with(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
     interactive(ctx).then(|| MediaActionSpec::on(MediaActionId::OpenWith, Icon::OpenWith, "Open with..."))
 }
 
-/// Images only (mpv zooms videos itself): the button toggles the slider that hangs below the bar.
+/// Pictures and videos (a video once mpv knows its size): the button toggles the slider that hangs below the bar.
 fn zoom(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
     let open = ctx.zoom.filter(|_| interactive(ctx))?;
     Some(MediaActionSpec {
@@ -358,7 +358,7 @@ fn zoom(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
             if open {
                 "Hide the zoom slider"
             } else {
-                "Zoom (also Ctrl + mouse wheel over the image)"
+                "Zoom (also Ctrl + mouse wheel over the medium)"
             },
         )
     })

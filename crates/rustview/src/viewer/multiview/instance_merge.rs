@@ -15,7 +15,6 @@ use super::layout::Layout;
 use super::prefs;
 use super::route::HostMode;
 use super::tile::TileState;
-use crate::viewer::zoom::state::ZoomState;
 
 /// The tiles of a Multiview that gave them away, with the display it was laid out for.
 pub struct ReleasedTiles {
@@ -63,7 +62,7 @@ impl MultiviewInstance {
         let me = self.me.clone();
         for mut tile in tiles {
             tile.pin = None;
-            tile.zoom = tile.zoom.take().map(|zoom| ZoomState::new(zoom.image()));
+            tile.zoom = tile.zoom.take().map(|zoom| zoom.restarted());
             tile.zoom_minimap_shown = false;
             if let Some(video) = tile.video.as_ref() {
                 *video.owner.write() = me.clone();

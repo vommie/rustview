@@ -47,6 +47,11 @@ pub enum PlayerEvent {
         tile: TileKey,
         result: Result<Arc<SourceImage>, String>,
     },
+    /// A still of a zoomed video for its minimap was taken (or could not be).
+    VideoStill {
+        tile: TileKey,
+        result: Result<SharedPixelBuffer<Rgb8Pixel>, String>,
+    },
     /// A zoomed picture was resampled.
     ZoomRendered {
         tile: TileKey,

@@ -40,12 +40,16 @@ impl MultiviewInstance {
         matches!(self.host.surface.mode, HostMode::Fullscreen | HostMode::TabView)
     }
 
+    /// A picture once it is decoded, a video once mpv knows its size (`instance_video_zoom`).
     fn zoomable(&self, index: usize) -> bool {
         self.zoom_host_is_interactive()
-            && self
-                .tiles
-                .get(index)
-                .is_some_and(|t| t.kind == TileKind::Image && t.error.is_none() && !t.is_loading && t.zoom.is_some())
+            && self.tiles.get(index).is_some_and(|t| {
+                let ready = match t.kind {
+                    TileKind::Image => !t.is_loading,
+                    TileKind::Video => t.video.is_some(),
+                };
+                ready && t.error.is_none() && t.zoom.is_some()
+            })
     }
 
     /// `Some(slider open)` for a tile whose picture can be zoomed; this is what the zoom button of the bar looks at.
@@ -437,6 +441,7 @@ impl MultiviewInstance {
                 self.run_zoom_request(key, &path, crop, request);
             }
         }
+        self.sync_video_zoom(now);
         if changed {
             self.bump();
         }
@@ -518,6 +523,25 @@ impl MultiviewInstance {
         let prefs = zoom_prefs::current();
         let display_size = tile.pixels.as_ref().map(|p| (p.width(), p.height()));
         let area = self.zoom_area_in_tile(index).unwrap_or_default();
+        if tile.kind == TileKind::Video {
+            // mpv draws the video; the canvas only needs the room (it takes the pointer there) and where the picture is.
+            let picture = zoom
+                .is_active()
+                .then(|| zoom.image_rect())
+                .flatten()
+                .map(|rect| ZoomPictureView {
+                    area,
+                    dest: Rect::new(
+                        rect.x.round().to_int::<i32>(),
+                        rect.y.round().to_int::<i32>(),
+                        rect.w.round().to_int::<i32>(),
+                        rect.h.round().to_int::<i32>(),
+                    ),
+                    content: ZoomContentView::Preview { clip: Rect::default() },
+                    pixelated: false,
+                });
+            return (picture, self.minimap_view(index, &prefs), zoom.can_pan());
+        }
         let picture = zoom.picture(display_size, &prefs).map(|picture| ZoomPictureView {
             area,
             dest: Rect::new(picture.dest.x, picture.dest.y, picture.dest.w, picture.dest.h),
@@ -556,6 +580,14 @@ impl MultiviewInstance {
                 )
             });
         layout.map_or((0.0, 0.0), |l| (f64::from(l.rect.w), f64::from(l.rect.h)))
+    }
+
+    /// The minimap of tile `index` (for the cutouts of a video window).
+    pub(super) fn minimap_view_of(&self, index: usize, prefs: &zoom_prefs::ZoomPrefs) -> Option<MinimapView> {
+        if !self.zoomable(index) {
+            return None;
+        }
+        self.minimap_view(index, prefs)
     }
 
     fn minimap_view(&self, index: usize, prefs: &zoom_prefs::ZoomPrefs) -> Option<MinimapView> {

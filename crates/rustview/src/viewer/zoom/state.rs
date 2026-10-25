@@ -192,9 +192,27 @@ pub struct ZoomState {
     release_at: Option<Instant>,
     thumb: Option<SharedPixelBuffer<Rgb8Pixel>>,
     minimap: MinimapState,
+    /// A picture is resampled here; a video is drawn by mpv (`mpv_view`), so its zoom never asks for decoding or rendering.
+    renders: bool,
 }
 
 impl ZoomState {
+    /// The zoom of a video of `size` pixels (its display size): the same model, without the picture work.
+    pub fn new_video(size: (u32, u32)) -> Self {
+        Self {
+            renders: false,
+            ..Self::new(size)
+        }
+    }
+
+    /// A fresh zoom of the same medium (a tile that moved to another Multiview).
+    pub fn restarted(&self) -> Self {
+        Self {
+            renders: self.renders,
+            ..Self::new(self.image)
+        }
+    }
+
     pub fn new(image: (u32, u32)) -> Self {
         Self {
             image,
@@ -211,6 +229,7 @@ impl ZoomState {
             release_at: None,
             thumb: None,
             minimap: MinimapState::default(),
+            renders: true,
         }
     }
 
@@ -473,7 +492,7 @@ impl ZoomState {
             return requests;
         }
 
-        if self.animation.is_some() {
+        if self.animation.is_some() || !self.renders {
             return requests;
         }
         let Some(key) = self.key_for(self.target, prefs) else {
@@ -703,6 +722,12 @@ impl ZoomState {
     }
 
     /// Makes the thumbnail of the minimap from the tile's picture, once.
+    /// The minimap of a video shows a still of it; a newer still replaces the old one.
+    pub fn replace_thumb(&mut self, still: &SharedPixelBuffer<Rgb8Pixel>) {
+        self.thumb = None;
+        self.ensure_thumb(still);
+    }
+
     pub fn ensure_thumb(&mut self, display: &SharedPixelBuffer<Rgb8Pixel>) {
         if self.thumb.is_none() {
             match super::render::thumbnail(display, 480, 360) {

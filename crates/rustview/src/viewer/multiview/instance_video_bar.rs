@@ -61,7 +61,7 @@ impl MultiviewInstance {
         let pointer = self.pointer;
         let mut targets = Vec::new();
         for index in 0..self.tiles.len() {
-            let video_rect = self.host_content(index);
+            let video_rect = self.video_window_rect(index);
             let tile = &mut self.tiles[index];
             let (key, media_id, broken) = (tile.key, tile.media_id, tile.error.is_some());
             let Some(video) = tile.video.as_mut().filter(|_| tile.kind == TileKind::Video) else {

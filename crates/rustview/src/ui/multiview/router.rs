@@ -66,6 +66,16 @@ fn route_event(handle: &MultiviewHandle, weak: &WeakInstance, event: PlayerEvent
             refresh_host(handle, mode);
             return;
         }
+        PlayerEvent::VideoStill { tile, result } => {
+            let mode = {
+                let mut guard = instance.lock();
+                guard.on_video_still(tile, result);
+                guard.host_mode()
+            };
+            drop(instance);
+            refresh_host(handle, mode);
+            return;
+        }
         PlayerEvent::ZoomRendered { tile, done } => {
             let mode = {
                 let mut guard = instance.lock();

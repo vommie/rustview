@@ -98,12 +98,21 @@ impl MultiviewInstance {
             return;
         };
         match tile::reload_video(video, key, &path) {
-            Ok(()) => tracing::info!(
+            Ok(()) => {
+                // The zoom belonged to the file before (mpv resets its view on a new file); the new one gets its own once probed.
+                let tile = &mut self.tiles[index];
+                tile.zoom = None;
+                if let Some(video) = tile.video.as_mut() {
+                    video.zoom_view = None;
+                    video.minimap_cut.clear();
+                }
+                tracing::info!(
                 media_id,
                 index,
                 filename = %LogObscurer::filename(&self.tiles[index].filename),
-                "[Multiview: Tile] Video tile recycled the player of the tile it replaced"
-            ),
+                    "[Multiview: Tile] Video tile recycled the player of the tile it replaced"
+                );
+            }
             Err(e) => {
                 tracing::error!(media_id, index, error = %loggable(&e), "[Multiview: Tile] Recycled video failed");
                 let tile = &mut self.tiles[index];

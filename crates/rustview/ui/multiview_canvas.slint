@@ -268,7 +268,7 @@ export component MultiviewCanvas inherits Rectangle {
             mouse-cursor: tile.pannable ? (self.pressed && self.dragged ? MouseCursor.grabbing : MouseCursor.grab) : MouseCursor.default;
 
             scroll-event(event) => {
-                if tile.kind == 0 && (event.modifiers.control || event.modifiers.meta) {
+                if tile.kind <= 1 && (event.modifiers.control || event.modifiers.meta) {
                     root.tile-zoom-wheel(index, event.delta-y, self.mouse-x, self.mouse-y);
                     return accept;
                 }
@@ -360,7 +360,7 @@ export component MultiviewCanvas inherits Rectangle {
         }
 
         // The minimap of a zoomed image: the whole image in small, the visible part framed. Dragging the frame moves the picture.
-        if tile.kind == 0 && tile.mm-available && root.interactive : Rectangle {
+        if tile.mm-available && root.interactive : Rectangle {
             x: tile.mm-x;
             y: tile.mm-y;
             width: tile.mm-width;
@@ -426,7 +426,7 @@ export component MultiviewCanvas inherits Rectangle {
 
         // The zoom slider on the minimap (right click on it): a speech bubble above it, the same slider as the media bar's, so both show
         // and change the same zoom. The percentage floats above the bubble.
-        if tile.kind == 0 && tile.mm-available && tile.mm-bubble-open && root.interactive : holder := Rectangle {
+        if tile.mm-available && tile.mm-bubble-open && root.interactive : holder := Rectangle {
             property <length> bubble-width: 210px;
             property <length> bubble-height: 43px;
             property <length> bubble-x: Math.max(tile.zoom-area-x, Math.min(tile.zoom-area-x + tile.zoom-area-width - self.bubble-width, tile.mm-x + tile.mm-width / 2 - self.bubble-width / 2));

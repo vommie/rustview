@@ -5179,7 +5179,7 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
 name = "rustview"
-version = "0.4.11"
+version = "0.4.12"
 dependencies = [
  "arboard",
  "ashpd",
@@ -5194,6 +5194,7 @@ dependencies = [
  "freedesktop-icons",
  "image",
  "libmpv2",
+ "libmpv2-sys",
  "num-format",
  "parking_lot",
  "procfs",
@@ -5223,7 +5224,7 @@ dependencies = [
 
 [[package]]
 name = "rustview-core"
-version = "0.4.11"
+version = "0.4.12"
 dependencies = [
  "atomic-write-file",
  "avif-parse",

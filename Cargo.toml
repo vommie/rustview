@@ -4,7 +4,7 @@ members = ["crates/rustview-core", "crates/rustview"]
 default-members = ["crates/rustview-core", "crates/rustview"]
 
 [workspace.package]
-version = "0.4.11"
+version = "0.4.12"
 edition = "2024"
 # The lowest toolchain known to work: the code uses `AtomicUsize::try_update` (1.95). rust-toolchain.toml pins `stable`.
 rust-version = "1.95"
@@ -31,6 +31,8 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png",
 fast_image_resize = "6"
 ffmpeg-next = "9"
 libmpv2 = "6"
+# The raw libmpv calls libmpv2 does not wrap: `mpv_command_ret` for `screenshot-raw` (the still of a zoomed video's minimap).
+libmpv2-sys = "4"
 rayon = "1"
 memchr = "2"
 walkdir = "2"

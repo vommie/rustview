@@ -30,6 +30,7 @@ rustview-core.workspace = true
 slint.workspace = true
 raw-window-handle.workspace = true
 libmpv2.workspace = true
+libmpv2-sys.workspace = true
 rfd.workspace = true
 arboard.workspace = true
 resvg.workspace = true

@@ -109,7 +109,7 @@ impl MultiviewInstance {
             return Ok(UiAction::None);
         }
         if self.tiles[index].kind == TileKind::Video {
-            // mpv zooms a video itself (inside its tile, no slider or minimap); a tile without a player yet refuses.
+            // A video whose size mpv has not reported yet (no zoom model) zooms itself around the middle; one without a player refuses.
             let Some(video) = self.tiles[index].video.as_ref() else {
                 return Err(HintKind::VideoNotZoomable);
             };

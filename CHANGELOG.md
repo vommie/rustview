@@ -10,6 +10,9 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 ## [Unreleased]
 
 ### Added
+- **Videos zoom like pictures** (tab and fullscreen): Ctrl + mouse wheel zooms toward the pointer, Ctrl++ / Ctrl+- / Ctrl+Backspace, dragging moves
+  the picture, the Zoom button of the media bar opens the slider, and the minimap shows a still of the video with the visible part framed (drag it,
+  middle click resets, right click opens its slider). A zoomed video uses the free room around its tile, as a zoomed picture does.
 - **The Unsaved Changes dialog shows each picture:** a small thumbnail at the left of every row, in a square, as the picture looks with its
   changes (the cropped part), so you can tell the pictures apart before deciding which to save.
 - **A selected medium in the Multiview** (with two or more media, fullscreen and tab): a plain click on a medium, on a video too, or on a button of its media

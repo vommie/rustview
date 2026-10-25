@@ -13,6 +13,7 @@ mod events;
 mod osd_text;
 pub mod overlay;
 mod playback;
+mod still;
 pub use controls::SeekPrecision;
 pub use osd_text::OsdText;
 pub use playback::PlaybackNumbers;

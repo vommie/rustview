@@ -31,7 +31,7 @@ fullscreen and the tab view). The tab grid still leaves the pointer to mpv (its 
   unmutes a muted video, mutes an audible one, and brings a silent one back to its last audible level.
 - From round 3: the mouse wheel over a video changes the volume (5 % per notch; Ctrl + wheel zooms the video with mpv), a right
   click plays or pauses, a click selects the tile, double and middle click work as over pictures (through the canvas). Video
-  zoom, panning, the minimap and the zoom slider like pictures come next.
+  zoom, panning, the minimap and the zoom slider like pictures: built in 0.4.12 (see below).
 
 ## Code
 
@@ -69,3 +69,11 @@ the grid). The small bars use the window pool of `ui/multiview/video_bar` with o
 `UiState::tab_grid_mark` / `TabGridItemModel::is_marked`, moved by the pure `ui/tabs/grid/mark.rs` (`neighbor` in the masonry
 layout) and scrolled into view with `tab-grid-reveal`. mpv's grid bindings (clicks and the wheel reported through property
 toggles) are gone.
+
+## Video zoom (round 3, built in 0.4.12)
+
+Videos zoom exactly like pictures: Ctrl + wheel toward the pointer, the zoom keys, dragging the picture, the minimap (with a
+still of the video, refreshed every 2 s while it shows over a playing video; drag, middle click = reset, right click = the slider
+bubble), the zoom slider of the media bar, and a zoomed video grows into the free room of its tile (its native window grows). The
+zoom model is the pictures' (`ZoomState`, without the picture work); mpv draws the result (`video-zoom`, `video-pan-*`). The same
+mpv properties would work with the render API (`docs/rendering_audit.md`), only the window growth would become a larger texture.
