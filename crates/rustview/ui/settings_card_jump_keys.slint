@@ -1,0 +1,38 @@
+import { SpinBox } from "std-widgets.slint";
+import { SettingsCard } from "settings_card.slint";
+import { SettingsOptionRow } from "settings_option_row.slint";
+
+/// Settings > Multiview > Jump Keys: how far the jump keys of the video player move a video.
+export component SettingsCardJumpKeys inherits VerticalLayout {
+    in-out property <int> jump-secs: 5;
+    in-out property <int> jump-long-secs: 60;
+
+    SettingsCard {
+        title: "Jump Keys";
+        description: "How far the jump keys move a video. The keys are on Settings > Hotkeys > Video Player (Left and Right, with Shift the long jumps, by default).";
+
+        SettingsOptionRow {
+            label: "Jump keys move by (seconds)";
+            tooltip: "One press of a jump key moves the selected video this many seconds forward or back.";
+
+            SpinBox {
+                width: 90px;
+                minimum: 1;
+                maximum: 600;
+                value <=> root.jump-secs;
+            }
+        }
+
+        SettingsOptionRow {
+            label: "Long jump keys move by (seconds)";
+            tooltip: "One press of a long jump key moves the selected video this many seconds forward or back.";
+
+            SpinBox {
+                width: 90px;
+                minimum: 1;
+                maximum: 600;
+                value <=> root.jump-long-secs;
+            }
+        }
+    }
+}

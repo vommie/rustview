@@ -10,7 +10,7 @@ fullscreen and the tab view). The tab grid still leaves the pointer to mpv (its 
 - Content, left to right: play/pause, the current time, the progress bar, the remaining time, the volume (a speaker button and a
   volume slider instead of a plain mute button).
 - Style: a translucent bar over the whole width of the video, about 70 % opaque, or a floating pill (both are options under
-  Settings > Fullscreen > Player, as is the opacity; default: the bar at 70 %).
+  Settings > Multiview > Player, as is the opacity; default: the bar at 70 %).
 - Height: freely adjustable (default 30 px); fonts, buttons, the progress bar and the slider grow with it.
 - Progress bar: a wide block like mpv's, the played part in the primary blue. It is an open model: layers of spans, the played
   part is the first one, so later features (A-B repeat, sections) add spans without touching the bar.
@@ -54,7 +54,7 @@ fullscreen and the tab view). The tab grid still leaves the pointer to mpv (its 
 
 ## A-B repeats of the mpv script ab_repeat.lua (questionnaire 2026-10-25, built in 0.5.4)
 
-While the user's mpv script ab_repeat.lua runs in a video's player (Settings > Viewer > Videos), the bar gets an A-B group in
+While the user's mpv script ab_repeat.lua runs in a video's player (Settings > Multiview), the bar gets an A-B group in
 a capsule between the remaining time and the sound: A, B, AB (a click switches the loop on and off, holding it clears A and B),
 Save (a name bubble) and Load (the menu of saved repeats, with a badge of their number). Above the progress bar a tab grows out
 of the bar (same color, curved flanks like a Chrome tab, a third of the bar high and at least 12 px; without a compositing

@@ -1,4 +1,4 @@
-//! Settings > Viewer > Videos, card "mpv script `ab_repeat.lua`" (`ui/settings_card_ab_repeat.slint`): its values, the status
+//! Settings > Multiview, card "mpv script `ab_repeat.lua`" (`ui/settings_card_ab_repeat.slint`): its values, the status
 //! of the script (what the players or the last check found) and "Check again", which starts a fresh, invisible mpv with the
 //! user's configuration on a worker thread (a replaced script is then known without restarting `RustView`).
 

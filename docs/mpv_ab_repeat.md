@@ -31,13 +31,13 @@ native mpv (CLI, `--input-ipc-server`, real X11 keys through `xdotool`) and Rust
 - The AB button switches the loop of the current, valid A-B on and off without clearing it; holding it (hold to confirm) clears
   A and B. So the script gets a loop on/off state of its own.
 
-**Settings (Settings > Viewer > Videos, card "mpv script ab_repeat.lua"):** look for the script (default on; status line, error
+**Settings (Settings > Multiview, card "mpv script ab_repeat.lua"):** look for the script (default on; status line, error
 for an incompatible script, re-check button; extra information in a tooltip, not as text); show the script's OSD messages (one
 switch for all of them; on = the script's own `script-opts`, off = RustView turns them off for its players); colors of saved
 repeats (each its own color = default, or all grey); playbar interactions (click a lane loads it, hover shows the name, hover
 shows the times (off by default), drag the A/B flags; each a switch, the first three of these on); load menu paging (pages of N,
-default 10, or a scroll list showing at least ~5). Settings > Debug gets a check. A later milestone renames the Fullscreen page
-to "Multiview" and moves the player settings there (separate session).
+default 10, or a scroll list showing at least ~5). Settings > Debug gets a check. Since 0.5.5 the card is on the Multiview page
+(formerly "Fullscreen") with the other player settings; the values stay under `viewer.videos.ab_repeat` of settings.json.
 
 **Control bar (fullscreen and tab view, not the tab grid):** a group in its own capsule between the remaining time and the
 sound: A (`brackets-contain-start`), B (`brackets-contain-end`), AB (an own SVG: repeat arrows with "AB" exactly centered), Save
@@ -94,7 +94,7 @@ back to A, and the commands `set-a [t]`, `set-b [t]`, `clear`, `jump-a`, `save [
 `colors`, `prefs`, `moves`), `viewer/mpv_engine/ab_repeat.rs` (observes the three paths as JSON strings, decides the support
 at the first loaded file, sends commands, forwards a saved-list change of one player to every other player of the file as
 `reload`, `probe` = a headless mpv for Check again, `move_paths`), the bar (`docs/video_controls.md`), the keys
-(`docs/hotkeys.md`), Settings > Viewer > Videos (`settings_card_ab_repeat.slint`, `settings_dialog/ab_repeat_card.rs`,
+(`docs/hotkeys.md`), Settings > Multiview (`settings_card_ab_repeat.slint`, `settings_dialog/ab_repeat_card.rs`,
 `AbRepeatSettings`), a check on Settings > Debug (`health::ab_repeat_check`) and the move observer of the library
 (`file_operations::set_move_observer`): a renamed or moved file whose path has saved repeats has them moved by the script
 (through a running player or a headless mpv; RustView reads the script's JSON for that check only, on that explicit action, and

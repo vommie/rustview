@@ -1,4 +1,4 @@
-//! Settings > Fullscreen > Selected Medium and the switch that hides its marks with the mouse cursor: the dialog shows the
+//! Settings > Multiview > Selected Medium and the switch that hides its marks with the mouse cursor: the dialog shows the
 //! steps by index, the settings store them by name (`MULTIVIEW_FOCUS_BRIGHTEN_LEVELS`, `MULTIVIEW_FOCUS_CORNER_LEVELS`).
 
 use crate::ui::SettingsWindow;

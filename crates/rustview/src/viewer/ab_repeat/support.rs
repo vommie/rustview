@@ -1,4 +1,4 @@
-//! Whether a player runs a compatible `ab_repeat.lua`, and the last answer any player gave (Settings > Viewer > Videos shows
+//! Whether a player runs a compatible `ab_repeat.lua`, and the last answer any player gave (Settings > Multiview shows
 //! it, Settings > Debug checks it).
 
 use super::protocol::{API_VERSION, ScriptInfo};

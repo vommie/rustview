@@ -1,0 +1,159 @@
+import { ComboBox, CheckBox } from "std-widgets.slint";
+import { Theme } from "styles.slint";
+import { BulletItem } from "bullet_item.slint";
+import { AppIcon, IconId, IconSize } from "icons.slint";
+import { SettingsCard } from "settings_card.slint";
+import { TooltipHost } from "tooltips.slint";
+
+/// Settings > Multiview > Displays: the monitor the fullscreen opens on.
+export component SettingsCardDisplays inherits VerticalLayout {
+    in property <[string]> display-options: [];
+    in-out property <int> selected-display-idx: 0;
+    in-out property <bool> enable-specific-monitor: false;
+    in-out property <bool> enable-fallback-rule: false;
+    in-out property <int> fallback-target-idx: 0; // 0 = Same display as Main UI, 1 = Different display from Main UI
+
+    callback refresh-displays();
+
+    SettingsCard {
+        title: "Displays";
+        description: "Configure target monitor routing for Fullscreen mode.";
+
+        // Group 1: Specific Display (Always operable/refreshable, rule gated by checkbox)
+        VerticalLayout {
+            spacing: 8px;
+
+            CheckBox {
+                text: "Always display fullscreen on specific monitor:";
+                checked <=> root.enable-specific-monitor;
+            }
+
+            HorizontalLayout {
+                padding-left: 20px;
+                spacing: 8px;
+                alignment: start;
+
+                Text {
+                    text: "Target Display:";
+                    color: Theme.text;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+
+                ComboBox {
+                    width: 320px;
+                    model: root.display-options;
+                    current-index <=> root.selected-display-idx;
+                }
+
+                refresh-btn := Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    border-radius: 4px;
+                    background: refresh-touch.has-hover ? Theme.surface-hover : Theme.surface-variant;
+                    border-width: 1px;
+                    border-color: refresh-touch.has-hover ? Theme.primary : Theme.border;
+
+                    tooltip-host := TooltipHost {
+                        text: "Re-scan connected displays";
+                        is-enabled: true;
+                    }
+
+                    refresh-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        pointer-event(event) => {
+                            if event.kind == PointerEventKind.down {
+                                tooltip-host.on-hover-leave();
+                            }
+                        }
+                        clicked => {
+                            tooltip-host.on-hover-leave();
+                            root.refresh-displays();
+                        }
+                        moved => {
+                            tooltip-host.on-mouse-move(self.mouse-x, self.mouse-y);
+                        }
+                    }
+
+                    property <bool> is-hovered: refresh-touch.has-hover;
+                    changed is-hovered => {
+                        if self.is-hovered {
+                            tooltip-host.on-hover-enter(refresh-touch.mouse-x, refresh-touch.mouse-y);
+                        } else {
+                            tooltip-host.on-hover-leave();
+                        }
+                    }
+
+                    AppIcon {
+                        icon: IconId.refresh;
+                        size: IconSize.md;
+                        color: refresh-touch.has-hover ? Theme.primary : Theme.text;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                    }
+                }
+            }
+        }
+
+        // Group 2: Secondary / Fallback Rule
+        VerticalLayout {
+            spacing: 8px;
+
+            CheckBox {
+                text: "When no specific monitor is chosen or available:";
+                checked <=> root.enable-fallback-rule;
+            }
+
+            HorizontalLayout {
+                padding-left: 20px;
+                spacing: 8px;
+                alignment: start;
+
+                Text {
+                    text: "Fallback Display:";
+                    color: root.enable-fallback-rule ? Theme.text : Theme.text-muted;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+
+                ComboBox {
+                    width: 320px;
+                    enabled: root.enable-fallback-rule;
+                    model: ["Same display as Main UI", "Different display from Main UI"];
+                    current-index <=> root.fallback-target-idx;
+                }
+            }
+        }
+
+        // Group 3: Concise Dynamic Status Box
+        Rectangle {
+            background: #89b4fa12;
+            border-radius: 4px;
+            border-width: 1px;
+            border-color: #89b4fa33;
+
+            VerticalLayout {
+                padding: 8px;
+                spacing: 3px;
+
+                Text {
+                    text: "Active Behavior:";
+                    font-size: 11px;
+                    font-weight: 700;
+                    color: Theme.primary;
+                }
+
+                BulletItem {
+                    text: root.enable-specific-monitor
+                        ? ("Fullscreen will target the chosen monitor. If unavailable: " + (root.enable-fallback-rule ? (root.fallback-target-idx == 1 ? "opens on another available display." : "opens on Main UI display.") : "defaults to Main UI display."))
+                        : (root.enable-fallback-rule
+                            ? (root.fallback-target-idx == 1 ? "Fullscreen opens on a different display than Main UI (if multi-monitor setup exists)." : "Fullscreen opens on the same display as Main UI.")
+                            : "Standard mode: Fullscreen always opens on the same display as Main UI.");
+                    color: Theme.text-muted;
+                }
+            }
+        }
+    }
+}

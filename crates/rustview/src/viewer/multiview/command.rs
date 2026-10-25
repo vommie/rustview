@@ -61,7 +61,7 @@ pub enum MultiviewCommand {
 pub enum PlayerCommand {
     PlayPause,
     Mute,
-    /// Settings > Viewer > Videos says how far (`long`: the long jump).
+    /// Settings > Multiview > Jump Keys says how far (`long`: the long jump).
     Jump {
         forward: bool,
         long: bool,

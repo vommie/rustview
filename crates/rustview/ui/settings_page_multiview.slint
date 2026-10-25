@@ -1,15 +1,19 @@
-import { ComboBox, CheckBox, Slider } from "std-widgets.slint";
+import { ComboBox, Slider } from "std-widgets.slint";
 import { Theme } from "styles.slint";
 import { BulletItem } from "bullet_item.slint";
-import { AppIcon, IconId, IconSize } from "icons.slint";
 import { SettingsCard } from "settings_card.slint";
-import { TooltipHost } from "tooltips.slint";
 import { SettingsOptionRow, SettingsSwitchRow } from "settings_option_row.slint";
 import { ColorSwatchButton } from "color_picker.slint";
+import { SettingsCardAbRepeat } from "settings_card_ab_repeat.slint";
+import { SettingsCardDisplays } from "settings_card_displays.slint";
+import { SettingsCardImageZoom } from "settings_card_image_zoom.slint";
+import { SettingsCardJumpKeys } from "settings_card_jump_keys.slint";
 import { SettingsCardSelectedMedium } from "settings_card_selected_medium.slint";
 import { SettingsCardPlayer, PlayerBarLimits } from "settings_card_player.slint";
 
-export component SettingsPageFullscreen inherits VerticalLayout {
+/// Settings > Multiview: everything about the view that shows media (fullscreen and tabs), the video player included,
+/// because videos play only there. The values live in the `fullscreen` and `viewer.videos` sections of settings.json.
+export component SettingsPageMultiview inherits VerticalLayout {
     spacing: 12px;
 
     in property <[string]> display-options: [];
@@ -75,6 +79,24 @@ export component SettingsPageFullscreen inherits VerticalLayout {
     in-out property <bool> player-show-ms: false;
     in-out property <int> player-seek-idx: 0;
     in property <PlayerBarLimits> player-limits;
+    // Jump keys of the video player
+    in-out property <int> video-jump-secs: 5;
+    in-out property <int> video-jump-long-secs: 60;
+    // The mpv script ab_repeat.lua (`settings_card_ab_repeat.slint`).
+    in-out property <bool> ab-enabled: true;
+    in-out property <bool> ab-osd-messages: true;
+    in-out property <int> ab-colors-idx: 0;
+    in-out property <bool> ab-click-loads: true;
+    in-out property <bool> ab-hover-name: true;
+    in-out property <bool> ab-hover-times: false;
+    in-out property <bool> ab-drag-flags: true;
+    in-out property <int> ab-menu-idx: 0;
+    in-out property <int> ab-page-size: 10;
+    in property <string> ab-status-text;
+    in property <int> ab-status-level;
+    in property <string> ab-status-tooltip;
+    in property <bool> ab-checking;
+    callback ab-check-again();
     // The rating keys as the description names them (Settings > Hotkeys).
     in property <string> rating-keys: "the rating keys";
 
@@ -86,146 +108,20 @@ export component SettingsPageFullscreen inherits VerticalLayout {
     // The user wants to choose the custom background color (Rust opens the color picker window).
     callback pick-background-color();
 
-    SettingsCard {
-        title: "Displays";
-        description: "Configure target monitor routing for Fullscreen mode.";
+    Text {
+        text: "The Multiview is where RustView shows media: one to four images and videos side by side, in the fullscreen or in a tab. Videos play only there, so the video player is set up on this page too.";
+        color: Theme.text-muted;
+        font-size: 12px;
+        wrap: word-wrap;
+    }
 
-        // Group 1: Specific Display (Always operable/refreshable, rule gated by checkbox)
-        VerticalLayout {
-            spacing: 8px;
-
-            CheckBox {
-                text: "Always display fullscreen on specific monitor:";
-                checked <=> root.enable-specific-monitor;
-            }
-
-            HorizontalLayout {
-                padding-left: 20px;
-                spacing: 8px;
-                alignment: start;
-
-                Text {
-                    text: "Target Display:";
-                    color: Theme.text;
-                    font-size: 11px;
-                    vertical-alignment: center;
-                    horizontal-stretch: 1;
-                }
-
-                ComboBox {
-                    width: 320px;
-                    model: root.display-options;
-                    current-index <=> root.selected-display-idx;
-                }
-
-                refresh-btn := Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    border-radius: 4px;
-                    background: refresh-touch.has-hover ? Theme.surface-hover : Theme.surface-variant;
-                    border-width: 1px;
-                    border-color: refresh-touch.has-hover ? Theme.primary : Theme.border;
-
-                    tooltip-host := TooltipHost {
-                        text: "Re-scan connected displays";
-                        is-enabled: true;
-                    }
-
-                    refresh-touch := TouchArea {
-                        mouse-cursor: pointer;
-                        pointer-event(event) => {
-                            if event.kind == PointerEventKind.down {
-                                tooltip-host.on-hover-leave();
-                            }
-                        }
-                        clicked => {
-                            tooltip-host.on-hover-leave();
-                            root.refresh-displays();
-                        }
-                        moved => {
-                            tooltip-host.on-mouse-move(self.mouse-x, self.mouse-y);
-                        }
-                    }
-
-                    property <bool> is-hovered: refresh-touch.has-hover;
-                    changed is-hovered => {
-                        if self.is-hovered {
-                            tooltip-host.on-hover-enter(refresh-touch.mouse-x, refresh-touch.mouse-y);
-                        } else {
-                            tooltip-host.on-hover-leave();
-                        }
-                    }
-
-                    AppIcon {
-                        icon: IconId.refresh;
-                        size: IconSize.md;
-                        color: refresh-touch.has-hover ? Theme.primary : Theme.text;
-                        x: (parent.width - self.width) / 2;
-                        y: (parent.height - self.height) / 2;
-                    }
-                }
-            }
-        }
-
-        // Group 2: Secondary / Fallback Rule
-        VerticalLayout {
-            spacing: 8px;
-
-            CheckBox {
-                text: "When no specific monitor is chosen or available:";
-                checked <=> root.enable-fallback-rule;
-            }
-
-            HorizontalLayout {
-                padding-left: 20px;
-                spacing: 8px;
-                alignment: start;
-
-                Text {
-                    text: "Fallback Display:";
-                    color: root.enable-fallback-rule ? Theme.text : Theme.text-muted;
-                    font-size: 11px;
-                    vertical-alignment: center;
-                    horizontal-stretch: 1;
-                }
-
-                ComboBox {
-                    width: 320px;
-                    enabled: root.enable-fallback-rule;
-                    model: ["Same display as Main UI", "Different display from Main UI"];
-                    current-index <=> root.fallback-target-idx;
-                }
-            }
-        }
-
-        // Group 3: Concise Dynamic Status Box
-        Rectangle {
-            background: #89b4fa12;
-            border-radius: 4px;
-            border-width: 1px;
-            border-color: #89b4fa33;
-
-            VerticalLayout {
-                padding: 8px;
-                spacing: 3px;
-
-                Text {
-                    text: "Active Behavior:";
-                    font-size: 11px;
-                    font-weight: 700;
-                    color: Theme.primary;
-                }
-
-                BulletItem {
-                    text: root.enable-specific-monitor
-                        ? ("Fullscreen will target the chosen monitor. If unavailable: " + (root.enable-fallback-rule ? (root.fallback-target-idx == 1 ? "opens on another available display." : "opens on Main UI display.") : "defaults to Main UI display."))
-                        : (root.enable-fallback-rule
-                            ? (root.fallback-target-idx == 1 ? "Fullscreen opens on a different display than Main UI (if multi-monitor setup exists)." : "Fullscreen opens on the same display as Main UI.")
-                            : "Standard mode: Fullscreen always opens on the same display as Main UI.");
-                    color: Theme.text-muted;
-                }
-            }
-        }
+    SettingsCardDisplays {
+        display-options: root.display-options;
+        selected-display-idx <=> root.selected-display-idx;
+        enable-specific-monitor <=> root.enable-specific-monitor;
+        enable-fallback-rule <=> root.enable-fallback-rule;
+        fallback-target-idx <=> root.fallback-target-idx;
+        refresh-displays => { root.refresh-displays(); }
     }
 
     SettingsCard {
@@ -316,7 +212,7 @@ export component SettingsPageFullscreen inherits VerticalLayout {
         SettingsSwitchRow {
             indent: 12px;
             label: "Zoom";
-            tooltip: "A button with a zoom slider, shown on images only. Ctrl + mouse wheel over an image zooms without the button.";
+            tooltip: "A button with a zoom slider, for pictures and videos. Ctrl + mouse wheel over a medium zooms without the button.";
             enabled: root.media-bar-enabled;
             checked <=> root.media-bar-show-zoom;
         }
@@ -500,162 +396,15 @@ export component SettingsPageFullscreen inherits VerticalLayout {
         }
     }
 
-    SettingsCard {
-        title: "Image Zoom";
-        description: "Zooming and the minimap for images in a Multiview (fullscreen and tabs). Videos have the zoom of mpv.";
-
-        SettingsOptionRow {
-            label: "Zoom step size";
-            description: "How much one notch of Ctrl + mouse wheel zooms (Ctrl + plus and minus too). The wheel over the zoom slider uses 5 %, with Shift 10 %, with Ctrl 25 %.";
-            tooltip: "How much one notch of Ctrl + mouse wheel over an image zooms in or out. Every step is this share of the current size, so a step up and a step down lead back to where you were.";
-
-            HorizontalLayout {
-                spacing: 8px;
-
-                Slider {
-                    width: 140px;
-                    minimum: 1;
-                    maximum: 100;
-                    value: root.zoom-step-percent;
-                    changed(v) => { root.zoom-step-percent = Math.round(v); }
-                }
-
-                Text {
-                    text: root.zoom-step-percent + " %";
-                    color: Theme.primary;
-                    width: 46px;
-                    vertical-alignment: center;
-                    horizontal-alignment: right;
-                }
-            }
-        }
-
-        SettingsOptionRow {
-            label: "Maximum zoom in";
-            description: "The slider and the wheel stop here. 100 % is the picture as it fits its place.";
-            tooltip: "The largest zoom you can reach, as a percentage of the fitted picture. Large values need the original to be decoded in full.";
-
-            HorizontalLayout {
-                spacing: 8px;
-
-                Slider {
-                    width: 140px;
-                    minimum: 200;
-                    maximum: 6400;
-                    value: root.zoom-max-percent;
-                    changed(v) => { root.zoom-max-percent = Math.round(v / 100) * 100; }
-                }
-
-                Text {
-                    text: root.zoom-max-percent + " %";
-                    color: Theme.primary;
-                    width: 56px;
-                    vertical-alignment: center;
-                    horizontal-alignment: right;
-                }
-            }
-        }
-
-        SettingsOptionRow {
-            label: "Maximum zoom out";
-            description: root.zoom-out-percent == 0
-                ? "No zooming out: the picture is never smaller than its fit."
-                : "The picture can shrink to " + Math.round(10000 / (100 + root.zoom-out-percent)) + " % of its fit. 0 = no zooming out.";
-            tooltip: "How far the slider and the wheel can make the picture smaller than 100 %: 200 = down to a third, 1000 = down to a eleventh. At 0 the slider only zooms in.";
-
-            HorizontalLayout {
-                spacing: 8px;
-
-                Slider {
-                    width: 140px;
-                    minimum: 0;
-                    maximum: 1000;
-                    value: root.zoom-out-percent;
-                    changed(v) => { root.zoom-out-percent = Math.round(v / 10) * 10; }
-                }
-
-                Text {
-                    text: root.zoom-out-percent + " %";
-                    color: Theme.primary;
-                    width: 56px;
-                    vertical-alignment: center;
-                    horizontal-alignment: right;
-                }
-            }
-        }
-
-        SettingsSwitchRow {
-            label: "Smooth zoom";
-            description: "Off (default): a zoom step happens at once.";
-            tooltip: "Glide to the new zoom in a fraction of a second instead of jumping to it.";
-            checked <=> root.zoom-smooth;
-        }
-
-        SettingsOptionRow {
-            label: "Resampling quality";
-            description: "Used when a zoomed picture is made sharp, in both directions.";
-            tooltip: "Lanczos (default) is the sharpest and the best for zooming in and out. Catmull-Rom is slightly softer, Bilinear is fast and soft, Nearest neighbor shows the pixels as blocks.";
-
-            ComboBox {
-                width: 220px;
-                model: ["Lanczos (best quality)", "Catmull-Rom (cubic)", "Bilinear (fast)", "Nearest neighbor (pixels)"];
-                current-index <=> root.zoom-resample-idx;
-            }
-        }
-
-        Text {
-            text: "Minimap";
-            color: Theme.text-muted;
-            font-size: 11px;
-            font-weight: 700;
-        }
-
-        SettingsOptionRow {
-            indent: 12px;
-            label: "Position";
-            tooltip: "The corner of the image where the minimap sits. It appears when the pointer comes near it and for a moment after every zoom change.";
-
-            ComboBox {
-                width: 220px;
-                model: ["Bottom left", "Bottom right"];
-                current-index <=> root.zoom-minimap-idx;
-            }
-        }
-
-        SettingsSwitchRow {
-            indent: 12px;
-            label: "Always visible while zoomed in";
-            tooltip: "Keep the minimap on screen as long as the image is zoomed in, without having to point at it.";
-            checked <=> root.zoom-minimap-always;
-        }
-
-        SettingsOptionRow {
-            indent: 12px;
-            label: "Hide after";
-            tooltip: "How long the minimap stays after the zoom or the view changed, when the pointer is not on it.";
-            enabled: !root.zoom-minimap-always;
-
-            HorizontalLayout {
-                spacing: 8px;
-
-                Slider {
-                    width: 140px;
-                    minimum: 1;
-                    maximum: 30;
-                    enabled: !root.zoom-minimap-always;
-                    value: root.zoom-minimap-secs;
-                    changed(v) => { root.zoom-minimap-secs = Math.round(v); }
-                }
-
-                Text {
-                    text: root.zoom-minimap-secs + " s";
-                    color: root.zoom-minimap-always ? Theme.text-muted : Theme.primary;
-                    width: 46px;
-                    vertical-alignment: center;
-                    horizontal-alignment: right;
-                }
-            }
-        }
+    SettingsCardImageZoom {
+        step-percent <=> root.zoom-step-percent;
+        max-percent <=> root.zoom-max-percent;
+        out-percent <=> root.zoom-out-percent;
+        minimap-secs <=> root.zoom-minimap-secs;
+        smooth <=> root.zoom-smooth;
+        minimap-idx <=> root.zoom-minimap-idx;
+        minimap-always <=> root.zoom-minimap-always;
+        resample-idx <=> root.zoom-resample-idx;
     }
 
     SettingsCardSelectedMedium {
@@ -672,6 +421,28 @@ export component SettingsPageFullscreen inherits VerticalLayout {
         show-ms <=> root.player-show-ms;
         seek-idx <=> root.player-seek-idx;
         limits: root.player-limits;
+    }
+
+    SettingsCardJumpKeys {
+        jump-secs <=> root.video-jump-secs;
+        jump-long-secs <=> root.video-jump-long-secs;
+    }
+
+    SettingsCardAbRepeat {
+        enabled <=> root.ab-enabled;
+        osd-messages <=> root.ab-osd-messages;
+        colors-idx <=> root.ab-colors-idx;
+        click-loads <=> root.ab-click-loads;
+        hover-name <=> root.ab-hover-name;
+        hover-times <=> root.ab-hover-times;
+        drag-flags <=> root.ab-drag-flags;
+        menu-idx <=> root.ab-menu-idx;
+        page-size <=> root.ab-page-size;
+        status-text: root.ab-status-text;
+        status-level: root.ab-status-level;
+        status-tooltip: root.ab-status-tooltip;
+        checking: root.ab-checking;
+        check-again => { root.ab-check-again(); }
     }
 
     SettingsCard {

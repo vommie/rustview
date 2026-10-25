@@ -1,0 +1,174 @@
+import { ComboBox, Slider } from "std-widgets.slint";
+import { Theme } from "styles.slint";
+import { SettingsCard } from "settings_card.slint";
+import { SettingsOptionRow, SettingsSwitchRow } from "settings_option_row.slint";
+
+/// Settings > Multiview > Image Zoom: zooming and the minimap.
+export component SettingsCardImageZoom inherits VerticalLayout {
+    in-out property <int> step-percent: 15;
+    in-out property <int> max-percent: 1000;
+    in-out property <int> out-percent: 200;
+    in-out property <int> minimap-secs: 3;
+    in-out property <bool> smooth: true;
+    in-out property <int> minimap-idx: 0; // 0 = bottom left, 1 = bottom right
+    in-out property <bool> minimap-always: false;
+    in-out property <int> resample-idx: 0; // 0 = Lanczos, 1 = Catmull-Rom, 2 = Bilinear, 3 = Nearest neighbor
+
+    SettingsCard {
+        title: "Image Zoom";
+        description: "Zooming and the minimap in a Multiview (fullscreen and tabs), for pictures and videos alike. The resampling quality is for pictures only: mpv scales videos itself.";
+
+        SettingsOptionRow {
+            label: "Zoom step size";
+            description: "How much one notch of Ctrl + mouse wheel zooms (Ctrl + plus and minus too). The wheel over the zoom slider uses 5 %, with Shift 10 %, with Ctrl 25 %.";
+            tooltip: "How much one notch of Ctrl + mouse wheel over an image zooms in or out. Every step is this share of the current size, so a step up and a step down lead back to where you were.";
+
+            HorizontalLayout {
+                spacing: 8px;
+
+                Slider {
+                    width: 140px;
+                    minimum: 1;
+                    maximum: 100;
+                    value: root.step-percent;
+                    changed(v) => { root.step-percent = Math.round(v); }
+                }
+
+                Text {
+                    text: root.step-percent + " %";
+                    color: Theme.primary;
+                    width: 46px;
+                    vertical-alignment: center;
+                    horizontal-alignment: right;
+                }
+            }
+        }
+
+        SettingsOptionRow {
+            label: "Maximum zoom in";
+            description: "The slider and the wheel stop here. 100 % is the picture as it fits its place.";
+            tooltip: "The largest zoom you can reach, as a percentage of the fitted picture. Large values need the original to be decoded in full.";
+
+            HorizontalLayout {
+                spacing: 8px;
+
+                Slider {
+                    width: 140px;
+                    minimum: 200;
+                    maximum: 6400;
+                    value: root.max-percent;
+                    changed(v) => { root.max-percent = Math.round(v / 100) * 100; }
+                }
+
+                Text {
+                    text: root.max-percent + " %";
+                    color: Theme.primary;
+                    width: 56px;
+                    vertical-alignment: center;
+                    horizontal-alignment: right;
+                }
+            }
+        }
+
+        SettingsOptionRow {
+            label: "Maximum zoom out";
+            description: root.out-percent == 0
+                ? "No zooming out: the picture is never smaller than its fit."
+                : "The picture can shrink to " + Math.round(10000 / (100 + root.out-percent)) + " % of its fit. 0 = no zooming out.";
+            tooltip: "How far the slider and the wheel can make the picture smaller than 100 %: 200 = down to a third, 1000 = down to a eleventh. At 0 the slider only zooms in.";
+
+            HorizontalLayout {
+                spacing: 8px;
+
+                Slider {
+                    width: 140px;
+                    minimum: 0;
+                    maximum: 1000;
+                    value: root.out-percent;
+                    changed(v) => { root.out-percent = Math.round(v / 10) * 10; }
+                }
+
+                Text {
+                    text: root.out-percent + " %";
+                    color: Theme.primary;
+                    width: 56px;
+                    vertical-alignment: center;
+                    horizontal-alignment: right;
+                }
+            }
+        }
+
+        SettingsSwitchRow {
+            label: "Smooth zoom";
+            description: "Off (default): a zoom step happens at once.";
+            tooltip: "Glide to the new zoom in a fraction of a second instead of jumping to it.";
+            checked <=> root.smooth;
+        }
+
+        SettingsOptionRow {
+            label: "Resampling quality";
+            description: "Used when a zoomed picture is made sharp, in both directions.";
+            tooltip: "Lanczos (default) is the sharpest and the best for zooming in and out. Catmull-Rom is slightly softer, Bilinear is fast and soft, Nearest neighbor shows the pixels as blocks.";
+
+            ComboBox {
+                width: 220px;
+                model: ["Lanczos (best quality)", "Catmull-Rom (cubic)", "Bilinear (fast)", "Nearest neighbor (pixels)"];
+                current-index <=> root.resample-idx;
+            }
+        }
+
+        Text {
+            text: "Minimap";
+            color: Theme.text-muted;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        SettingsOptionRow {
+            indent: 12px;
+            label: "Position";
+            tooltip: "The corner of the image where the minimap sits. It appears when the pointer comes near it and for a moment after every zoom change.";
+
+            ComboBox {
+                width: 220px;
+                model: ["Bottom left", "Bottom right"];
+                current-index <=> root.minimap-idx;
+            }
+        }
+
+        SettingsSwitchRow {
+            indent: 12px;
+            label: "Always visible while zoomed in";
+            tooltip: "Keep the minimap on screen as long as the image is zoomed in, without having to point at it.";
+            checked <=> root.minimap-always;
+        }
+
+        SettingsOptionRow {
+            indent: 12px;
+            label: "Hide after";
+            tooltip: "How long the minimap stays after the zoom or the view changed, when the pointer is not on it.";
+            enabled: !root.minimap-always;
+
+            HorizontalLayout {
+                spacing: 8px;
+
+                Slider {
+                    width: 140px;
+                    minimum: 1;
+                    maximum: 30;
+                    enabled: !root.minimap-always;
+                    value: root.minimap-secs;
+                    changed(v) => { root.minimap-secs = Math.round(v); }
+                }
+
+                Text {
+                    text: root.minimap-secs + " s";
+                    color: root.minimap-always ? Theme.text-muted : Theme.primary;
+                    width: 46px;
+                    vertical-alignment: center;
+                    horizontal-alignment: right;
+                }
+            }
+        }
+    }
+}

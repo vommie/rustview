@@ -1,4 +1,4 @@
-//! Settings > Fullscreen > Player: the control bar of a video. The dialog shows the choices by index, the settings store them
+//! Settings > Multiview > Player: the control bar of a video. The dialog shows the choices by index, the settings store them
 //! by name ("bar"/"pill", "bottom"/"anywhere").
 
 use crate::ui::SettingsWindow;

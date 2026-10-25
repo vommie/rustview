@@ -1,4 +1,4 @@
-//! The user's zoom preferences (Settings > Fullscreen > Image Zoom) as a snapshot everything that zooms can read cheaply.
+//! The user's zoom preferences (Settings > Multiview > Image Zoom) as a snapshot everything that zooms can read cheaply.
 //!
 //! Like `multiview::prefs`: the settings dialog is the only writer (`apply`, at startup and after every change), a change takes
 //! effect with the next zoom.

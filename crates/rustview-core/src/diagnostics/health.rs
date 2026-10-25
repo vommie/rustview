@@ -85,7 +85,7 @@ pub struct DisplayFacts {
     pub ab_repeat: Option<AbRepeatFacts>,
 }
 
-/// What the players (or Settings > Viewer > Videos, Check again) found about the mpv script `ab_repeat.lua`.
+/// What the players (or Settings > Multiview, Check again) found about the mpv script `ab_repeat.lua`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AbRepeatFacts {
     /// No video was opened yet.
@@ -199,7 +199,7 @@ fn ab_repeat_check(facts: &AbRepeatFacts) -> Check {
             Status::Warning,
             "mpv script ab_repeat.lua is incompatible",
             format!(
-                "{reason} Replace the script in mpv's scripts folder (version 2.0 or newer, api=yes) and click Check again on Settings > Viewer > Videos."
+                "{reason} Replace the script in mpv's scripts folder (version 2.0 or newer, api=yes) and click Check again on Settings > Multiview."
             ),
         ),
         AbRepeatFacts::NotFound => health(

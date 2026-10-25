@@ -313,7 +313,7 @@ impl Default for FullscreenZoomSettings {
     }
 }
 
-/// The control bar of a video in the Multiview (fullscreen and tab view): Settings > Fullscreen > Player.
+/// The control bar of a video in the Multiview (fullscreen and tab view): Settings > Multiview > Player.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct FullscreenPlayerSettings {

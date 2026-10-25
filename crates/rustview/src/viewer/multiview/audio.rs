@@ -1,6 +1,6 @@
 //! Sound rules of the Multiview (pure functions, table-testable).
 //!
-//! The user's policy (Settings > Fullscreen > Sound) decides which videos are muted automatically. By default only one
+//! The user's policy (Settings > Multiview > Sound) decides which videos are muted automatically. By default only one
 //! video is audible: the leftmost one when the Multiview opens. `Native` means "mpv's own state is left alone"; a tile
 //! that returns to `Native` gets the mute value mpv started with (captured at tile creation), never a blind "unmuted".
 //! A mute set by the user (badge, `m`, mpv OSC) is never overridden by the policy.

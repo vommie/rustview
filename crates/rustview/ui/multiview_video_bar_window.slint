@@ -99,7 +99,7 @@ component BarTime inherits Rectangle {
 /// The control bar of a video, in a frameless transparent window of its own above the native mpv window (like the action
 /// bars: nothing drawn in the Multiview window can blend with a video). Rust places the window over the bottom of the video
 /// and limits its pointer input to the bar; the room above the bar holds the bubble with the time under the pointer.
-/// Everything in the bar grows with `bar-height` (Settings > Fullscreen > Player).
+/// Everything in the bar grows with `bar-height` (Settings > Multiview > Player).
 export component MultiviewVideoBarWindow inherits Window {
     title: "RustView - Video control bar";
     no-frame: true;

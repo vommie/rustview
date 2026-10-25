@@ -1,4 +1,4 @@
-//! The settings of Fullscreen > Player as a global, like the zoom preferences (read on every tick of a host).
+//! The settings of Multiview > Player as a global, like the zoom preferences (read on every tick of a host).
 
 use super::view::DragPhase;
 use crate::viewer::mpv_engine::SeekPrecision;

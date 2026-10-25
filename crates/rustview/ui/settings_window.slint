@@ -8,7 +8,7 @@ import { SettingsPagePerformance } from "settings_page_performance.slint";
 import { SettingsPageFormats } from "settings_page_formats.slint";
 import { FormatRowView, UnsupportedFormatView } from "settings_format_row.slint";
 import { SettingsPageViewer } from "settings_page_viewer.slint";
-import { SettingsPageFullscreen } from "settings_page_fullscreen.slint";
+import { SettingsPageMultiview } from "settings_page_multiview.slint";
 import { PlayerBarLimits } from "settings_card_player.slint";
 import { SettingsPageImageEdit, RatioChipView } from "settings_page_image_edit.slint";
 import { SettingsPageTagsRatings } from "settings_page_tags_ratings.slint";
@@ -28,7 +28,7 @@ export { SettingsPageAppearance } from "settings_page_appearance.slint";
 export { SettingsPagePerformance } from "settings_page_performance.slint";
 export { SettingsPageFormats } from "settings_page_formats.slint";
 export { SettingsPageViewer } from "settings_page_viewer.slint";
-export { SettingsPageFullscreen } from "settings_page_fullscreen.slint";
+export { SettingsPageMultiview } from "settings_page_multiview.slint";
 export { SettingsPageImageEdit, RatioChipView } from "settings_page_image_edit.slint";
 export { SettingsPageTagsRatings } from "settings_page_tags_ratings.slint";
 export { SettingsPageHotkeys } from "settings_page_hotkeys.slint";
@@ -142,6 +142,10 @@ export component SettingsWindow inherits Window {
     in-out property <bool> allow-multiple-image-tabs: false;
     in-out property <bool> open-videos-in-tab: true;
     in-out property <bool> allow-multiple-video-tabs: true;
+    in-out property <bool> viewer-show-tab-rating-badge: false;
+    in-out property <int> viewer-background-mode-idx: 0;
+
+    // Multiview options: the video player keys and the ab_repeat.lua support (stored under `viewer.videos`)
     in-out property <int> video-jump-secs: 5;
     in-out property <int> video-jump-long-secs: 60;
     in-out property <bool> ab-enabled: true;
@@ -158,10 +162,8 @@ export component SettingsWindow inherits Window {
     in property <string> ab-status-tooltip;
     in property <bool> ab-checking;
     callback ab-check-again();
-    in-out property <bool> viewer-show-tab-rating-badge: false;
-    in-out property <int> viewer-background-mode-idx: 0;
 
-    // Fullscreen options
+    // Multiview options (stored under `fullscreen`)
     in property <[string]> display-options: [];
     in-out property <int> selected-display-idx: 0;
     in-out property <bool> fullscreen-enable-specific: false;
@@ -408,27 +410,11 @@ export component SettingsWindow inherits Window {
                             allow-multiple-image-tabs <=> root.allow-multiple-image-tabs;
                             open-videos-in-tab <=> root.open-videos-in-tab;
                             allow-multiple-video-tabs <=> root.allow-multiple-video-tabs;
-                            video-jump-secs <=> root.video-jump-secs;
-                            video-jump-long-secs <=> root.video-jump-long-secs;
-                            ab-enabled <=> root.ab-enabled;
-                            ab-osd-messages <=> root.ab-osd-messages;
-                            ab-colors-idx <=> root.ab-colors-idx;
-                            ab-click-loads <=> root.ab-click-loads;
-                            ab-hover-name <=> root.ab-hover-name;
-                            ab-hover-times <=> root.ab-hover-times;
-                            ab-drag-flags <=> root.ab-drag-flags;
-                            ab-menu-idx <=> root.ab-menu-idx;
-                            ab-page-size <=> root.ab-page-size;
-                            ab-status-text: root.ab-status-text;
-                            ab-status-level: root.ab-status-level;
-                            ab-status-tooltip: root.ab-status-tooltip;
-                            ab-checking: root.ab-checking;
-                            ab-check-again => { root.ab-check-again(); }
                             show-tab-rating-badge <=> root.viewer-show-tab-rating-badge;
                             background-mode-idx <=> root.viewer-background-mode-idx;
                         }
 
-                        if root.active-category == 6 : SettingsPageFullscreen {
+                        if root.active-category == 6 : SettingsPageMultiview {
                             display-options: root.display-options;
                             selected-display-idx <=> root.selected-display-idx;
                             enable-specific-monitor <=> root.fullscreen-enable-specific;
@@ -478,6 +464,22 @@ export component SettingsWindow inherits Window {
                             player-show-ms <=> root.fullscreen-player-show-ms;
                             player-seek-idx <=> root.fullscreen-player-seek-idx;
                             player-limits: root.fullscreen-player-limits;
+                            video-jump-secs <=> root.video-jump-secs;
+                            video-jump-long-secs <=> root.video-jump-long-secs;
+                            ab-enabled <=> root.ab-enabled;
+                            ab-osd-messages <=> root.ab-osd-messages;
+                            ab-colors-idx <=> root.ab-colors-idx;
+                            ab-click-loads <=> root.ab-click-loads;
+                            ab-hover-name <=> root.ab-hover-name;
+                            ab-hover-times <=> root.ab-hover-times;
+                            ab-drag-flags <=> root.ab-drag-flags;
+                            ab-menu-idx <=> root.ab-menu-idx;
+                            ab-page-size <=> root.ab-page-size;
+                            ab-status-text: root.ab-status-text;
+                            ab-status-level: root.ab-status-level;
+                            ab-status-tooltip: root.ab-status-tooltip;
+                            ab-checking: root.ab-checking;
+                            ab-check-again => { root.ab-check-again(); }
                             rating-show-feedback <=> root.fullscreen-rating-show-feedback;
                             rating-keys: root.fullscreen-rating-keys;
                             background-source-idx <=> root.fullscreen-background-source-idx;

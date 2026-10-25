@@ -85,7 +85,7 @@ Inspector, Tag & Rate (incl. its rating buttons), tag clicks, tag history and F5
 With nothing focused they show "Select a medium in the view" and do nothing. A tab of one medium is unchanged.
 
 ### Sound
-New choice "The selected video" for Settings > Fullscreen > Sound > "Sound follows" (`fullscreen.sound.follows = "selected"`): focusing a video gives it
+New choice "The selected video" for Settings > Multiview > Sound > "Sound follows" (`fullscreen.sound.follows = "selected"`): focusing a video gives it
 the sound and mutes the other videos the policy controls; focusing an image changes nothing. The default stays "first".
 
 ## Look
@@ -110,14 +110,14 @@ the sound and mutes the other videos the policy controls; focusing an image chan
   window of its own like the bars (blended by the compositor; drawn in the canvas where that is not possible, e.g. Wayland). One single-shot timer, no polling.
 
 ## Settings (all additive with `#[serde(default)]`, no migration)
-- Settings > Fullscreen, new section "Selected Medium": "Brighten its area" (Off / Weak / Medium / Strong, default Medium), "Corner marks"
+- Settings > Multiview, new section "Selected Medium": "Brighten its area" (Off / Weak / Medium / Strong, default Medium), "Corner marks"
   (Short / Medium / Long, default Medium). The marks cannot be switched off (the focus would be invisible).
-- Settings > Fullscreen > Primary Action Bar > "Mouse cursor", below "Hide after": "Hide the selection marks too" (indented, enabled only while hiding
+- Settings > Multiview > Primary Action Bar > "Mouse cursor", below "Hide after": "Hide the selection marks too" (indented, enabled only while hiding
   the cursor is on, default on). Tooltip: "While the resting mouse cursor is hidden, the marks of the selected medium are hidden as well. They show again
   with the cursor; the keys still act on the selected medium." The tooltip of "Hide the mouse cursor when it rests" mentions it.
 - Tooltip of the primary bar's cursor button (`primary_actions.rs`) while the switch is on: "The mouse cursor and the selection marks are hidden after
   N s without movement (click to keep them visible)" / "Hide the mouse cursor and the selection marks after N s without movement (they show again when it moves)".
-- Settings > Fullscreen > Sound > "Sound follows": new choice "The selected video".
+- Settings > Multiview > Sound > "Sound follows": new choice "The selected video".
 
 ## mpv in this milestone (the minimum)
 - `MBTN_LEFT` -> a `script-message` that tells RustView which tile was clicked (no pause; `MBTN_LEFT_DBL` must still work).

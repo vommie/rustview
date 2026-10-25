@@ -100,7 +100,7 @@ pub(super) struct VideoBarWindow {
     ab_renaming: Option<usize>,
     /// The duration of hold to confirm the window has.
     hold_ms: Option<u32>,
-    /// The height of the bar (logical pixels, Settings > Fullscreen > Player): the popups are sized from it.
+    /// The height of the bar (logical pixels, Settings > Multiview > Player): the popups are sized from it.
     bar_height: f32,
     shared: Rc<Shared>,
     shown: bool,

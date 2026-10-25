@@ -117,7 +117,7 @@ pub(super) fn unregister(id: u64) {
     PLAYERS.lock().retain(|p| p.id != id && p.mpv.strong_count() > 0);
 }
 
-/// Settings > Viewer > Videos changed: every player watches the script or stops, and gets the script's message switch.
+/// Settings > Multiview changed: every player watches the script or stops, and gets the script's message switch.
 pub fn apply_prefs() {
     let opts = script_opts();
     let enabled = prefs::current().enabled;
@@ -367,7 +367,7 @@ fn wait_for_info(mpv: &Mpv) -> Option<ScriptInfo> {
     }
 }
 
-/// Looks for the script in a fresh, invisible mpv with the user's configuration (Settings > Viewer > Videos, Check again):
+/// Looks for the script in a fresh, invisible mpv with the user's configuration (Settings > Multiview, Check again):
 /// a replaced `ab_repeat.lua` is what every video opened from now on gets, without restarting `RustView`. Blocks while mpv starts
 /// and loads its scripts (call it on a worker thread); the answer is recorded for the settings card.
 pub fn probe() -> Support {

@@ -1,4 +1,4 @@
-//! The user's Multiview preferences (Settings > Fullscreen) as a snapshot the whole Multiview can read cheaply.
+//! The user's Multiview preferences (Settings > Multiview) as a snapshot the whole Multiview can read cheaply.
 //!
 //! The settings dialog is the only writer (`apply`, at startup and after every change); the instances read the snapshot
 //! when they need a decision (which buttons a tile offers, how new videos start), so nothing has to be threaded through
@@ -143,7 +143,7 @@ impl FocusMarkPrefs {
         hide_with_cursor: DEFAULT_FULLSCREEN_HIDE_SELECTION_WITH_CURSOR,
     };
 
-    /// The steps of Settings > Fullscreen > Selected Medium (sanitized names; an unknown one keeps the default).
+    /// The steps of Settings > Multiview > Selected Medium (sanitized names; an unknown one keeps the default).
     pub fn from_settings(selection: &FullscreenSelectionSettings, hide_with_cursor: bool) -> Self {
         Self {
             brighten_percent: level_of(

@@ -41,7 +41,7 @@ same, e.g. only the fullscreen of a Browse view pages or becomes a tab) with sim
 - Keys over a video (0.4.6, the "RustView controls the videos" milestone, keyboard part): mpv takes no keys
   (`input-vo-keyboard=no`); X11 then delivers a key pressed over a video to the RustView window under it, so every key over a
   video is the keymap's. The Video Player area comes first while the Multiview holds a video; its actions run `MpvPlayer`
-  commands on the selected video (`MultiviewCommand::Player`: pause, mute, jumps of Settings > Viewer > Videos, 5 % volume
+  commands on the selected video (`MultiviewCommand::Player`: pause, mute, jumps of Settings > Multiview > Jump Keys, 5 % volume
   steps, frame steps, speed x1.1); a picture as target shows "Select a video". (0.4.4 had bound the keymap's chords inside mpv as
   `script-message rustview-key`; that path is gone.) The mouse over a video is RustView's since 0.4.7 (see "Mouse over videos" and `docs/video_controls.md`).
 - Fixed keys (cannot be changed, shown greyed with a lock and a tooltip that says why): Esc (cancels, closes, clears the

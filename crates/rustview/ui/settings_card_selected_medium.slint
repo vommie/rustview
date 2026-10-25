@@ -2,7 +2,7 @@ import { ComboBox } from "std-widgets.slint";
 import { SettingsCard } from "settings_card.slint";
 import { SettingsOptionRow } from "settings_option_row.slint";
 
-/// Settings > Fullscreen > Selected Medium: how the selected medium of a Multiview with several media is marked.
+/// Settings > Multiview > Selected Medium: how the selected medium of a Multiview with several media is marked.
 export component SettingsCardSelectedMedium inherits VerticalLayout {
     in-out property <int> brighten-idx: 2; // 0 = off, 1 = weak, 2 = medium, 3 = strong
     in-out property <int> corner-idx: 1; // 0 = short, 1 = medium, 2 = long

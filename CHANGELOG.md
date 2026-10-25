@@ -24,7 +24,7 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 - **Keys for A-B repeats** (Settings > Hotkeys > MPV ab_repeat.lua, only while the script runs): set A (Home), set B (End), clear
   (Ctrl+Delete), and without a default key the save bubble, the menu of saved repeats, jump to A and the next or previous saved
   repeat.
-- **Settings > Viewer > Videos, card "mpv script ab_repeat.lua"**: look for the script (on by default; an incompatible script is
+- **Settings > Multiview, card "mpv script ab_repeat.lua"**: look for the script (on by default; an incompatible script is
   named as an error, Check again looks again without restarting RustView), whether the script shows its own messages in the
   video, the colors of the saved repeats, what clicks, the pointer and dragging do in the playbar, and how the menu pages.
   Settings > Debug names the script too.
@@ -36,7 +36,17 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 - **The mute key shows a speaker icon** in the middle of the video (crossed out when it is muted), like the rating icon. The mute buttons
   show none.
 
+### Changed
+- **The settings page "Fullscreen" is now called "Multiview"** and starts with a short explanation of what the Multiview is (the
+  view of one to four media, in the fullscreen and in tabs). Everything about the video player lives there now, because videos play
+  only in the Multiview: the jump distances of the jump keys moved from Settings > Viewer > Videos to the new card Multiview > Jump
+  Keys, and the card "mpv script ab_repeat.lua" sits next to Player and Sound. Settings > Viewer keeps how images and videos open
+  from the media view, the rating badge of tabs and the tab background. Only the place in the settings window changed: your settings
+  are kept as they are (no migration).
+
 ### Fixed
+- **Settings > Multiview no longer says that only pictures zoom**: the Image Zoom card and the tooltip of the Zoom button now name videos
+  too, which zoom the same way.
 - **mpv's own on-screen controller no longer runs inside RustView's players** when the user's `mpv.conf` switches it on (`osc=yes`): the
   mpv configuration is read after RustView's own options, so the controller was loaded again. It was never visible (RustView takes the
   mouse over videos), but it ran in every player.

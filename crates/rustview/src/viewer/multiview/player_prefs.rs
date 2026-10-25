@@ -1,4 +1,4 @@
-//! The settings the video player keys read (Settings > Viewer > Videos), kept as a global like the zoom preferences.
+//! The settings the video player keys read (Settings > Multiview > Jump Keys), kept as a global like the zoom preferences.
 
 use parking_lot::RwLock;
 use rustview_core::settings::schema::{

@@ -396,7 +396,7 @@ pub const MIN_VIEWER_VIDEO_JUMP_SECS: u32 = 1;
 
 pub const MAX_VIEWER_VIDEO_JUMP_SECS: u32 = 600;
 
-/// Support for the mpv script `ab_repeat.lua` (Settings > Viewer > Videos, `docs/mpv_ab_repeat.md`): look for it in the players.
+/// Support for the mpv script `ab_repeat.lua` (Settings > Multiview, `docs/mpv_ab_repeat.md`): look for it in the players.
 pub const DEFAULT_AB_REPEAT_ENABLED: bool = true;
 
 /// Let the script show its own on-screen messages in `RustView`'s players (as in mpv; off sets `ab_repeat-osd_messages=no`).
@@ -560,7 +560,7 @@ pub const MAX_FULLSCREEN_ZOOM_MINIMAP_SECS: u32 = 30;
 /// "lanczos3" (best quality), "`catmull_rom`" (bicubic), "bilinear" or "nearest" (hard pixels).
 pub const DEFAULT_FULLSCREEN_ZOOM_RESAMPLE: &str = "lanczos3";
 
-// --- Video control bar of the Multiview (Settings > Fullscreen > Player) ---
+// --- Video control bar of the Multiview (Settings > Multiview > Player) ---
 /// "bar" (a translucent bar over the whole width of the video) or "pill" (a floating pill with a margin to the edges).
 pub const DEFAULT_FULLSCREEN_PLAYER_BAR_STYLE: &str = "bar";
 
@@ -675,7 +675,7 @@ pub const MULTIVIEW_TICK_MS: u64 = 50;
 pub const MULTIVIEW_DOUBLE_CLICK_MS: u64 = 400;
 
 /// The selected medium of a Multiview of 2+ tiles: white over its column (where the medium leaves room), in percent, for the
-/// steps of Settings > Fullscreen > Selected Medium ("medium" is the default).
+/// steps of Settings > Multiview > Selected Medium ("medium" is the default).
 pub const MULTIVIEW_FOCUS_BRIGHTEN_PERCENT: u8 = 7;
 
 pub const MULTIVIEW_FOCUS_BRIGHTEN_LEVELS: [(&str, u8); 4] = [

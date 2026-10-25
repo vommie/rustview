@@ -1,4 +1,4 @@
-//! The settings of the `ab_repeat.lua` support (Settings > Viewer > Videos), kept as a global like the other player preferences.
+//! The settings of the `ab_repeat.lua` support (Settings > Multiview), kept as a global like the other player preferences.
 
 use parking_lot::RwLock;
 use rustview_core::settings::schema::{
