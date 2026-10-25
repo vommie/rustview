@@ -17,6 +17,9 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   show none.
 
 ### Fixed
+- **mpv's own on-screen controller no longer runs inside RustView's players** when the user's `mpv.conf` switches it on (`osc=yes`): the
+  mpv configuration is read after RustView's own options, so the controller was loaded again. It was never visible (RustView takes the
+  mouse over videos), but it ran in every player.
 - **Zooming a video no longer flickers when it leaves 100 % or comes back to it**: for one frame the video showed up stretched or at the
   wrong place. In the fullscreen and in tabs the video now always draws into the whole area of its tile and is only cut to its place while
   it is not zoomed, so starting or ending a zoom never resizes the video's own window. The rating icon now stays centered on the video

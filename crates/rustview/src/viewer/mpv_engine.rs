@@ -131,6 +131,19 @@ impl MpvPlayer {
         // Ensure OSC deadzone is completely zeroed out
         let _ = mpv_instance.set_property("script-opts", "osc-deadzonesize=0,osc-minmousemove=0");
 
+        // The user's mpv.conf is read after the options above (`osc=yes` there loads mpv's controller again, which never sees
+        // the pointer but runs); setting it now unloads that script.
+        if mpv_instance.get_property::<bool>("osc").unwrap_or(false) {
+            match mpv_instance.set_property("osc", false) {
+                Ok(()) => tracing::info!(
+                    "[MpvPlayer: Init] mpv's on-screen controller switched off again (the user's mpv.conf had it on)"
+                ),
+                Err(e) => {
+                    tracing::warn!(error = ?e, "[MpvPlayer: Init] mpv's on-screen controller could not be switched off")
+                }
+            }
+        }
+
         // Ensure window states are clean
         let _ = mpv_instance.set_property("window-maximized", false);
         let _ = mpv_instance.set_property("ontop", false);
