@@ -1,0 +1,15 @@
+# Throw-away probe for the rendering audit (docs/rendering_audit.md): mpv's render API inside Slint windows, compared with
+# mpv's own native windows. Not part of the workspace and not shipped.
+[package]
+name = "render-probe"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+slint = { version = "1.18", features = ["raw-window-handle-06", "unstable-winit-030"] }
+libmpv2 = "6"
+glow = "0.18"
+self_cell = "1"
