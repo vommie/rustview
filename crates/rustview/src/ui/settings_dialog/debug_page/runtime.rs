@@ -29,6 +29,15 @@ pub struct RuntimeInputs {
     pub cache: RamCacheStats,
 }
 
+/// "no player", "1 player", "3 players".
+fn players_text(count: usize) -> String {
+    match count {
+        0 => "no player".to_owned(),
+        1 => "1 player".to_owned(),
+        n => format!("{n} players"),
+    }
+}
+
 /// "2 h 14 min", "3 min 5 s", "12 s".
 pub fn duration_text(total_secs: u64) -> String {
     let (hours, minutes, seconds) = (total_secs / 3600, (total_secs / 60) % 60, total_secs % 60);
@@ -147,7 +156,7 @@ pub fn rows(inputs: &RuntimeInputs) -> Vec<(String, String)> {
         ),
         (
             "Videos".to_owned(),
-            format!("{} players{context}", crate::viewer::mpv_engine::live_players()),
+            format!("{}{context}", players_text(crate::viewer::mpv_engine::live_players())),
         ),
         ("Window system".to_owned(), window_system_text()),
         ("Graphics".to_owned(), gl),
@@ -168,12 +177,19 @@ pub fn summary() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::duration_text;
+    use super::{duration_text, players_text};
 
     #[test]
     fn durations_read_like_a_clock() {
         assert_eq!(duration_text(12), "12 s");
         assert_eq!(duration_text(185), "3 min 5 s");
         assert_eq!(duration_text(2 * 3600 + 14 * 60 + 9), "2 h 14 min");
+    }
+
+    #[test]
+    fn players_are_counted_in_words() {
+        assert_eq!(players_text(0), "no player");
+        assert_eq!(players_text(1), "1 player");
+        assert_eq!(players_text(3), "3 players");
     }
 }
