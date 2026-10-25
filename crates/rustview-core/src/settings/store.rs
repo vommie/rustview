@@ -115,6 +115,8 @@ impl SettingsStore {
 
     fn validate_and_sanitize(settings: &mut AppSettings) {
         settings.image_edit.sanitize();
+        settings.debug.sanitize();
+        settings.view.log_window.sanitize();
 
         settings.general.confirm_open_file_count = settings
             .general

@@ -132,7 +132,7 @@ impl LibraryDatabase {
     /// Passing `None` results in an empty folder tree (e.g. first start without a configured root).
     pub fn set_tree_root(&self, root: Option<PathBuf>) {
         tracing::debug!(
-            root = ?root.as_ref().map(|p| crate::settings::LogObscurer::path(p).clone()),
+            root = ?root.as_ref().map(crate::settings::LogObscurer::path),
             "[FolderTree: Scope] Folder tree root scope updated"
         );
         *self.tree_root.write() = root;

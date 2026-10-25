@@ -280,6 +280,6 @@ pub fn calculate_aspect_dimensions(orig_w: u32, orig_h: u32, max_bound: u32) -> 
 }
 
 #[inline]
-pub fn anonymize_target(path: &Path, media_id: Option<u64>) -> String {
+pub fn anonymize_target(path: &Path, media_id: Option<u64>) -> crate::settings::obscurer::Obscured {
     LogObscurer::target(path, media_id)
 }

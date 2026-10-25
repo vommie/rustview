@@ -694,6 +694,24 @@ impl SettingsDiff {
                 old.debug.obfuscate_logs, new.debug.obfuscate_logs
             ));
         }
+        if old.debug.log_level != new.debug.log_level {
+            changes.push(format!(
+                "Debug: log_level ({} -> {})",
+                old.debug.log_level, new.debug.log_level
+            ));
+        }
+        if old.debug.log_files != new.debug.log_files {
+            changes.push(format!(
+                "Debug: log_files ({} -> {})",
+                old.debug.log_files, new.debug.log_files
+            ));
+        }
+        if old.debug.mpv_log != new.debug.mpv_log {
+            changes.push(format!(
+                "Debug: mpv_log ({} -> {})",
+                old.debug.mpv_log, new.debug.mpv_log
+            ));
+        }
 
         if self.image_edit_changed {
             changes.extend(new.image_edit.describe_changes(&old.image_edit));

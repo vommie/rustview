@@ -1,3 +1,4 @@
+pub mod app_dirs;
 pub mod clipboard;
 pub mod desktop;
 pub mod display;
@@ -5,6 +6,7 @@ pub mod dnd;
 pub mod error;
 pub mod file_handler;
 pub mod fs_access;
+pub mod log_settings;
 pub mod termination;
 pub mod window_system;
 

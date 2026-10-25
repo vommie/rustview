@@ -49,7 +49,7 @@ impl MissingFileDialogController {
             tracing::warn!(
                 operation_context = operation_context,
                 missing_count = count,
-                first_missing = %missing_files.first().map(|f| LogObscurer::path(&f.path)).unwrap_or_default(),
+                first_missing = %LogObscurer::path_opt(missing_files.first().map(|f| &f.path)),
                 "[MissingFileDialog] Displaying missing files notification dialog with focusable read-only text area"
             );
 

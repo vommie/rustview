@@ -20,7 +20,7 @@ use crate::viewer::zoom::prefs as zoom_prefs;
 use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::settings::memory_budget::{BYTES_PER_MB, MemoryPlan, SystemMemory};
-use rustview_core::settings::{AppSettings, GridAspectRatio, LogObscurer, SettingsDiff, SettingsManager};
+use rustview_core::settings::{AppSettings, GridAspectRatio, SettingsDiff, SettingsManager};
 use rustview_core::thumbnails::ThumbnailConfig;
 use rustview_core::util::cast::SaturatingAs;
 use slint::ComponentHandle;
@@ -149,7 +149,7 @@ impl UiBridge {
                 }
 
                 if diff_clone.debug_settings_changed {
-                    LogObscurer::set_obfuscate(new_clone.debug.obfuscate_logs);
+                    crate::system::log_settings::apply(&new_clone.debug);
                 }
 
                 if diff_clone.folder_tree_presentation_changed && !diff_clone.root_folder_changed {

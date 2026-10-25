@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 mod appearance;
 mod constants;
+mod debug;
 mod hotkeys;
 mod image_edit;
 mod viewer;
@@ -12,6 +13,7 @@ pub use appearance::GridAspectRatio;
 pub use appearance::ThumbnailBadgeOverflow;
 pub use appearance::ViewSettings;
 pub use constants::*;
+pub use debug::{DebugPageState, DebugSettings, LogWindowState};
 pub use hotkeys::HotkeysPageState;
 pub use image_edit::{CropSettings, FormatPresets, ImageEditSettings, LastExport, SaveSettings};
 pub use viewer::FullscreenBackgroundSettings;
@@ -198,20 +200,6 @@ impl Default for ApiSettings {
     fn default() -> Self {
         Self {
             auto_complete_external_stubs: DEFAULT_AUTO_COMPLETE_EXTERNAL_STUBS,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct DebugSettings {
-    pub obfuscate_logs: bool,
-}
-
-impl Default for DebugSettings {
-    fn default() -> Self {
-        Self {
-            obfuscate_logs: DEFAULT_OBFUSCATE_LOGS,
         }
     }
 }

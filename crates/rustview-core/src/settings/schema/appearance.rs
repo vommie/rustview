@@ -220,6 +220,12 @@ pub struct ViewSettings {
 
     /// Added in 0.4.4: the state of the Settings page Hotkeys.
     pub hotkeys_page: super::HotkeysPageState,
+
+    /// Added in 0.4.15: the open cards of the Settings page Debug.
+    pub debug_page: super::DebugPageState,
+
+    /// Added in 0.4.15: the log window.
+    pub log_window: super::LogWindowState,
 }
 
 impl Default for ViewSettings {
@@ -258,6 +264,8 @@ impl Default for ViewSettings {
                 .collect(),
             left_sidebar_active_panel_tab: DEFAULT_LEFT_SIDEBAR_ACTIVE_PANEL_TAB.to_string(),
             hotkeys_page: super::HotkeysPageState::default(),
+            debug_page: super::DebugPageState::default(),
+            log_window: super::LogWindowState::default(),
         }
     }
 }

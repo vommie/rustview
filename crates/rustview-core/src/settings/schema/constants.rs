@@ -359,6 +359,22 @@ pub const DEFAULT_WINDOW_MAXIMIZED: bool = false;
 // =============================================================================
 pub const DEFAULT_OBFUSCATE_LOGS: bool = true;
 
+/// The log level of Settings > Debug (`rustview_core::logging::LogLevel`, stored by name).
+pub const DEFAULT_LOG_LEVEL: &str = "info";
+
+/// Log files are written only when the user switches them on.
+pub const DEFAULT_LOG_FILES: bool = false;
+
+/// libmpv's detailed log (`mpv.log`) only when the user switches it on.
+pub const DEFAULT_MPV_LOG: bool = false;
+
+/// The cards of Settings > Debug that are open the first time.
+pub const DEFAULT_DEBUG_OPEN_CARDS: [&str; 2] = ["dependencies", "health"];
+
+/// The size of the log window the first time it opens (logical pixels).
+pub const DEFAULT_LOG_WINDOW_WIDTH: u32 = 900;
+pub const DEFAULT_LOG_WINDOW_HEIGHT: u32 = 560;
+
 // =============================================================================
 // SECTION 10: Viewer Settings - Single Point of Truth Constants
 // =============================================================================

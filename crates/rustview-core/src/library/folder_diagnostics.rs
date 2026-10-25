@@ -278,6 +278,6 @@ impl FolderDiagnostics {
     /// Convenience used in log lines.
     #[allow(dead_code)]
     pub(crate) fn display_path(path: &Path) -> String {
-        LogObscurer::path(path).clone()
+        LogObscurer::path(path).to_string()
     }
 }

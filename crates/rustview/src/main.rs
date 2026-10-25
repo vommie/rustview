@@ -1,18 +1,14 @@
-use directories::ProjectDirs;
 use rustview::app::cli::{Cli, Command};
 use rustview::system::SystemDisplayService;
-use rustview::system::{termination, window_system};
+use rustview::system::{app_dirs, termination, window_system};
 use rustview::ui::{MainWindow, UiBridge, shutdown};
 use rustview_core::library::Library;
 use rustview_core::settings::memory_budget::BYTES_PER_MB;
-use rustview_core::settings::{
-    LogObscurer, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, MemoryPlan, SettingsManager, SystemMemory,
-};
+use rustview_core::settings::{MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, MemoryPlan, SettingsManager, SystemMemory};
 use rustview_core::thumbnails::ThumbnailManager;
 use rustview_core::util::cast::SaturatingAs;
 use rustview_core::util::startup_clock;
 use slint::{CloseRequestResponse, ComponentHandle};
-use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -34,8 +30,8 @@ struct WindowGeometryTracker {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     startup_clock::begin();
     let cli = Cli::parse_process_args();
-    let data_dir = dirs_data_dir();
-    let config_dir = dirs_config_dir();
+    let data_dir = app_dirs::data_dir();
+    let config_dir = app_dirs::config_dir();
 
     // 1. Standalone Headless CLI API for external tools (e.g. PyCut)
     if let Some(Command::Api { command } | Command::Direct(command)) = cli.command {
@@ -67,14 +63,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // 3. Standard GUI Startup with structured logging output
-    tracing_subscriber::fmt()
-        .with_target(false)
-        .with_thread_names(true)
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "rustview=info".into()),
-        )
-        .init();
+    // 3. Standard GUI Startup with structured logging output: the terminal, the lines in memory (log window, report) and the
+    // log files while they are switched on. The level of the settings is applied once they are loaded.
+    rustview_core::logging::init_app(rustview_core::logging::LogLevel::default())?;
 
     tracing::info!("Launching RustView with Full Tracing & Persistent State...");
     startup_clock::mark("Main");
@@ -98,7 +89,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize Settings System and live Log Privacy Obscurer
     let settings = SettingsManager::new(&config_dir);
-    LogObscurer::set_obfuscate(settings.get().debug.obfuscate_logs);
+    rustview::system::log_settings::apply(&settings.get().debug);
     startup_clock::mark("Settings");
 
     // Initialize Core LMDB Storage
@@ -488,13 +479,4 @@ fn persist_window_geometry(
         active_screen_x = t.active_monitor_x,
         "[Shutdown: WindowState] Persisted window geometry and monitor anchor cleanly"
     );
-}
-
-fn dirs_data_dir() -> PathBuf {
-    ProjectDirs::from("", "", "rustview").map_or_else(|| PathBuf::from("./data"), |dirs| dirs.data_dir().to_path_buf())
-}
-
-fn dirs_config_dir() -> PathBuf {
-    ProjectDirs::from("", "", "rustview")
-        .map_or_else(|| PathBuf::from("./config"), |dirs| dirs.config_dir().to_path_buf())
 }

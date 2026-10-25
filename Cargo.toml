@@ -39,6 +39,8 @@ walkdir = "2"
 thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-appender = "0.2"
+file-rotate = "0.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 regex = "1"
@@ -77,6 +79,8 @@ x11rb = { version = "0.13", features = ["shape", "xfixes"] }
 x11-dl = "2"
 # The desktop portal (the application chooser of "Open With"): the same D-Bus service that sandboxed apps use, no helper processes.
 ashpd = { version = "0.13", default-features = false, features = ["async-io", "open_uri"] }
+zbus = { version = "5", default-features = false, features = ["async-io", "blocking-api"] }
+which = "8"
 async-io = "2"
 # Embeds the thumbnail of the drag ghost into the SVG that draws it.
 base64 = "0.23"

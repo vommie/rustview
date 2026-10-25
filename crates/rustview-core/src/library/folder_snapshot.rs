@@ -33,7 +33,7 @@ pub struct SnapshotBuildStats {
     pub unreachable_nodes: usize,
     pub reachable_nodes: usize,
     pub max_depth: u32,
-    pub orphan_samples: Vec<(FolderId, String)>,
+    pub orphan_samples: Vec<(FolderId, PathBuf)>,
 }
 
 pub struct FolderSnapshotBuilder<'a> {
@@ -266,7 +266,7 @@ fn link_children(nodes: &NodeMap, root_id: FolderId, stats: &mut SnapshotBuildSt
             _ => {
                 stats.orphan_nodes += 1;
                 if stats.orphan_samples.len() < MAX_LOGGED_SAMPLES {
-                    stats.orphan_samples.push((id, LogObscurer::path(&node.path).clone()));
+                    stats.orphan_samples.push((id, node.path.clone()));
                 }
             }
         }
