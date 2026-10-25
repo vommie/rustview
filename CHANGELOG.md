@@ -9,6 +9,8 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-25
+
 ### Fixed
 - **The corner marks of the selected medium in a Multiview frame its view now, not the medium** (your decision): they sit in the corners
   of the tile's area (its column at the full height of the row) for pictures and videos alike, in the fullscreen and in tabs. Before, the
@@ -847,7 +849,8 @@ First usable version: the application skeleton grew into a working media browser
 ### Added
 - Initial commit of the project.
 
-[Unreleased]: https://github.com/vommie/rustview/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/vommie/rustview/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/vommie/rustview/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/vommie/rustview/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/vommie/rustview/compare/v0.3.86...v0.4.0
 [0.3.86]: https://github.com/vommie/rustview/compare/v0.3.85...v0.3.86
