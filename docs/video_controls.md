@@ -76,4 +76,5 @@ Videos zoom exactly like pictures: Ctrl + wheel toward the pointer, the zoom key
 still of the video, refreshed every 2 s while it shows over a playing video; drag, middle click = reset, right click = the slider
 bubble), the zoom slider of the media bar, and a zoomed video grows into the free room of its tile (its native window grows). The
 zoom model is the pictures' (`ZoomState`, without the picture work); mpv draws the result (`video-zoom`, `video-pan-*`). The same
-mpv properties would work with the render API (`docs/rendering_audit.md`), only the window growth would become a larger texture.
+mpv properties would work with the render API (`docs/rendering_audit.md` on the branch `render-api`; the decision to keep the native
+windows is in `docs/rendering.md`), only the window growth would become a larger texture.
