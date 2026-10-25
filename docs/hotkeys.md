@@ -42,7 +42,9 @@ same, e.g. only the fullscreen of a Browse view pages or becomes a tab) with sim
   selection; it also cancels the recording of a key), the cursor keys of Browse (arrows, Page Up/Down, Home/End, Shift
   extends), type-ahead letters. Dialog keys (Enter, Esc) are not listed.
 - Text fields: while one has the keyboard only actions marked "while typing" act (close tab, focus the filter, tab
-  switching, settings, F1).
+  switching, settings, F1). A field asks the window's keymap for every key it does not use itself (`ui/typing_keys.slint`,
+  global `TypingKeys`, called by `SearchField`, connected in `ui::hotkeys::main_window::install`): the window's own key
+  handler sits next to the fields, not around them, so it never sees their keys (fixed in 0.4.11).
 
 ## Settings page "Hotkeys" (before "API")
 - Sections per area, collapsible (collapsed sections, the filter text and "Only changed" persist).

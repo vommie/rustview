@@ -99,6 +99,8 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   of mpv no longer apply there either).
 
 ### Fixed
+- **The keys that work while typing did nothing in a filter field** (Browse filter, tag filter): Ctrl+W, Ctrl+Tab, Alt+1, Alt+2,
+  Ctrl+Comma, F1 and Ctrl+F act there now, and Alt+2 no longer types "2" into the field.
 - **Opening the Tab-Grid froze RustView** as soon as a tab was open (since 0.4.0): the app no longer reacted and had to be killed.
 - **F5 in Browse** did nothing although the menu named it; it refreshes the selected files now.
 - The tag menu no longer names F2 for "Rename Tag..." (F2 never renamed a tag).

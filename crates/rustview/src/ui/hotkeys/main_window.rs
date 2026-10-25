@@ -5,9 +5,9 @@
 //! tab view's callbacks (`MultiviewCommand`s on the selected medium), the new Browse keys through the media menu's actions.
 
 use super::{Resolved, Trigger, resolve};
-use crate::ui::MainWindow;
 use crate::ui::keymap::{Action, Area, KeyPress};
 use crate::ui::state::{CTX_ACTION_OPEN_IN_BG_TAB, CTX_ACTION_OPEN_IN_FULLSCREEN, CTX_ACTION_REFRESH_FILES};
+use crate::ui::{MainWindow, TypingKeys};
 use rustview_core::util::cast::WrappingAs;
 use slint::ComponentHandle;
 use slint::platform::Key;
@@ -34,6 +34,25 @@ pub fn install(window: &MainWindow) {
         };
         dispatch(&window, &Trigger::Press(press), typing)
     });
+    // The keys a text field of the main window does not use itself (the window's handler never sees them: it sits next to the
+    // fields, not around them).
+    let weak = window.as_weak();
+    window
+        .global::<TypingKeys>()
+        .on_key(move |text, control, alt, shift, meta, repeat| {
+            let Some(window) = weak.upgrade() else {
+                return false;
+            };
+            let press = KeyPress {
+                text: text.as_str(),
+                control,
+                alt,
+                shift,
+                meta,
+                repeat,
+            };
+            dispatch(&window, &Trigger::Press(press), true)
+        });
 }
 
 /// Shows the current keys where the main window names them (the tooltip of the tab view's refresh button).
