@@ -4,12 +4,77 @@ The user's mpv script `~/.config/mpv/scripts/ab_repeat.lua` sets A-B repeats and
 `~/.config/mpv/ab_repeat.json`. RustView's players load the user's mpv config and scripts (`MpvPlayer::new`: `config=yes`,
 `load-scripts=yes`, `config-dir` = `$XDG_CONFIG_HOME/mpv`), so the script already runs in every RustView player, but
 `input-vo-keyboard=no` means its keys never reach it. This page holds what was tested before the feature is designed; the
-design questions are in the questionnaire `2026-10-25-rustview-ab-repeat` (`~/claude/feedback/questionnaires/rustview/`). Nothing
-is implemented yet.
+design was decided in the questionnaire `2026-10-25-rustview-ab-repeat` (`~/claude/feedback/questionnaires/rustview/`, saved
+2026-10-25); the decisions are the next chapter.
 
 Tested with mpv 0.41.0 (libmpv of the VM), the VM's real `~/.config/mpv` (test-only, so as close to production as possible),
 native mpv (CLI, `--input-ipc-server`, real X11 keys through `xdotool`) and RustView 0.5.3 in the test environment
 (`rv-testenv mpv-user on --ipc SOCKET` links the real scripts into the test profile).
+
+## Decisions (questionnaire 2026-10-25)
+
+**The script (the user's own file, not part of this repository):**
+- RustView talks to an interface in `ab_repeat.lua` (not to emulated keys). The interface is generic (it never names RustView),
+  explained in the script and switchable by an option (`api`, default on). The extended script replaces the user's file in
+  `~/.config/mpv/scripts/` (backup next to it); it is **not** put into this repository, the user distributes it.
+- Identity: mpv has no script registry (the client name is the file name, `mp.get_script_name()`), so the script uses the two
+  documented mechanisms: `options.read_options(CONFIG, "ab_repeat")` with a fixed identifier (`script-opts/ab_repeat.conf` and
+  `--script-opts=ab_repeat-...` whatever the file is called) and an identity record at the fixed path `user-data/ab_repeat`
+  (name, version, interface version, the client name to send messages to). RustView recognizes the script by that record, not by
+  its file name.
+- An old script without the interface is not supported: the settings card shows it as an error, the switch is disabled, and a
+  re-check button looks again without restarting RustView.
+- Script fixes: B before A makes the range invalid (no loop, AB inactive; "hanging" is gone), `CONFIG` through `script-opts`. No
+  other script changes (umlauts in mpv's prompt, keypad Enter, atomic writes, a cycle action and the prompt timeout stay as
+  they are). mpv's `l` stays mpv's own A-B loop. The Ctrl+S problem is no longer relevant (user).
+- While a repeat is active, seeking outside A-B is forced back to A by the script itself (RustView does nothing special).
+- The AB button switches the loop of the current, valid A-B on and off without clearing it; holding it (hold to confirm) clears
+  A and B. So the script gets a loop on/off state of its own.
+
+**Settings (Settings > Viewer > Videos, card "mpv script ab_repeat.lua"):** look for the script (default on; status line, error
+for an incompatible script, re-check button; extra information in a tooltip, not as text); show the script's OSD messages (one
+switch for all of them; on = the script's own `script-opts`, off = RustView turns them off for its players); colors of saved
+repeats (each its own color = default, or all grey); playbar interactions (click a lane loads it, hover shows the name, hover
+shows the times (off by default), drag the A/B flags; each a switch, the first three of these on); load menu paging (pages of N,
+default 10, or a scroll list showing at least ~5). Settings > Debug gets a check. A later milestone renames the Fullscreen page
+to "Multiview" and moves the player settings there (separate session).
+
+**Control bar (fullscreen and tab view, not the tab grid):** a group in its own capsule between the remaining time and the
+sound: A (`brackets-contain-start`), B (`brackets-contain-end`), AB (an own SVG: repeat arrows with "AB" exactly centered), Save
+(`playlist-add`), Load (`list-details`). A and B are yellow when set; AB is yellow while the loop plays, blue when a valid A-B
+could play, disabled (no hover, crossed out) without a valid A-B. The Load button shows the number of saved repeats as a badge
+and is disabled at 0.
+
+**Playbar:** saved repeats as one thin row of colored, slightly translucent segments above the progress bar (overlaps show as
+stronger color), shaped like a Chrome tab: only as wide as the progress bar, with curved flanks into the bar; height a third of
+the bar, at least 12 px; every repeat is shown. Yellow is reserved for the active A-B and never in the palette; a saved
+repeat keeps its color for the whole run (deleting or adding others never reshuffles). The active A-B: A/B flags with times
+(label left/right/centered depending on the room), the part A-B bright and the rest darker, a point the script set by itself
+(automatic B at the end, automatic A at 0) dashed. Hover over a segment shows a small label with the name (and the times when
+switched on) that follows the pointer; a click loads it; the flags can be dragged.
+
+**Save:** a bubble above the Save button with a text field and a save button only; the field has the focus at once and shows
+the script's default name ("Range N") as placeholder; Enter saves, Esc, a click outside or a second click on Save cancels; Save
+is yellow while the bubble is open; a hint below the field appears only while the name or the range already exists.
+
+**Load menu:** speech-bubble menu like Open With: search field (filters while typing), number, color stripe, name, start -> end,
+length, a mini bar per row, the running repeat highlighted, rename and delete (hold to confirm) per row, "delete all" (hold) at
+the bottom, pages remembered per video while RustView runs; order and numbers as in the script (save order). Picking an entry
+jumps to A and plays.
+
+**Keys:** a hotkey area "MPV ab_repeat.lua" (only while the script is active; conflicts checked with the other keys of a
+selected video): set A = Home, set B = End, clear = Ctrl+Delete; save, load menu, jump to A, next/previous saved repeat
+without defaults. Keys act on the selected video only.
+
+**Several players:** every video has its own player, script and A-B; the saved list of a file is kept in sync between all
+players showing it, event-driven (a change in one player makes RustView ask the others to re-read; no timers); the current A-B
+and its on/off state are never touched by that. Another file in the same player clears A-B (script). Renaming or moving a
+video in RustView moves its saved repeats along; deleting keeps them; paths through links stay as the script keys them.
+
+**Reveal:** user seeks (keys, clicks) and the A-B keys show the video control bar briefly, like the volume bar; the script's own
+jumps of an active loop do not.
+
+**Side finding:** RustView turns mpv's OSC off again after the user's `mpv.conf` was read (a separate commit).
 
 ## The script
 
