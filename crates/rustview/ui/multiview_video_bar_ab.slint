@@ -81,13 +81,26 @@ component AbButton inherits Rectangle {
         }
     }
 
+    // Also over a disabled button: its tooltip says why it is disabled.
     touch := TouchArea {
-        enabled: root.enabled;
         mouse-cursor: root.enabled ? pointer : default;
-        clicked => { root.clicked(); }
+        clicked => {
+            // A click may open a popup (or rebuild the bar): the tooltip goes first.
+            tip-host.on-hover-leave();
+            if root.enabled {
+                root.clicked();
+            }
+        }
+        changed has-hover => {
+            if self.has-hover {
+                tip-host.on-hover-enter(self.mouse-x, self.mouse-y);
+            } else {
+                tip-host.on-hover-leave();
+            }
+        }
     }
 
-    TooltipHost {
+    tip-host := TooltipHost {
         text: root.tip;
     }
 }
@@ -138,7 +151,6 @@ component AbLoopButton inherits Rectangle {
     }
 
     touch := TouchArea {
-        enabled: root.enabled;
         mouse-cursor: root.enabled ? pointer : default;
         pointer-event(event) => {
             if event.kind == PointerEventKind.down {
@@ -146,13 +158,21 @@ component AbLoopButton inherits Rectangle {
             }
         }
         clicked => {
-            if !root.fired {
+            tip-host.on-hover-leave();
+            if root.enabled && !root.fired {
                 root.clicked();
+            }
+        }
+        changed has-hover => {
+            if self.has-hover {
+                tip-host.on-hover-enter(self.mouse-x, self.mouse-y);
+            } else {
+                tip-host.on-hover-leave();
             }
         }
     }
 
-    TooltipHost {
+    tip-host := TooltipHost {
         text: root.tip;
         hold: root.enabled;
     }
@@ -176,9 +196,10 @@ export component AbGroup inherits Rectangle {
     in property <string> loop-tip;
     in property <string> save-tip;
     in property <string> load-tip;
-    // Where the centers of Save and Load are (the carets of their popups point there), relative to the group.
-    out property <length> save-center: save.x + save.width / 2;
-    out property <length> load-center: load.x + load.width / 2;
+    // Where the centers of Save and Load are (the carets of their popups point there), relative to the group. A button's own `x`
+    // is relative to the layout that centers it vertically, so the position of that layout counts.
+    out property <length> save-center: save-slot.x + save-slot.width / 2;
+    out property <length> load-center: load-slot.x + load-slot.width / 2;
     // 0 = A, 1 = B, 2 = AB clicked, 3 = AB held, 4 = Save, 5 = Load.
     callback button(int);
 
@@ -241,9 +262,9 @@ export component AbGroup inherits Rectangle {
             }
         }
 
-        VerticalLayout {
+        save-slot := VerticalLayout {
             alignment: center;
-            save := AbButton {
+            AbButton {
                 width: root.button-size;
                 height: root.button-size;
                 pt: root.pt;
@@ -257,9 +278,9 @@ export component AbGroup inherits Rectangle {
             }
         }
 
-        VerticalLayout {
+        load-slot := VerticalLayout {
             alignment: center;
-            load := AbButton {
+            AbButton {
                 width: root.button-size;
                 height: root.button-size;
                 pt: root.pt;
@@ -414,9 +435,16 @@ export component AbSaveBubble inherits Rectangle {
                     save-touch := TouchArea {
                         mouse-cursor: pointer;
                         clicked => { root.commit(root.text); }
+                        changed has-hover => {
+                            if self.has-hover {
+                                save-tip.on-hover-enter(self.mouse-x, self.mouse-y);
+                            } else {
+                                save-tip.on-hover-leave();
+                            }
+                        }
                     }
 
-                    TooltipHost {
+                    save-tip := TooltipHost {
                         text: "Save (Enter)";
                     }
                 }
@@ -496,9 +524,16 @@ component AbHoldButton inherits Rectangle {
             }
         }
         clicked => { logic.released-click(); }
+        changed has-hover => {
+            if self.has-hover {
+                tip-host.on-hover-enter(self.mouse-x, self.mouse-y);
+            } else {
+                tip-host.on-hover-leave();
+            }
+        }
     }
 
-    TooltipHost {
+    tip-host := TooltipHost {
         text: root.tip;
         hold: true;
     }

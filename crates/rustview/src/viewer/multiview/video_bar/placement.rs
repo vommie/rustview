@@ -13,7 +13,7 @@ use rustview_core::util::cast::{Az, FloatToInt};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VideoBarPlacement {
     /// The bar with the room above it (the canvas draws the bar component there).
-    pub window: Rect,
+    pub area: Rect,
     /// The bar inside it (at its bottom).
     pub bar: Rect,
 }
@@ -116,7 +116,7 @@ fn place_with(video: Rect, style: BarStyle, bar_height: f32, min_width: f32, sca
         height,
     );
     Some(VideoBarPlacement {
-        window: Rect::new(bar.x, bar.y - bubble, bar.w, height + bubble),
+        area: Rect::new(bar.x, bar.y - bubble, bar.w, height + bubble),
         bar,
     })
 }
@@ -124,18 +124,13 @@ fn place_with(video: Rect, style: BarStyle, bar_height: f32, min_width: f32, sca
 impl VideoBarPlacement {
     /// The rectangle grows upward so that `room` (physical pixels) is free above the bar (the A-B group).
     pub fn with_room_above(self, room: i32) -> Self {
-        let have = self.bar.y - self.window.y;
+        let have = self.bar.y - self.area.y;
         if room <= have {
             return self;
         }
         let extra = room - have;
         Self {
-            window: Rect::new(
-                self.window.x,
-                self.window.y - extra,
-                self.window.w,
-                self.window.h + extra,
-            ),
+            area: Rect::new(self.area.x, self.area.y - extra, self.area.w, self.area.h + extra),
             bar: self.bar,
         }
     }
@@ -144,7 +139,7 @@ impl VideoBarPlacement {
     pub fn translated(self, dx: i32, dy: i32) -> Self {
         let shift = |r: Rect| Rect::new(r.x + dx, r.y + dy, r.w, r.h);
         Self {
-            window: shift(self.window),
+            area: shift(self.area),
             bar: shift(self.bar),
         }
     }
@@ -159,7 +154,7 @@ mod tests {
         let video = Rect::new(100, 50, 800, 450);
         let bar = place(video, BarStyle::Bar, 30.0, 1.0).unwrap();
         assert_eq!(bar.bar, Rect::new(100, 470, 800, 30));
-        assert_eq!(bar.window, Rect::new(100, 442, 800, 58));
+        assert_eq!(bar.area, Rect::new(100, 442, 800, 58));
         let pill = place(video, BarStyle::Pill, 30.0, 1.0).unwrap();
         assert_eq!(pill.bar, Rect::new(110, 460, 780, 30));
         let scaled = place(video, BarStyle::Bar, 30.0, 2.0).unwrap();
@@ -183,7 +178,7 @@ mod tests {
         let bar = place(Rect::new(100, 50, 800, 450), BarStyle::Bar, 30.0, 1.0).unwrap();
         let grown = bar.with_room_above(44 + 120);
         assert_eq!(grown.bar, bar.bar);
-        assert_eq!(grown.window, Rect::new(100, 470 - 164, 800, 164 + 30));
+        assert_eq!(grown.area, Rect::new(100, 470 - 164, 800, 164 + 30));
         assert_eq!(bar.with_room_above(10), bar, "never smaller");
         let menu = ab_popup_height(AbPopupSize::Load { rows: 10 }, 30.0);
         assert!((menu - (12.0 + 26.0 + 4.0 + 260.0 + 4.0 + 24.0 + 7.0)).abs() < f32::EPSILON);

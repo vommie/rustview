@@ -85,6 +85,13 @@ With the video as a texture, Slint's own context menus, tooltips and popups are 
 
 ## 3. Video control bar incl. the A-B group: windows of their own (M2)
 
+**Done in M2 (0.5.8):** every row of this section. The bar is `MultiviewVideoBar` (`ui/multiview_video_bar.slint`) drawn by the
+canvas from one `VideoBarModel` per host (`ui/multiview/video_bar/`, hosts `session_video_bar.rs`, `tab_video_bar.rs`,
+`grid_bars.rs`); `window.rs`, the pool, `close_ab_popups`, `register_overlay_xid`/`is_overlay_xid`, `effective_prefs` (the compositor
+no longer matters) and the shutdown row are gone; `placement` keeps the bar's rectangle (relative to the canvas now) without the popup
+room. The tab grid's small bars moved too (they used the same pool), so their row in §7 is done as far as the bar goes; the pointer
+probe of `grid_bars` stays for M6. The popups are elements of the canvas, not `PopupWindow`s (see `docs/video_controls.md`).
+
 | File / function | What it does today | Milestone |
 |---|---|---|
 | `src/ui/multiview/video_bar/window.rs` (`VideoBarWindow`, `XState`, `apply_shape`, `takes_pointer_at`, `new` (override-redirect), `show` (`host_state`, `in_front`), `follow_popup` (window resized while a popup is open: the flicker, gap and caret of the saved menu), `hide`, `sync_prefs`, `sync_view`, `sync_ab`, `place`, `adopt_native_window` (`register_overlay_xid`), `host_state` (`is_overlay_xid`), `refresh_glass`, `connect`, `connect_ab`, `logical_rect`, its test) | one override-redirect ARGB window per shown bar, shaped without a compositor, keyboard grab for popups | **M2** delete; the bar is a component in `multiview_canvas.slint` |

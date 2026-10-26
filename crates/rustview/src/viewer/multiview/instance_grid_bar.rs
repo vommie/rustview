@@ -27,7 +27,7 @@ impl MultiviewInstance {
         let scale = self.host.surface.dpi.max(0.5);
         let clip = self.host.surface.clip;
         self.collect_bar_targets(allowed, prefs, (RevealMode::Hover, true), now, |rect| {
-            placement::place_mini(rect, scale).filter(|place| clip.is_none_or(|clip| clip.contains_rect(place.window)))
+            placement::place_mini(rect, scale).filter(|place| clip.is_none_or(|clip| clip.contains_rect(place.area)))
         })
     }
 

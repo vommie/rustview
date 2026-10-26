@@ -52,14 +52,14 @@ also offered as a German questionnaire with a tick and a note field per item.
 ## C. The video control bar
 
 - [ ] **C1** Each video has its own bar at its bottom: play/pause, current time, progress bar, remaining time, speaker and
-  volume slider. — *Test:* two videos, hover the bottom of each.
+  volume slider. — *Test:* two videos, hover the bottom of each. *Checked in M2: two videos in the fullscreen, each its own bar at its bottom (drawn by the canvas); the tab view; the small bar in the tab grid.*
 - [ ] **C2** It shows while the pointer is near the bottom of the video (default) or, with the other setting, after any
   movement over the video, and goes after 1.5 s at rest; while paused only with the pointer. — *Test:* both settings
   (Settings > Multiview > Player).
 - [ ] **C3** Style "bar" (whole width, ~70 % opaque) and "pill" (floating, with a margin); opacity and height (default
   30 px) can be changed and everything grows with the height. — *Test:* change each setting, look at the bar.
 - [ ] **C4** The short fade (0.15 s) when the bar comes and goes (setting, default on; only with a compositor). — *Test:*
-  watch the bar appear.
+  watch the bar appear. *M2: the canvas draws the bar, so it fades also without a compositor.*
 - [ ] **C5** Clicking and dragging on the progress bar seeks exactly by default; the bar shows the target until mpv is there;
   a bubble above it shows the time under the pointer. — *Test:* `Videos/Long`, click and drag.
 - [ ] **C6** The seek modes (exact, like mpv's controller, keyframes, as mpv is configured) behave as named. — *Test:*
@@ -73,8 +73,8 @@ also offered as a German questionnaire with a tick and a note field per item.
 - [ ] **C9** A key that moves the video (jumps, frame steps, A-B keys) shows the bar for 1.5 s; the A-B loop's own jumps do
   not. — *Test:* press Right arrow without touching the mouse.
 - [ ] **C10** No control bar while a dialog or a menu is open. — *Test:* press F2 over a video tab; right click a tab in
-  the tab bar.
-- [ ] **C11** *(no compositor)* The bar is drawn solid and still works. — *Test:* Alt+Shift+F12, hover the bar.
+  the tab bar. *Checked in M2: right click on the tab in the tab bar, the bar went away while the menu was open.*
+- [ ] **C11** *(no compositor)* The bar is drawn solid and still works. — *Test:* Alt+Shift+F12, hover the bar. *M2: no longer a special case: the bar is drawn in the window, the same with and without a compositor.*
 
 ## D. The A-B group (mpv script ab_repeat.lua)
 
@@ -92,24 +92,24 @@ also offered as a German questionnaire with a tick and a note field per item.
   click loads it; the flags can be dragged. — *Test:* each, with the matching switches in Settings > Multiview.
 - [ ] **D6** **Save bubble:** a click on Save opens a bubble above it with a text field (focused at once, placeholder
   "Range N") and a save button; Enter saves, Esc, a click outside or a second click on Save cancels; Save is yellow while it
-  is open; a hint appears only while the name or the range already exists. — *Test:* each way to close it.
+  is open; a hint appears only while the name or the range already exists. — *Test:* each way to close it. *Checked in M2: Save opens the bubble above it with the field focused (typed at once), Esc closes it, the keys work right after.*
 - [ ] **D7** **Load menu:** speech-bubble menu with search field (filters while typing), number, color stripe, name,
   start → end, length, a mini bar per row, the running repeat highlighted, rename and delete (hold) per row, "delete all"
   (hold) at the bottom; pages remembered per video; picking an entry jumps to A and plays. — *Test:* 26 repeats for paging
-  (`gen_ab_repeats.py`), search, rename, delete.
+  (`gen_ab_repeats.py`), search, rename, delete. *Checked in M2: the menu with 12 repeats (two pages) in a tab and with 2 in the fullscreen; deleting a row by holding in the fullscreen.*
 - [ ] **D8** **Opening the saved menu does not make the playbar flicker.** — *Test:* open and close Load several times,
-  watch the bar.
-- [ ] **D9** **No strange gap** between the menu bubble and the playbar. — *Test:* look at the open menu.
+  watch the bar. *M2: fixed by construction (the menu is an element of the canvas; nothing is resized when it opens).*
+- [ ] **D9** **No strange gap** between the menu bubble and the playbar. — *Test:* look at the open menu. *Checked in M2: the caret of the menu and of the bubble touches the top of the bar.*
 - [ ] **D10** **The bubble's caret points at the Load button** (and the Save bubble's at Save), wherever the button is. —
-  *Test:* a narrow and a wide video, pill and bar style.
+  *Test:* a narrow and a wide video, pill and bar style. *Checked in M2: on Load and on Save in a wide tab (bar style), and on Load at the right edge of the fullscreen where the menu is shifted left. The old caret pointed at the A button: the button's center was taken relative to its own wrapping layout (fixed in `AbGroup`). Pill style on a narrow video (three videos in the fullscreen): the menu is wider than the video and lies over its neighbor, the caret on Load touches the pill.*
 - [ ] **D11** Mouse in the popups: clicking a row, holding to delete and the search field work with the real mouse; a short
-  click on the video closes the menu. — *Test:* each.
+  click on the video closes the menu. — *Test:* each. *Checked in M2: a click on the other video closes the menu (and does nothing else), holding Delete works with the real pointer, the A-B buttons and the menu's buttons show their tooltips (they never did before: nothing called `on-hover-enter`).*
 - [ ] **D12** Two players of one file stay in sync: save, rename, delete in one shows in the other at once; A and B of the
   other are not touched. — *Test:* Duplicate a video, save in the left one, look at the right one.
 - [ ] **D13** Keys act on the selected video only: Home = A, End = B, Ctrl+Delete = clear (and the keys without defaults once
-  assigned). — *Test:* two videos, select one, press Home.
+  assigned). — *Test:* two videos, select one, press Home. *Checked in M2: Home and End right after the menu closed set A and B.*
 - [ ] **D14** *(no compositor)* Solid bar, the tab as a plain rectangle over the progress bar, menus fine. — *Test:*
-  Alt+Shift+F12.
+  Alt+Shift+F12. *M2: no longer a special case (see C11).*
 
 ## E. The media bar (top right of each medium)
 

@@ -19,7 +19,7 @@ pub(super) fn row(target: &VideoBarTarget, prefs: &VideoBarPrefs, slot: &mut Slo
     sync_lists(view, slot);
     let scale = target.scale.max(0.5);
     let logical = |px: i32| px.az::<f32>() / scale;
-    let window = target.placement.window;
+    let area = target.placement.area;
     let room = AbRoom::for_bar(prefs.height);
     let (hover_shown, hover_share, hover_text) = match &view.hover {
         Some((share, text)) => (true, *share, text.as_str().into()),
@@ -27,10 +27,10 @@ pub(super) fn row(target: &VideoBarTarget, prefs: &VideoBarPrefs, slot: &mut Slo
     };
     let mut row = MultiviewVideoBarView {
         key: target.key.wrapping_as::<i32>(),
-        x: logical(window.x),
-        y: logical(window.y),
-        width: logical(window.w),
-        height: logical(window.h),
+        x: logical(area.x),
+        y: logical(area.y),
+        width: logical(area.w),
+        height: logical(area.h),
         pill: prefs.style == BarStyle::Pill,
         mini: target.mini,
         bar_opacity: prefs.opacity,

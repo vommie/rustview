@@ -64,6 +64,7 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   cut to the curved outline.
 
 ### Fixed
+- **The buttons of the A-B group and of the menu of saved repeats show their tooltips** (they never appeared).
 - **The menu of saved A-B repeats and the save bubble work with the mouse**: a press inside them was taken for a press outside
   and closed them, so a click on an entry could get lost and deleting by holding never worked; a click on the video now closes
   them reliably, also a very short one.
