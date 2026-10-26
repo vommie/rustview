@@ -79,11 +79,19 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   Keys, and the card "mpv script ab_repeat.lua" sits next to Player and Sound. Settings > Viewer keeps how images and videos open
   from the media view, the rating badge of tabs and the tab background. Only the place in the settings window changed: your settings
   are kept as they are (no migration).
+- **Native Wayland shows videos too** (branch video-in-slint, seventh step): since everything over a video is drawn by RustView, a
+  start with `RUSTVIEW_WINDOW_SYSTEM=wayland` in a Wayland session plays videos with all bars, menus, zoom and the Multiview. A
+  Wayland session still starts RustView through XWayland until the joint test; what native Wayland still lacks (dragging files to
+  other programs, dialogs tied to their window, the pointer lock of the minimap drag) is listed in Settings > Debug.
 - **The A-B tab above the progress bar only shows when it has something in it** (a saved repeat, A or B); without them the bar
   looks like any other. Without a compositing manager the tab is now a plain rectangle over the progress bar instead of a window
   cut to the curved outline.
 
 ### Fixed
+- **The Multiview fullscreen opens on native Wayland**: it waited for an X11 window and closed itself again; it now goes into
+  Wayland's fullscreen on the monitor that is set (or the one the window opened on).
+- **The Multiview fullscreen no longer opens as a merely maximized window now and then** (with the panel visible): when the window
+  manager did not take the fullscreen state, RustView asks for it again.
 - **The buttons of the A-B group and of the menu of saved repeats show their tooltips** (they never appeared).
 - **The menu of saved A-B repeats and the save bubble work with the mouse**: a press inside them was taken for a press outside
   and closed them, so a click on an entry could get lost and deleting by holding never worked; a click on the video now closes
