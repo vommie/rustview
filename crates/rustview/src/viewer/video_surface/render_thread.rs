@@ -30,6 +30,9 @@ struct Bound {
     rendered_size: (u32, u32),
     /// The slot of the newest rendered picture.
     newest: Option<usize>,
+    /// mpv reported a video frame in this render context. Before that a render only clears to black (after a move mpv selects
+    /// the video track again and decodes for a while), so nothing is handed to the UI and the window keeps the still.
+    has_frame: bool,
     redraw: Arc<dyn Fn() + Send + Sync>,
 }
 
@@ -139,6 +142,7 @@ fn bind(surface: u64, core: &RenderCore, channel: &Arc<Channel>, epoch: u64, bin
         free: (0..SLOTS).map(|i| (i, None)).collect(),
         rendered_size: (0, 0),
         newest: None,
+        has_frame: false,
         redraw: binding.redraw,
     })
 }
@@ -151,8 +155,16 @@ impl Bound {
         };
         // Must be called after every update callback, whether or not a frame is drawn.
         let new_frame = render.has_new_frame();
+        if new_frame && !self.has_frame {
+            self.has_frame = true;
+            tracing::debug!(
+                surface,
+                epoch = self.epoch,
+                "[VideoSurface: Render] First video frame of the render context"
+            );
+        }
         let resized = size != self.rendered_size;
-        if !(new_frame || resized || forced) || size.0 == 0 || size.1 == 0 {
+        if !(new_frame || resized || forced) || !self.has_frame || size.0 == 0 || size.1 == 0 {
             return;
         }
         // A free slot; when the UI holds all others, take back the frame it has not picked up yet (a newer one replaces it).
