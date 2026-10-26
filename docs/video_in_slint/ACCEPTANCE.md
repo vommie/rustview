@@ -256,5 +256,9 @@ also offered as a German questionnaire with a tick and a note field per item.
 
 - [ ] **R1** No extra windows over videos: bars, menus, sliders and the hint are part of the RustView window (KDE's task
   switcher and `xwininfo -tree` show no extra windows). — *Test:* open a bar and a menu, Alt+Tab list.
-- [ ] **R2** Native Wayland (only if decided in the M0 questionnaire, question 3): in a Plasma Wayland session RustView runs
-  without XWayland and everything above works. — *Test:* log into Plasma (Wayland), repeat A, C, D, G.
+- [ ] **R2** Native Wayland is the default (decision 2026-10-26, tested together): in a Plasma Wayland session RustView runs
+  without XWayland and everything above works; what native Wayland still lacks (dragging files to other programs, dialogs that
+  belong to their window, pointer lock of the minimap) is solved or accepted by you. — *Test:* log into Plasma (Wayland),
+  repeat A, C, D, G, then switch to X11/XWayland (`RUSTVIEW_WINDOW_SYSTEM`) and repeat a few.
+- [ ] **R3** The UI looks right under the renderer chosen after the AMD measurement (skia unless something spoke against it):
+  text, rounded corners, icons, thumbnails. — *Test:* look through Browse, Settings, a dialog and the Multiview.
