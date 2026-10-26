@@ -8,6 +8,7 @@ pub mod error;
 pub mod file_handler;
 pub mod fs_access;
 pub mod log_settings;
+pub mod renderer;
 pub mod termination;
 pub mod window_system;
 

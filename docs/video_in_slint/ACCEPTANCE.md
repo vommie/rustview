@@ -22,7 +22,7 @@ also offered as a German questionnaire with a tick and a note field per item.
 ## A. The picture
 
 - [ ] **A1** A video plays in the tab view, in the fullscreen and (paused) in the tab grid, sharp and in the right
-  shape. — *Test:* open `full_hd_h264.mp4`, `portrait_1080x1920.mp4` and `anamorphic_720x480.mp4` in each of the three. *Checked in M1: tab view and fullscreen with `vid_landscape.mp4` (VirGL VM, femtovg/GLX); the grid and the other clips in M6.*
+  shape. — *Test:* open `full_hd_h264.mp4`, `portrait_1080x1920.mp4` and `anamorphic_720x480.mp4` in each of the three. *Checked in M1: tab view and fullscreen with `vid_landscape.mp4` (VirGL VM, femtovg/GLX); the grid and the other clips in M6.* *M1: the tab grid shows the paused video too (its black placeholder lay over the canvas; fixed). Also under skia/EGL.*
 - [ ] **A2** A lone video in a tab fills the whole tab area; mpv adds the black bars itself where the shape differs. —
   *Test:* open `cinemascope_2560x1072.mp4` in a tab, make the window narrower and wider.
 - [ ] **A3** 2, 3 and 4 media are arranged as before (a row, or a 2x2 grid for four wide media); the gutters can be dragged,
@@ -32,7 +32,7 @@ also offered as a German questionnaire with a tick and a note field per item.
 - [ ] **A5** A tab that is not shown pauses its videos and plays on when it comes back, unless you paused it yourself. —
   *Test:* play a video tab, switch to another tab, come back; then pause it, switch, come back: still paused.
 - [ ] **A6** No video stays black or frozen while others play (also 4 videos at once, also 4K). — *Test:* four clips in the
-  fullscreen; `Videos/4K`.
+  fullscreen; `Videos/4K`. *Checked in M1: the four videos of `Multiview-Tests` play together in the fullscreen (four render contexts); 4K in the AMD measurement.*
 - [ ] **A7** Opening a video shows its first picture quickly, without a flash of another color. — *Test:* open several
   clips one after another.
 
@@ -137,7 +137,7 @@ also offered as a German questionnaire with a tick and a note field per item.
 - [ ] **G1** A context menu of the main window (right click on a tab of the tab bar, on the sidebar, the tag panel) shows
   completely over a video, nothing is cut or hidden; a click anywhere closes it and goes on to what is below (KDE style). —
   *Test:* a video tab, right click a tab title so the menu hangs over the video. *Checked in M1: the tab bar's context menu lies completely over a playing video, no cutout.*
-- [ ] **G2** Tooltips show over a video. — *Test:* hover a toolbar button whose tooltip lies over the video.
+- [ ] **G2** Tooltips show over a video. — *Test:* hover a toolbar button whose tooltip lies over the video. *Checked in M1: a tab's tooltip shows over the video (skia run).*
 - [ ] **G3** Dialogs (F2 rename, Delete, Save As) open centered over their window, the window behind is locked (dimmed by
   KWin), a click on it brings the dialog to the front; no bar is shown or usable while it is open. — *Test:* F2 on a video in
   the fullscreen and in a tab.
@@ -241,7 +241,7 @@ also offered as a German questionnaire with a tick and a note field per item.
 
 - [ ] **P1** Closing a tab with playing videos, closing the fullscreen, quitting RustView (window close, Ctrl+C in the
   terminal) never hangs or crashes. — *Test:* each with 4 videos playing.
-- [ ] **P2** Settings > Debug: the video self-test passes and the page names the way videos are drawn. — *Test:* run it.
+- [ ] **P2** Settings > Debug: the video self-test passes and the page names the way videos are drawn. — *Test:* run it. *Checked in M1: the self-test renders 90 frames through the render API (GLX), first after 28 ms, picture has content.*
 - [ ] **P3** A corrupt video shows its error tile, the others go on. — *Test:* `Corrupt/` with a good video.
 - [ ] **P4** *(no compositor)* Everything above still works with KWin compositing off. — *Test:* Alt+Shift+F12, repeat a
   few items of C, D, E.

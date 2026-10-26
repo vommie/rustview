@@ -20,7 +20,8 @@ publish = false
 [workspace.dependencies]
 rustview-core = { path = "crates/rustview-core" }
 
-slint = { version = "1.18", features = ["raw-window-handle-06", "unstable-winit-030"] }
+# skia (EGL) next to femtovg (GLX on X11): `system::renderer` picks one at startup.
+slint = { version = "1.18", features = ["raw-window-handle-06", "unstable-winit-030", "renderer-skia-opengl"] }
 slint-build = "1.18"
 raw-window-handle = "0.6"
 heed = "0.22"

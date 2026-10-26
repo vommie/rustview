@@ -247,10 +247,10 @@ export component TabGridItemView inherits Rectangle {
                 height: 100%;
             }
 
+            // The pause badge of a single video (the canvas above draws its picture).
             if root.item.is-video && root.item.error-message == "" && !root.away : Rectangle {
                 width: 100%;
                 height: 100%;
-                background: #000000;
 
                 Rectangle {
                     x: parent.width - 24px;
