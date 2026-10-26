@@ -10,6 +10,7 @@ use std::time::Instant;
 pub mod ab_repeat;
 mod controls;
 mod events;
+mod looping;
 mod messages;
 mod options;
 mod playback;
@@ -64,6 +65,8 @@ pub struct MpvPlayer {
     listener: Arc<RwLock<Option<MpvNoticeCallback>>>,
     /// What the player knows about the mpv script `ab_repeat.lua` (`viewer::ab_repeat`).
     ab: Arc<RwLock<ab_repeat::AbSnapshot>>,
+    /// The `loop-file` value the player repeats its video with (`None`: it does not), see `looping`.
+    loop_file: Option<Arc<str>>,
     /// The player in the list of `ab_repeat` (forwarding changes of saved repeats, applying settings).
     ab_registration: u64,
     observer_handle: Mutex<Option<std::thread::JoinHandle<()>>>,
@@ -82,6 +85,7 @@ impl MpvPlayer {
         .or_else(|_| Mpv::new())
         .map_err(|e| ViewerError::Mpv(format!("Failed to initialize libmpv2 context: {e:?}")))?;
         options::after_init(&mpv_instance);
+        let loop_file = looping::apply(&mpv_instance);
 
         // mpv's warnings and errors go into the log (everything into mpv.log while it is switched on)
         messages::request(&mpv_instance);
@@ -103,6 +107,7 @@ impl MpvPlayer {
             observer_running: Arc::new(AtomicBool::new(true)),
             listener,
             ab,
+            loop_file,
             ab_registration,
             observer_handle: Mutex::new(None),
         };

@@ -31,6 +31,10 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   (not looping) marker turns white where it crosses the played part of the progress bar. The strip of saved repeats keeps a
   margin of 7 points to the ends of the progress bar, "Delete all" in the menu of saved repeats is only as wide as its label, and
   names too long for the menu are shortened in the middle.
+- **Videos repeat with mpv's `loop-file`, never with `loop-playlist`**, whatever your mpv.conf says: `loop-playlist=inf` (or a
+  number) is turned into `loop-file`, so a repeating video jumps back to its start instead of being loaded anew at its end.
+  The saved A-B repeats on the progress bar no longer vanish for a moment at every repeat, and a video repeats again when an
+  A-B loop of the script is switched off (the script leaves `loop-file` off then).
 - Tooltips of elements at the bottom of a window (the control bar of a video) open above the element instead of covering it.
 
 ### Removed
@@ -38,6 +42,8 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   messages in RustView's videos any more, the control bar shows what happens. mpv itself is not changed.
 
 ### Fixed
+- After a video was loaded again by mpv, its progress bar could keep a duration of zero (mpv reported no change because the
+  duration was the same), which squeezed the saved A-B repeats into the start of the bar until something else redrew it.
 - The line under the column headers of the Browse view runs through; before, it showed only as light bits in the gaps between
   the headers.
 - A click on the progress bar of a playing video no longer makes the picture jump back and forth for a moment: the click seeks

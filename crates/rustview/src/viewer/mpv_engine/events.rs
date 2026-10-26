@@ -87,6 +87,7 @@ impl MpvPlayer {
             listener: Arc::clone(&self.listener),
             current_file: Arc::clone(&self.current_file_path),
             ab: Arc::clone(&self.ab),
+            loop_file: self.loop_file.clone(),
             last_error: None,
             last_mute: None,
         };
@@ -127,6 +128,7 @@ struct Observer {
     listener: Arc<RwLock<Option<super::MpvNoticeCallback>>>,
     current_file: Arc<RwLock<Option<PathBuf>>>,
     ab: Arc<RwLock<ab_repeat::AbSnapshot>>,
+    loop_file: Option<Arc<str>>,
     /// The last error message of mpv for the current file (the reason shown when the file cannot be played).
     last_error: Option<String>,
     last_mute: Option<bool>,
@@ -176,7 +178,10 @@ impl Observer {
     fn on_property(&mut self, id: u64, change: &PropertyData<'_>) {
         match (id, change) {
             (TIME_POS, PropertyData::Double(pos)) => self.state.write().position_secs = *pos,
-            (DURATION, PropertyData::Double(duration)) => self.playback(|st| st.duration_secs = *duration),
+            (DURATION, PropertyData::Double(duration)) => {
+                tracing::debug!(duration, "[MpvPlayer: Observer] Duration reported");
+                self.playback(|st| st.duration_secs = *duration);
+            }
             (PAUSE, PropertyData::Flag(paused)) => self.on_pause(*paused),
             (VOLUME, PropertyData::Double(volume)) => self.playback(|st| st.volume = *volume),
             (MUTE, PropertyData::Flag(muted)) => {
@@ -194,6 +199,10 @@ impl Observer {
             }
             (_, PropertyData::Str(json)) => {
                 if let Some(change) = ab_repeat::on_property(&self.mpv, &self.ab, id, json) {
+                    if change == ab_repeat::AbChange::State {
+                        let looping = self.ab.read().state.active;
+                        super::looping::keep(&self.mpv, self.loop_file.as_deref(), looping);
+                    }
                     self.notify(MpvNotice::AbRepeat(change));
                 }
             }
@@ -253,14 +262,17 @@ impl Observer {
     fn on_start_file(&mut self) {
         self.last_error = None;
         self.params.write().reset(false);
-        self.playback(|st| {
-            st.position_secs = 0.0;
-            st.duration_secs = 0.0;
-            st.is_eof = false;
-        });
+        self.playback(file_started);
     }
 
+    /// mpv reports a property only when its value differs from the one it reported last, and only once its event queue is
+    /// empty: when a file is loaded again (`loop-playlist`), `duration` is gone and back with the same value before the queue
+    /// empties, so no change arrives at all. The duration is therefore read here, once per loaded file.
     fn on_file_loaded(&self) {
+        if let Ok(duration) = self.mpv.get_property::<f64>("duration") {
+            tracing::debug!(duration, "[MpvPlayer: Observer] File loaded");
+            self.playback(|st| st.duration_secs = duration);
+        }
         if let Some(change) = ab_repeat::settle(&self.mpv, &self.ab) {
             self.notify(MpvNotice::AbRepeat(change));
         }
@@ -303,6 +315,14 @@ fn names_the_file(prefix: &str) -> bool {
         .any(|module| prefix == *module || prefix.starts_with(&format!("{module}/")))
 }
 
+/// A file starts (a new one, or the same one again: `loop-playlist` loads it anew at its end): it plays from its start. The
+/// duration stays until the file says its own (`on_file_loaded`): zero would squeeze everything placed by time on the progress
+/// bar (the saved A-B repeats) into its start for the moment the file needs to load, and for good when mpv reports no change.
+fn file_started(st: &mut MpvPlaybackState) {
+    st.position_secs = 0.0;
+    st.is_eof = false;
+}
+
 fn capitalized(text: &str) -> String {
     let mut chars = text.chars();
     chars
@@ -314,6 +334,20 @@ fn capitalized(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_file_that_starts_again_keeps_its_duration() {
+        let mut st = MpvPlaybackState {
+            position_secs: 89.9,
+            duration_secs: 90.0,
+            is_eof: true,
+            ..MpvPlaybackState::default()
+        };
+        file_started(&mut st);
+        assert!(st.position_secs.abs() < f64::EPSILON);
+        assert!((st.duration_secs - 90.0).abs() < f64::EPSILON);
+        assert!(!st.is_eof);
+    }
 
     #[test]
     fn video_params_are_complete_with_width_and_height() {
