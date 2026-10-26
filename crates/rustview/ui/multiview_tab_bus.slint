@@ -10,6 +10,9 @@ export global MultiviewTabBus {
     in-out property <MultiviewScreenView> screen;
     // The control bars of the videos (their events go to `VideoBarBus`).
     in-out property <[MultiviewVideoBarView]> video-bars;
+    // The hint of a key that had nothing to act on (`ui::multiview::hint`).
+    in-out property <string> hint-text;
+    in-out property <bool> hint-shown: false;
 
     callback tile-clicked(int /* tile index */, bool /* is_ctrl */);
     callback tile-zoom-wheel(int /* tile index */, length /* delta-y */, length /* x */, length /* y */);

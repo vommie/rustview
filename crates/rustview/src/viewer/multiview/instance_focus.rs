@@ -4,7 +4,6 @@
 
 use super::focus_overlay::{self, CornerMarks};
 use super::follow::TileKey;
-use super::hint::HintAnchor;
 use super::instance::MultiviewInstance;
 use super::layout::Rect;
 use super::media_feedback::{FADE, HOLD};
@@ -90,13 +89,9 @@ impl MultiviewInstance {
         }
     }
 
-    /// Where a hint of this Multiview goes: the middle of its view in the host window. `None` while no interactive host shows it.
-    pub fn hint_anchor(&self) -> Option<HintAnchor> {
-        self.host_is_interactive().then_some(HintAnchor {
-            host_xid: self.host.surface.parent_xid,
-            view: self.host.surface.rect,
-            dpi: self.host.surface.dpi,
-        })
+    /// The host whose canvas shows a hint of this Multiview (centered over its view). `None` while no interactive host shows it.
+    pub fn hint_host(&self) -> Option<HostMode> {
+        self.host_is_interactive().then_some(self.host.surface.mode)
     }
 
     /// Length and thickness of the corner marks in host pixels.

@@ -76,6 +76,11 @@ pub(super) fn current_instance() -> Option<SharedInstance> {
     with_host(|h| h.instance.upgrade()).flatten()
 }
 
+/// The main window, whose tab view this host fills.
+pub(super) fn main_window() -> Option<MainWindow> {
+    with_host(|h| h.window.clone()?.upgrade()).flatten()
+}
+
 /// The Multiview the viewer tab shows right now.
 pub fn shown_instance() -> Option<SharedInstance> {
     current_instance()
@@ -234,8 +239,8 @@ pub fn primary_key(action: PrimaryActionId) {
 /// the hint asks for a selection, over the tab view.
 pub fn show_selection_hint() {
     if let Some(instance) = current_instance() {
-        let anchor = instance.lock().hint_anchor();
-        super::commands::refused(anchor, HintKind::NoSelection);
+        let host = instance.lock().hint_host();
+        super::commands::refused(host, HintKind::NoSelection);
     }
 }
 
@@ -455,6 +460,7 @@ pub fn suspend() {
     })
     .unwrap_or(false);
     if released {
+        super::hint::clear(HostMode::TabView);
         with_host(|h| {
             h.models.clear();
             h.images = ImageCache::default();

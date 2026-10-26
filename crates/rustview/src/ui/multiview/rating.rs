@@ -34,9 +34,9 @@ impl MultiviewHandle {
             tracing::debug!(rating, "[Multiview: Rating] Ignored: a dialog is open");
             return;
         }
-        let (mode, dragging, anchor) = {
+        let (mode, dragging, host) = {
             let guard = instance.lock();
-            (guard.host_mode(), guard.is_dragging(), guard.hint_anchor())
+            (guard.host_mode(), guard.is_dragging(), guard.hint_host())
         };
         if dragging || !matches!(mode, HostMode::Fullscreen | HostMode::TabView) {
             tracing::debug!(rating, ?mode, dragging, "[Multiview: Rating] Ignored");
@@ -50,7 +50,7 @@ impl MultiviewHandle {
             rateable_ids(vec![target], |id| standing_of(&state, &app.library, id))
         };
         if ids.is_empty() {
-            super::commands::refused(anchor, HintKind::NotRateable);
+            super::commands::refused(host, HintKind::NotRateable);
             return;
         }
         let rated = BridgeTags::apply_rating_to_ids(

@@ -284,6 +284,11 @@ fn create_window() -> Result<MultiviewFullscreenWindow, slint::PlatformError> {
     Ok(win)
 }
 
+/// The window, if it was made already (it is never made for this).
+pub(super) fn existing_window() -> Option<MultiviewFullscreenWindow> {
+    WINDOW.with(|cell| cell.borrow().as_ref().and_then(|win| win.as_weak().upgrade()))
+}
+
 /// The persistent window (created on first use); Slint component handles are not `Clone`, so callers upgrade the weak handle.
 pub(super) fn window_weak() -> Option<slint::Weak<MultiviewFullscreenWindow>> {
     WINDOW.with(|cell| {
@@ -687,6 +692,7 @@ impl Session {
         self.instance.lock().clear_feedback();
         bar_overlay::hide(BarOwner::Fullscreen);
         super::session_video_bar::clear();
+        super::hint::clear(crate::viewer::multiview::route::HostMode::Fullscreen);
         if let Some(win) = self.window.upgrade() {
             cursor::release(win.window(), Some(&self.instance), &mut self.cursor_hidden);
             win.set_is_ready(false);

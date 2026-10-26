@@ -7,6 +7,7 @@ import { MultiviewZoomSlider } from "multiview_zoom_slider.slint";
 import { MultiviewCropOverlay } from "multiview_crop_overlay.slint";
 import { MultiviewFocusCorners } from "multiview_focus_marks.slint";
 import { MultiviewVideoBar, MultiviewVideoBarView } from "multiview_video_bar.slint";
+import { MultiviewHint } from "multiview_hint.slint";
 
 /// The scene of a Multiview: background, image, video and status tiles and gutters. A video is the newest texture its render
 /// thread drew (`video-frames` of the window, the row of the tile). The same component draws the fullscreen window, the tab view
@@ -30,6 +31,10 @@ export component MultiviewCanvas inherits Rectangle {
     in property <bool> show-frame: false;
     // The mouse wheel is reported (previous/next for a single image); otherwise it passes through untouched.
     in property <bool> wheel-navigation: false;
+    // The hint of a key that had nothing to act on ("Select a medium first"), centered over the canvas; it fades out when
+    // `hint-shown` goes false.
+    in property <string> hint-text;
+    in property <bool> hint-shown: false;
 
     callback tile-clicked(int /* tile index */, bool /* is_ctrl */);
     callback background-clicked(bool /* is_ctrl */);
@@ -546,5 +551,12 @@ export component MultiviewCanvas inherits Rectangle {
         bar: bar;
         canvas-width: root.width;
         canvas-height: root.height;
+    }
+
+    if root.interactive : MultiviewHint {
+        x: (root.width - self.width) / 2;
+        y: (root.height - self.height) / 2;
+        text: root.hint-text;
+        shown: root.hint-shown;
     }
 }

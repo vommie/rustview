@@ -20,6 +20,9 @@ export component MultiviewFullscreenWindow inherits Window {
     in property <[image]> video-frames;
     // The control bars of the videos (their events go to `VideoBarBus`).
     in property <[MultiviewVideoBarView]> video-bars;
+    // The hint of a key that had nothing to act on (`ui::multiview::hint`).
+    in property <string> hint-text;
+    in property <bool> hint-shown: false;
     in property <int> navigation: 0; // 0 = off, 1 = previous/next allowed, 2 = refused (sticky single image)
     in property <int> background-mode: 0; // 0 = Dark Theme (#11111b), 1 = Deep Black (#000000), 2 = Checkerboard
     // Where the background comes from: 0 = the theme, 1 = `background-mode` (the viewer setting), 2 = `custom-fill`.
@@ -117,6 +120,8 @@ export component MultiviewFullscreenWindow inherits Window {
         gutters: root.gutters;
         video-frames: root.video-frames;
         video-bars: root.video-bars;
+        hint-text: root.hint-text;
+        hint-shown: root.hint-shown;
         wheel-navigation: root.navigation != 0;
         screen: { x: 0px, y: 0px, width: root.width, height: root.height };
         background-mode: root.background-mode;

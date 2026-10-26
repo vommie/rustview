@@ -1,12 +1,10 @@
-//! The short hint a Multiview shows when a key has nothing to act on (pure): its text and where it goes.
+//! The short hint a Multiview shows when a key has nothing to act on (pure): its text.
 //!
 //! A key that needs a medium does nothing while several are shown and none is selected ("Select a medium first"), or when it does
 //! not fit the selected one ("Nothing to save", ...).
 //!
 //! It looks and times like the feedback of a rating (`media_feedback::{HOLD, FADE}`): full strength first, then it fades;
-//! a new hint replaces the one on screen at once. The host shows it centered over the view (`ui::multiview::hint`).
-
-use super::layout::Rect;
+//! a new hint replaces the one on screen at once. The canvas of the host shows it centered over the view (`ui::multiview::hint`).
 
 /// Why a key did nothing. Every reason but `NoSelection` concerns the selected medium, whose marks the key shows for a moment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -63,34 +61,9 @@ impl HintKind {
     }
 }
 
-/// Where a hint is shown: the window of the host and the view in it (physical pixels, window coordinates).
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct HintAnchor {
-    pub host_xid: u64,
-    pub view: Rect,
-    pub dpi: f32,
-}
-
-impl HintAnchor {
-    /// The middle of the view, in window coordinates.
-    pub fn center(&self) -> (i32, i32) {
-        (self.view.x + self.view.w / 2, self.view.y + self.view.h / 2)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn the_hint_is_centered_in_the_view() {
-        let anchor = HintAnchor {
-            host_xid: 1,
-            view: Rect::new(100, 50, 801, 400),
-            dpi: 1.0,
-        };
-        assert_eq!(anchor.center(), (500, 250));
-    }
 
     #[test]
     fn the_text_asks_for_a_selection_or_names_the_reason() {

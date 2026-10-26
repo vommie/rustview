@@ -1,31 +1,23 @@
 import { Theme } from "styles.slint";
 import { AppIcon, IconId } from "icons.slint";
 
-/// The short hint of the Multiview when a key has nothing to act on ("Select a medium first"). It is a window of its own
-/// (override-redirect, see `src/ui/multiview/hint.rs`) so that it shows over the native video windows too, and it looks like
-/// the feedback of a rating: a disc with an icon and one line below it. Rust sizes and places the window and keeps the pointer
-/// out of it; `shown` going false fades the content out over `fade`.
-export component MultiviewHintWindow inherits Window {
-    title: "RustView - Multiview Hint";
-    no-frame: true;
-    background: transparent;
-
+/// The short hint of the Multiview when a key has nothing to act on ("Select a medium first"), drawn by the canvas centered over
+/// the view, above the media and the bars. It looks like the feedback of a rating: a disc with an icon and one line below it.
+/// `shown` going false fades it out over `fade`; a new hint (`shown` true again) is there at once. It takes no pointer input.
+export component MultiviewHint inherits Rectangle {
     in property <string> text;
-    // A compositing manager blends the window: the disc and the caption are slightly translucent. Otherwise the window is
-    // solid and shaped like them.
-    in property <bool> translucent: true;
     in property <bool> shown: false;
     in property <duration> fade: 250ms;
 
-    // Geometry Rust needs for the size and the shape of the window (logical pixels).
-    out property <length> disc-size: 56px;
-    out property <length> caption-top: root.disc-size + 6px;
-    out property <length> caption-height: 26px;
-    out property <length> caption-width: caption-text.preferred-width + 28px;
-    out property <length> content-width: Math.max(root.disc-size, root.caption-width);
-    out property <length> content-height: root.caption-top + root.caption-height;
+    property <length> disc-size: 56px;
+    property <length> caption-top: root.disc-size + 6px;
+    property <length> caption-height: 26px;
+    property <length> caption-width: caption-text.preferred-width + 28px;
+    property <color> surface: Theme.surface.with-alpha(0.93);
 
-    property <color> surface: root.translucent ? Theme.surface.with-alpha(0.93) : Theme.surface;
+    width: Math.max(root.disc-size, root.caption-width);
+    height: root.caption-top + root.caption-height;
+    visible: content.opacity > 0.01;
 
     content := Rectangle {
         width: root.width;
