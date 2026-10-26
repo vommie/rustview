@@ -1,6 +1,7 @@
 //! Which window system the windows of `RustView` use, decided from what the environment says about the session (pure, unit tested).
 
-/// The environment variable that asks for native Wayland in a Wayland session (`wayland`); `auto` or unset is the default.
+/// The environment variable that picks the window system in a Wayland session: `x11` asks for `XWayland`, `wayland` for native Wayland
+/// (the default since `video-in-slint` M7, user decision 2026-10-26); `auto` or unset is the default.
 pub const REQUEST_VARIABLE: &str = "RUSTVIEW_WINDOW_SYSTEM";
 
 /// The window system the windows of `RustView` are on.
@@ -26,11 +27,13 @@ pub struct SessionEnv {
 /// Why `RustView` runs on native Wayland.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WaylandReason {
+    /// A Wayland session: native Wayland is the default.
+    Session,
     /// [`REQUEST_VARIABLE`] is `wayland`.
     Requested,
-    /// `DISPLAY` is not set: the session has no `XWayland`.
+    /// `XWayland` was asked for, but `DISPLAY` is not set: the session has no `XWayland`.
     NoXDisplay,
-    /// `DISPLAY` is set, but its X server did not answer.
+    /// `XWayland` was asked for, but the X server of `DISPLAY` did not answer.
     XDisplayUnreachable,
 }
 
@@ -39,7 +42,8 @@ pub enum WaylandReason {
 pub enum Choice {
     /// An X11 session (no Wayland display).
     X11Session,
-    /// A Wayland session: `RustView` runs as an X11 program through `XWayland`, so everything works as on X11.
+    /// A Wayland session in which `XWayland` was asked for (or that has no Wayland display): `RustView` runs as an X11 program, so the
+    /// X11 features (dialog parents, dragging files out, the pointer lock) work as on X11.
     XWayland,
     /// Native Wayland: the X11 features (dialog parents, dragging files out, the pointer lock) degrade.
     Wayland(WaylandReason),
@@ -87,6 +91,7 @@ impl Choice {
 enum Request {
     Auto,
     Wayland,
+    X11,
 }
 
 fn parse_request(value: Option<&str>) -> (Request, Option<RequestNote>) {
@@ -94,33 +99,29 @@ fn parse_request(value: Option<&str>) -> (Request, Option<RequestNote>) {
         None | Some("") => (Request::Auto, None),
         Some(value) if value.eq_ignore_ascii_case("auto") => (Request::Auto, None),
         Some(value) if value.eq_ignore_ascii_case("wayland") => (Request::Wayland, None),
+        Some(value) if value.eq_ignore_ascii_case("x11") || value.eq_ignore_ascii_case("xwayland") => {
+            (Request::X11, None)
+        }
         Some(value) => (Request::Auto, Some(RequestNote::Unknown(value.to_owned()))),
     }
 }
 
-/// Decides the window system. X11 wins wherever an X display exists, also in a Wayland session (`XWayland`), unless native Wayland
-/// is asked for. `x11_answers` is called only when a Wayland session also has an X display: that is the one case in which X11 is
-/// chosen although winit would take Wayland, and winit cannot try Wayland after its X11 connection failed.
+/// Decides the window system. A Wayland session runs on native Wayland unless `XWayland` is asked for; without a Wayland display it is X11.
+/// `x11_answers` is called only when `XWayland` is asked for in a Wayland session that also has an X display: winit would take Wayland
+/// there, and it cannot try Wayland after its X11 connection failed.
 pub fn choose(env: &SessionEnv, x11_answers: impl FnOnce() -> bool) -> Decision {
     let (request, mut note) = parse_request(env.request.as_deref());
-    if matches!(request, Request::Wayland) {
-        if env.wayland_display {
-            return Decision {
-                choice: Choice::Wayland(WaylandReason::Requested),
-                note,
-            };
-        }
+    if matches!(request, Request::Wayland) && !env.wayland_display {
         note = Some(RequestNote::WaylandUnavailable);
     }
     let choice = match (env.wayland_display, env.x11_display) {
-        (true, true) => {
-            if x11_answers() {
-                Choice::XWayland
-            } else {
-                Choice::Wayland(WaylandReason::XDisplayUnreachable)
-            }
-        }
-        (true, false) => Choice::Wayland(WaylandReason::NoXDisplay),
+        (true, x11_display) => match request {
+            Request::X11 if !x11_display => Choice::Wayland(WaylandReason::NoXDisplay),
+            Request::X11 if x11_answers() => Choice::XWayland,
+            Request::X11 => Choice::Wayland(WaylandReason::XDisplayUnreachable),
+            Request::Wayland => Choice::Wayland(WaylandReason::Requested),
+            Request::Auto => Choice::Wayland(WaylandReason::Session),
+        },
         (false, true) if env.wayland_session => Choice::XWayland,
         (false, true) => Choice::X11Session,
         (false, false) => Choice::NoDisplay,
@@ -154,38 +155,46 @@ mod tests {
 
     #[test]
     fn an_x11_session_stays_on_x11_without_asking_the_display() {
-        let (decision, asked) = decide(&env(false, false, true, None), false);
-        assert_eq!(decision.choice, Choice::X11Session);
-        assert_eq!(decision.choice.window_system(), Some(WindowSystem::X11));
-        assert_eq!(decision.note, None);
-        assert_eq!(asked, 0);
+        for request in [None, Some("x11"), Some("auto")] {
+            let (decision, asked) = decide(&env(false, false, true, request), false);
+            assert_eq!(decision.choice, Choice::X11Session, "{request:?}");
+            assert_eq!(decision.choice.window_system(), Some(WindowSystem::X11));
+            assert_eq!(decision.note, None);
+            assert_eq!(asked, 0);
+        }
     }
 
     #[test]
-    fn a_wayland_session_with_xwayland_runs_on_x11() {
-        let (decision, asked) = decide(&env(true, true, true, None), true);
-        assert_eq!(decision.choice, Choice::XWayland);
-        assert_eq!(decision.choice.window_system(), Some(WindowSystem::X11));
-        assert_eq!(asked, 1);
+    fn a_wayland_session_runs_on_native_wayland_without_asking_the_x_display() {
+        for (wayland_session, x11_display) in [(true, true), (true, false), (false, true)] {
+            let (decision, asked) = decide(&env(true, wayland_session, x11_display, None), true);
+            assert_eq!(decision.choice, Choice::Wayland(WaylandReason::Session));
+            assert_eq!(decision.choice.window_system(), Some(WindowSystem::Wayland));
+            assert_eq!(asked, 0);
+        }
     }
 
     #[test]
-    fn a_wayland_display_without_session_type_still_goes_through_xwayland() {
-        let (decision, _) = decide(&env(true, false, true, None), true);
-        assert_eq!(decision.choice, Choice::XWayland);
+    fn xwayland_can_be_requested() {
+        for value in ["x11", "X11", " xwayland "] {
+            let (decision, asked) = decide(&env(true, true, true, Some(value)), true);
+            assert_eq!(decision.choice, Choice::XWayland, "{value:?}");
+            assert_eq!(decision.choice.window_system(), Some(WindowSystem::X11));
+            assert_eq!(decision.note, None);
+            assert_eq!(asked, 1);
+        }
     }
 
     #[test]
-    fn xwayland_that_does_not_answer_falls_back_to_native_wayland() {
-        let (decision, asked) = decide(&env(true, true, true, None), false);
+    fn requested_xwayland_that_does_not_answer_falls_back_to_native_wayland() {
+        let (decision, asked) = decide(&env(true, true, true, Some("x11")), false);
         assert_eq!(decision.choice, Choice::Wayland(WaylandReason::XDisplayUnreachable));
-        assert_eq!(decision.choice.window_system(), Some(WindowSystem::Wayland));
         assert_eq!(asked, 1);
     }
 
     #[test]
-    fn a_wayland_session_without_x_display_stays_native() {
-        let (decision, asked) = decide(&env(true, true, false, None), true);
+    fn requested_xwayland_without_x_display_stays_native() {
+        let (decision, asked) = decide(&env(true, true, false, Some("x11")), true);
         assert_eq!(decision.choice, Choice::Wayland(WaylandReason::NoXDisplay));
         assert_eq!(asked, 0);
     }
@@ -227,7 +236,7 @@ mod tests {
     fn auto_and_empty_requests_are_the_default() {
         for value in ["auto", "AUTO", "", "  "] {
             let (decision, _) = decide(&env(true, true, true, Some(value)), true);
-            assert_eq!(decision.choice, Choice::XWayland, "{value:?}");
+            assert_eq!(decision.choice, Choice::Wayland(WaylandReason::Session), "{value:?}");
             assert_eq!(decision.note, None, "{value:?}");
         }
     }
@@ -235,7 +244,7 @@ mod tests {
     #[test]
     fn an_unknown_request_is_ignored_with_a_note() {
         let (decision, _) = decide(&env(true, true, true, Some("x12")), true);
-        assert_eq!(decision.choice, Choice::XWayland);
+        assert_eq!(decision.choice, Choice::Wayland(WaylandReason::Session));
         assert_eq!(decision.note, Some(RequestNote::Unknown("x12".to_owned())));
     }
 

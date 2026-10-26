@@ -57,3 +57,7 @@ VM's display (VirGL), mpv's hardware decoding on Wayland and two monitors are le
   afterwards (5 needed the second request). XWayland (no variable): tab, context menu over the video, 4 of 4 fullscreen opens (one
   second request). Not run by Claude: copying a picture (the media context menu cannot be driven through the MCP), dragging in and out,
   the minimap's pointer lock, fractional scaling.
+- 2026-10-26 (0.5.15): questionnaire saved: switch after the test (done), W1 dragging out, W2 dialog parents and W3 the pointer lock
+  "later" (cleanup branch, CLEANUP #19-#21); W4-W7 accepted as listed. The user ran no tests of their own ("passt", Claude's checks in the
+  VM's Wayland session count). Default switched: a Wayland session runs on native Wayland, `RUSTVIEW_WINDOW_SYSTEM=x11` (or `xwayland`)
+  asks for XWayland, an X11 session stays on X11 whatever the variable says. Settings > Debug: "Native Wayland" is Info (was Warning).

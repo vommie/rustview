@@ -78,7 +78,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Ctrl+C, `kill` and a closed terminal run the same orderly shutdown as the close button (before any thread exists).
     termination::install_signal_handlers();
 
-    // X11, also in a Wayland session (XWayland), unless there is no X display: decided before any window exists.
+    // X11 in an X11 session, native Wayland in a Wayland session (XWayland on request): decided before any window exists.
     let window_system = window_system::decide();
     startup_clock::mark("WindowSystem");
 

@@ -38,9 +38,10 @@ pub fn window_system_facts() -> (WindowSystemKind, Option<String>) {
         Choice::NoDisplay => (WindowSystemKind::NoDisplay, None),
         Choice::Wayland(reason) => {
             let why = match reason {
+                WaylandReason::Session => format!("default; {REQUEST_VARIABLE}=x11 for XWayland"),
                 WaylandReason::Requested => format!("{REQUEST_VARIABLE}=wayland"),
-                WaylandReason::NoXDisplay => "the session has no XWayland".to_owned(),
-                WaylandReason::XDisplayUnreachable => "XWayland does not answer".to_owned(),
+                WaylandReason::NoXDisplay => format!("{REQUEST_VARIABLE}=x11, but the session has no XWayland"),
+                WaylandReason::XDisplayUnreachable => format!("{REQUEST_VARIABLE}=x11, but XWayland does not answer"),
             };
             (WindowSystemKind::Wayland, Some(why))
         }

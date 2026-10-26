@@ -404,10 +404,10 @@ fn window_system_check(display: &DisplayFacts) -> Check {
         ),
         WindowSystemKind::Wayland => health(
             "window_system",
-            Status::Warning,
+            Status::Info,
             "Native Wayland",
             format!(
-                "videos work; dialogs are not tied to their window, files cannot be dragged to other programs, the minimap drag has no pointer lock{reason}"
+                "everything works except: dialogs are not tied to their window, files cannot be dragged to other programs, the minimap drag has no pointer lock{reason}"
             ),
         ),
         WindowSystemKind::NoDisplay => health(
@@ -613,7 +613,7 @@ mod tests {
         display.window_system = WindowSystemKind::Wayland;
         display.wayland_reason = Some("RUSTVIEW_WINDOW_SYSTEM=wayland".into());
         let check = find(&in_memory(&display, None), "window_system");
-        assert_eq!(check.status, Status::Warning);
+        assert_eq!(check.status, Status::Info);
         assert!(check.detail.ends_with("(RUSTVIEW_WINDOW_SYSTEM=wayland)"));
 
         display.in_app = false;

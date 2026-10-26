@@ -43,11 +43,10 @@ Slint user interface; videos play through the embedded mpv player and most forma
 
 ## Platform
 
-RustView targets **Arch Linux and Manjaro with KDE Plasma**. X11 is the default session. In a Wayland session RustView runs as an X11
-program through XWayland (part of KDE Plasma), so videos and everything else work as on X11. Without XWayland, or with
-`RUSTVIEW_WINDOW_SYSTEM=wayland`, it runs as a native Wayland program: videos and everything over them work there too (they are drawn
-by the app itself), only a few X11 features degrade (dragging files to other programs, dialogs tied to their window, the pointer lock
-of the minimap drag). Other distributions and desktops are not a target.
+RustView targets **Arch Linux and Manjaro with KDE Plasma**. In an X11 session RustView runs on X11. In a Wayland session it runs as a
+native Wayland program: videos and everything over them work there too (they are drawn by the app itself), only a few X11 features are
+missing for now (dragging files to other programs, dialogs tied to their window, the pointer lock of the minimap drag). Start it with
+`RUSTVIEW_WINDOW_SYSTEM=x11` to run it through XWayland (part of KDE Plasma), where those work. Other distributions and desktops are not a target.
 
 ## Install
 

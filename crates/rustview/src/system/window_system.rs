@@ -1,10 +1,10 @@
 //! The window system `RustView` runs on (X11, `XWayland` or native Wayland), chosen once at the start of `main`, before the first
 //! window exists.
 //!
-//! In a Wayland session `RustView` runs as an X11 program through `XWayland` (user decision 2026-10-25, `docs/rendering.md`): the
-//! X11 features (dialogs that belong to their window, dragging files to other programs, the pointer lock) exist only there.
-//! Videos and everything over them are drawn by Slint since `video-in-slint`, so native Wayland shows them too; it becomes the
-//! default after the joint test of M7 (`docs/video_in_slint/WAYLAND.md`). Every place
+//! An X11 session runs on X11. A Wayland session runs on native Wayland (user decision 2026-10-26 after the joint test of
+//! `video-in-slint` M7, `docs/video_in_slint/WAYLAND.md`): videos and everything over them are drawn by Slint, only the X11 features
+//! (dialogs that belong to their window, dragging files to other programs, the pointer lock) degrade; `RUSTVIEW_WINDOW_SYSTEM=x11`
+//! starts it as an X11 program through `XWayland`, where they exist. Every place
 //! that depends on the window system (the clipboard tool, drag and drop, the logs) asks [`current`] instead of reading the
 //! environment, which says "Wayland" while the windows are X11 windows.
 
@@ -31,7 +31,7 @@ pub fn session_env() -> SessionEnv {
     }
 }
 
-/// Chooses the window system (once; in a Wayland session the X display is asked with one short connection), logs the choice and
+/// Chooses the window system (once; when `XWayland` is asked for, the X display is asked with one short connection), logs the choice and
 /// keeps it for [`current`]. Called at the start of `main`, before Slint's backend is selected.
 pub fn decide() -> Choice {
     *CHOSEN.get_or_init(|| {
@@ -78,7 +78,7 @@ fn log_decision(decision: &Decision) {
         Some(RequestNote::Unknown(value)) => tracing::warn!(
             variable = REQUEST_VARIABLE,
             value = %value,
-            "[Startup: WindowSystem] Unknown value ignored (known: wayland, auto)"
+            "[Startup: WindowSystem] Unknown value ignored (known: wayland, x11, auto)"
         ),
         Some(RequestNote::WaylandUnavailable) => tracing::warn!(
             variable = REQUEST_VARIABLE,
@@ -94,18 +94,19 @@ fn log_decision(decision: &Decision) {
         ),
         Choice::XWayland => tracing::info!(
             window_system,
-            "[Startup: WindowSystem] Wayland session; RustView runs as an X11 program through XWayland ({REQUEST_VARIABLE}=wayland for native Wayland)"
+            "[Startup: WindowSystem] Wayland session; RustView runs as an X11 program through XWayland"
         ),
         Choice::Wayland(reason) => {
             let why = match reason {
+                WaylandReason::Session => "Wayland session",
                 WaylandReason::Requested => "requested",
-                WaylandReason::NoXDisplay => "DISPLAY is not set (no XWayland)",
-                WaylandReason::XDisplayUnreachable => "XWayland does not answer",
+                WaylandReason::NoXDisplay => "XWayland was requested, but DISPLAY is not set",
+                WaylandReason::XDisplayUnreachable => "XWayland was requested, but it does not answer",
             };
-            tracing::warn!(
+            tracing::info!(
                 window_system,
                 why,
-                "[Startup: WindowSystem] RustView runs on native Wayland: the X11 features (dialog parents, dragging files out, the pointer lock) degrade"
+                "[Startup: WindowSystem] RustView runs on native Wayland ({REQUEST_VARIABLE}=x11 for XWayland); dialog parents, dragging files out and the pointer lock degrade"
             );
         }
         Choice::NoDisplay => tracing::warn!(

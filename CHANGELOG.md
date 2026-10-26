@@ -79,10 +79,10 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   Keys, and the card "mpv script ab_repeat.lua" sits next to Player and Sound. Settings > Viewer keeps how images and videos open
   from the media view, the rating badge of tabs and the tab background. Only the place in the settings window changed: your settings
   are kept as they are (no migration).
-- **Native Wayland shows videos too** (branch video-in-slint, seventh step): since everything over a video is drawn by RustView, a
-  start with `RUSTVIEW_WINDOW_SYSTEM=wayland` in a Wayland session plays videos with all bars, menus, zoom and the Multiview. A
-  Wayland session still starts RustView through XWayland until the joint test; what native Wayland still lacks (dragging files to
-  other programs, dialogs tied to their window, the pointer lock of the minimap drag) is listed in Settings > Debug.
+- **In a Wayland session RustView now runs as a native Wayland program** (branch video-in-slint, seventh step; before it ran through
+  XWayland). Videos with all bars, menus, zoom and the Multiview work there, since everything over a video is drawn by RustView. Not
+  yet on native Wayland: dragging files to other programs, dialogs tied to their window and the pointer lock of the minimap drag
+  (Settings > Debug names them). `RUSTVIEW_WINDOW_SYSTEM=x11` starts RustView through XWayland as before. An X11 session is unchanged.
 - **The A-B tab above the progress bar only shows when it has something in it** (a saved repeat, A or B); without them the bar
   looks like any other. Without a compositing manager the tab is now a plain rectangle over the progress bar instead of a window
   cut to the curved outline.

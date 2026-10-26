@@ -46,30 +46,32 @@ no cutouts, no pointer polling and no `overlay-add`/`osd-overlay`; mpv draws not
 - **2026-10-26 (`mpv-slint-lab`, questionnaire `2026-10-26-rustview-video-in-slint`):** the render API with **one render thread per
   video** (lab approach 03) removes the reason for both: Slint's own menus, popups and tooltips appear over a video, nothing floats
   over other applications, and native Wayland works. Built in the milestones M1-M7 of `docs/video_in_slint/HANDOFF.md`.
-  Decisions there: renderer skia; the fullscreen stays a separate window; **native Wayland becomes the default after M7**, switched
-  together with the user in a Plasma Wayland session; a cleanup branch after the acceptance (`docs/video_in_slint/CLEANUP.md`).
+  Decisions there: renderer skia; the fullscreen stays a separate window; **native Wayland is the default in a Wayland session**
+  (switched in 0.5.15 after the test in the user's Plasma Wayland session, questionnaire `2026-10-26-rustview-wayland-test`; the three
+  gaps go to the cleanup branch); a cleanup branch after the acceptance (`docs/video_in_slint/CLEANUP.md`).
 
-## How the window system is chosen (0.4.14)
+## How the window system is chosen (0.4.14, default changed in 0.5.15)
 
 `system/window_system/` decides once, at the start of `main` and before any window exists (`window_system::decide`, logged as
 `[Startup: WindowSystem]`, stage `WindowSystem`); the pure part is `choice.rs` (`choose`, unit tested):
 
 | Session | Result |
 |---|---|
-| no Wayland display, `DISPLAY` set | X11 (`X11Session`; `XWayland` when `XDG_SESSION_TYPE=wayland`) |
-| Wayland display and `DISPLAY`, the X server answers | X11 through XWayland (`XWayland`) |
-| Wayland display and `DISPLAY`, no answer | native Wayland (`XDisplayUnreachable`) |
-| Wayland display, no `DISPLAY` | native Wayland (`NoXDisplay`), with a warning |
-| `RUSTVIEW_WINDOW_SYSTEM=wayland` and a Wayland display | native Wayland (`Requested`) |
+| no Wayland display, `DISPLAY` set (an X11 session) | X11 (`X11Session`; `XWayland` when `XDG_SESSION_TYPE=wayland`), whatever the variable says |
+| Wayland display | native Wayland (`Session`) |
+| Wayland display, `RUSTVIEW_WINDOW_SYSTEM=wayland` | native Wayland (`Requested`) |
+| Wayland display, `RUSTVIEW_WINDOW_SYSTEM=x11`, the X server of `DISPLAY` answers | X11 through XWayland (`XWayland`) |
+| Wayland display, `RUSTVIEW_WINDOW_SYSTEM=x11`, no answer or no `DISPLAY` | native Wayland (`XDisplayUnreachable`, `NoXDisplay`) |
 | neither display | nothing is forced; winit reports the error as before |
 
-Until the joint Wayland test of M7 a Wayland session still starts through XWayland; afterwards native Wayland is the default and
-XWayland stays selectable. What native Wayland lacks is listed in `docs/video_in_slint/WAYLAND.md`.
+Until 0.5.14 a Wayland session started through XWayland (and the X display was asked at every start). What native Wayland lacks
+(dialog parents, dragging files out, the pointer lock of the minimap) is listed in `docs/video_in_slint/WAYLAND.md`; Settings > Debug
+names it.
 
 - The backend is forced through Slint's API, not the environment: `BackendSelector::with_winit_event_loop_builder` with winit's
   `EventLoopBuilderExtX11::with_x11` (or `with_wayland`), in `window_system::select_backend`. Programs RustView starts (file
   manager, "Open With") still see the session as it is. winit takes Wayland whenever `WAYLAND_DISPLAY` is set and cannot try
-  Wayland after a failed X11 connection, so in a Wayland session the X display is asked first with one short x11rb connection
+  Wayland after a failed X11 connection, so when XWayland is asked for, the X display is asked first with one short x11rb connection
   (`viewer::x11_display_answers`).
 - Everything that depends on the window system asks `window_system::current()` instead of reading the environment: the image
   clipboard tool (`system/clipboard.rs`: xclip on X11, under XWayland with wl-copy as the fallback, wl-copy on Wayland), the drag
