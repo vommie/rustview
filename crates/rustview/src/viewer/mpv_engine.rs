@@ -12,7 +12,6 @@ mod controls;
 mod events;
 mod messages;
 mod osd_text;
-pub mod overlay;
 mod playback;
 mod render;
 mod still;
@@ -20,7 +19,6 @@ pub use controls::SeekPrecision;
 pub use osd_text::OsdText;
 pub use playback::PlaybackNumbers;
 pub use render::{MpvRenderContext, NativeDisplay, RenderCore};
-mod rating;
 pub mod self_test;
 mod zoom;
 

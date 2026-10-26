@@ -6,15 +6,12 @@
 
 use super::audio::TileAudio;
 use super::events::{MultiviewEventSink, PlayerEvent};
-use super::feedback_overlay::OverlayState;
-use super::focus_overlay::WindowMarks;
 use super::follow::TileKey;
 use super::instance::WeakInstance;
 use super::media_actions::MediaActionId;
 use super::model::{AspectSource, TileKind};
 use super::video_bar::state::VideoBarState;
 use super::video_placement::VideoPlacement;
-use super::volume_overlay::VolumeOverlayState;
 use crate::ui::button_feedback::ButtonFeedback;
 use crate::viewer::MpvPlayer;
 use crate::viewer::edit::save_badge::SaveBadge;
@@ -50,12 +47,6 @@ pub struct VideoTile {
     pub current_tile: Arc<AtomicU64>,
     /// The Multiview whose tile this is; the events of the player are posted to it.
     pub owner: EventOwner,
-    /// The rating icon that mpv draws over the picture right now, if any.
-    pub feedback_overlay: Option<OverlayState>,
-    /// The volume bar that mpv draws over the picture right now, if any.
-    pub volume_overlay: Option<VolumeOverlayState>,
-    /// The part of the corner marks of the selected tile that mpv draws over the picture right now, if any.
-    pub focus_overlay: Option<WindowMarks>,
     /// The control bar of the video.
     pub bar: VideoBarState,
     /// The time badge mpv draws over the picture in the tab grid right now, if any.
@@ -255,9 +246,6 @@ pub fn create_video(
         last_mute: native_mute,
         current_tile,
         owner,
-        feedback_overlay: None,
-        volume_overlay: None,
-        focus_overlay: None,
         bar: VideoBarState::default(),
         time_badge: None,
         zoom_view: None,

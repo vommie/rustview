@@ -9,6 +9,7 @@ use super::media_actions::{ButtonLook, MediaActionId};
 use super::media_feedback::PulseView;
 use super::model::TileKind;
 use super::primary_actions::PrimaryActionId;
+use super::video_bar::volume::VolumeIcon;
 use crate::icons::Icon;
 use crate::ui::button_feedback::ButtonFeedback;
 use rustview_core::library::models::MediaId;
@@ -38,6 +39,25 @@ pub struct TileView {
     pub focus: Option<FocusMarkView>,
     /// The picture of a video, once its surface draws into the host's window.
     pub video: Option<VideoFrameView>,
+    /// The volume bar of a video after the wheel or a key changed its volume, while it is shown.
+    pub volume: Option<VolumeBarTileView>,
+}
+
+/// The volume bar of a video (`volume_feedback`, physical pixels): a square with the speaker, a gap and the flat bar with the
+/// level filled in, side by side.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct VolumeBarTileView {
+    /// The whole bar, relative to the tile; its height is the edge of the speaker's square.
+    pub rect: Rect,
+    /// The gap between the square and the bar.
+    pub gap: i32,
+    /// The filled share of the bar.
+    pub share: f32,
+    pub icon: VolumeIcon,
+    /// The fill is dimmed.
+    pub muted: bool,
+    /// 1.0 = full strength, 0.0 = gone.
+    pub alpha: f32,
 }
 
 /// Where the canvas draws the texture of a video (physical pixels).
@@ -52,8 +72,8 @@ pub struct VideoFrameView {
     pub clip: Rect,
 }
 
-/// The marks of the selected medium (physical pixels). The host brightens the view and draws the corner marks in its corners;
-/// where a video's native window covers a corner, mpv draws the part of the mark inside it (`focus_overlay`).
+/// The marks of the selected medium (physical pixels). The host brightens the view and draws the corner marks in its corners,
+/// over a video as over a picture.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FocusMarkView {
     /// The view of the tile (its canvas, `host_room`: the column at the full height of its row), relative to the tile. The marks

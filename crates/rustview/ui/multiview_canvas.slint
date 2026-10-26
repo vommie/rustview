@@ -123,7 +123,7 @@ export component MultiviewCanvas inherits Rectangle {
         height: tile.height;
 
         // The selected medium of several: its view is brightened (the medium covers its own part of it, so the light shows
-        // only where the medium leaves room, also around a video window).
+        // only where the medium leaves room).
         if root.interactive && tile.focused && tile.focus-brighten > 0 : Rectangle {
             x: tile.focus-view-x;
             y: tile.focus-view-y;
@@ -234,7 +234,7 @@ export component MultiviewCanvas inherits Rectangle {
         }
 
         // The corner marks of the selected medium of several frame its view, not the medium, so they stay put at every size and
-        // zoom. A video's native window covers this scene where it lies over a corner; mpv draws that part of the mark itself.
+        // zoom, over a picture as over a video.
         if root.interactive && tile.focused : MultiviewFocusCorners {
             x: tile.focus-view-x;
             y: tile.focus-view-y;
@@ -244,10 +244,48 @@ export component MultiviewCanvas inherits Rectangle {
             thickness: tile.focus-thickness;
         }
 
-        // The feedback of an interaction (`media_feedback`; a rating given with Ctrl+0..5, a save): its icon in the middle of the tile,
-        // full strength first, then fading out. A video tile gets the same icon from mpv itself, because its native window covers this
-        // scene. Rating: the colored rating icon; saved: the save icon, white on a green disc (`feedback_overlay` draws both alike).
-        if root.interactive && tile.kind != 1 && tile.feedback-icon >= 0 : Rectangle {
+        // The volume bar of a video after the wheel or a key changed its volume: the speaker on a square, a gap and the flat bar with
+        // the level, semi-transparent so the video shows through; the fill is dimmed while muted. It holds and fades like the
+        // feedback icon.
+        if root.interactive && tile.volume-shown : Rectangle {
+            x: tile.volume-x;
+            y: tile.volume-y;
+            width: tile.volume-width;
+            height: tile.volume-height;
+            opacity: tile.volume-alpha;
+
+            Rectangle {
+                x: 0px;
+                width: tile.volume-height;
+                background: #00000060;
+
+                AppIcon {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    icon: tile.volume-icon == 0 ? IconId.volume-off : (tile.volume-icon == 1 ? IconId.volume-low : IconId.volume-on);
+                    size: Math.round(tile.volume-height * 0.8 / 1px) * 1px;
+                    color: #ffffffa0;
+                }
+            }
+
+            Rectangle {
+                property <length> bar-width: parent.width - tile.volume-height - tile.volume-gap;
+                x: tile.volume-height + tile.volume-gap;
+                width: self.bar-width;
+                background: #00000060;
+
+                Rectangle {
+                    x: 0px;
+                    width: Math.round(parent.bar-width * Math.clamp(tile.volume-share, 0, 1) / 1px) * 1px;
+                    background: tile.volume-muted ? #ffffff50 : #ffffffa0;
+                }
+            }
+        }
+
+        // The feedback of an interaction (`media_feedback`; a rating given with Ctrl+0..5, a save, the mute key of a video): its icon in
+        // the middle of the tile, full strength first, then fading out. Rating: the colored rating icon; saved: the save icon, white on
+        // a green disc; sound: the speaker (crossed out when muted), dark on a white disc.
+        if root.interactive && tile.feedback-icon >= 0 : Rectangle {
             width: 50px;
             height: 50px;
             x: (parent.width - self.width) / 2;
@@ -257,7 +295,7 @@ export component MultiviewCanvas inherits Rectangle {
             opacity: tile.feedback-alpha;
 
             // A rating: the digit is cut out of the colored disc; a white disc behind it fills the digit white instead of letting the
-            // picture shine through. Saved: the green disc itself.
+            // picture shine through. Saved: the green disc itself; sound: the white disc.
             Rectangle {
                 x: 1px;
                 y: 1px;
@@ -278,6 +316,14 @@ export component MultiviewCanvas inherits Rectangle {
                 icon: IconId.save;
                 size: 28px;
                 color: #ffffff;
+            }
+
+            if tile.feedback-icon == 7 || tile.feedback-icon == 8 : AppIcon {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                icon: tile.feedback-icon == 8 ? IconId.volume-off : IconId.volume-on;
+                size: 28px;
+                color: #1e1e2e;
             }
         }
 

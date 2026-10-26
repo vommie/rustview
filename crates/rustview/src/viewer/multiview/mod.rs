@@ -11,9 +11,7 @@ pub mod click;
 pub mod command;
 pub mod container;
 pub mod events;
-pub mod feedback_overlay;
 pub mod focus;
-pub mod focus_overlay;
 pub mod follow;
 pub mod hint;
 pub mod image_decode;
@@ -59,7 +57,6 @@ pub mod video_bar;
 pub mod video_placement;
 pub mod view;
 pub mod volume_feedback;
-pub mod volume_overlay;
 
 pub use instance_host::HostSurface;
 pub use instance_merge::ReleasedTiles;

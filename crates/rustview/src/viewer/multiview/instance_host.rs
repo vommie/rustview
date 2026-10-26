@@ -226,8 +226,7 @@ impl MultiviewInstance {
     pub(super) fn reproject(&mut self) {
         self.sync_zoom_frames();
         self.size_surfaces();
-        self.sync_feedback_overlays(Instant::now());
-        self.sync_focus_overlays();
+        self.prune_feedback();
         self.bump();
     }
 
@@ -435,6 +434,7 @@ impl MultiviewInstance {
                     dirty: self.tile_is_dirty(index),
                     focus: self.focus_view(index),
                     video: self.video_frame_view(index, rect),
+                    volume: self.volume_bar_view(index, now),
                 }
             })
             .collect();

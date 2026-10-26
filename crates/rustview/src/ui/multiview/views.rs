@@ -117,6 +117,8 @@ fn tile_view(tile: &TileView, dpi: f32, images: &mut ImageCache) -> MultiviewTil
     let crop_pic = crop.map_or((0.0, 0.0, 0.0, 0.0), |c| c.picture);
     let crop_rect = crop.map_or((0.0, 0.0, 0.0, 0.0), |c| c.rect);
     let focus_view = tile.focus.map_or(Rect::default(), |f| f.view);
+    let volume = tile.volume;
+    let volume_rect = volume.map_or(Rect::default(), |v| v.rect);
     let video_row = tile.video.map_or(-1, |v| v.row.saturating_as::<i32>());
     let (video_frame, video_clip) = tile
         .video
@@ -174,6 +176,16 @@ fn tile_view(tile: &TileView, dpi: f32, images: &mut ImageCache) -> MultiviewTil
         mm_zoom_snaps: slint::ModelRc::new(slint::VecModel::from(bubble.map_or_else(Vec::new, |b| b.snaps.clone()))),
         feedback_icon: tile.feedback.map_or(-1, |pulse| pulse.icon.code()),
         feedback_alpha: tile.feedback.map_or(0.0, |pulse| pulse.alpha),
+        volume_shown: volume.is_some(),
+        volume_x: logical(volume_rect.x, dpi),
+        volume_y: logical(volume_rect.y, dpi),
+        volume_width: logical(volume_rect.w, dpi),
+        volume_height: logical(volume_rect.h, dpi),
+        volume_gap: logical(volume.map_or(0, |v| v.gap), dpi),
+        volume_share: volume.map_or(0.0, |v| v.share),
+        volume_icon: volume.map_or(0, |v| v.icon.code()),
+        volume_muted: volume.is_some_and(|v| v.muted),
+        volume_alpha: volume.map_or(0.0, |v| v.alpha),
         crop_open: crop.is_some(),
         crop_room_x: logical(crop_room.x, dpi),
         crop_room_y: logical(crop_room.y, dpi),

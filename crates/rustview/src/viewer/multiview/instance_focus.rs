@@ -1,13 +1,10 @@
-//! Instance behavior around the selected tile (`focus`): selecting it, keeping it in line with the tiles, the marks a host draws
-//! for it and the part of the corner marks that mpv draws over a video (`focus_overlay`). The marks frame the view of the tile
-//! (`host_room`), not its medium.
+//! Instance behavior around the selected tile (`focus`): selecting it, keeping it in line with the tiles and the marks a host
+//! draws for it. The marks frame the view of the tile (`host_room`), not its medium.
 
-use super::focus_overlay::{self, CornerMarks};
 use super::follow::TileKey;
 use super::instance::MultiviewInstance;
 use super::layout::Rect;
 use super::media_feedback::{FADE, HOLD};
-use super::model::TileKind;
 use super::prefs;
 use super::route::HostMode;
 use super::view::FocusMarkView;
@@ -52,7 +49,6 @@ impl MultiviewInstance {
         if let Some(index) = self.tile_index(key) {
             self.sound_follows_selection(index);
         }
-        self.sync_focus_overlays();
         self.bump();
         true
     }
@@ -120,7 +116,6 @@ impl MultiviewInstance {
                 instance = self.id,
                 "[Multiview: Focus] Marks shown for a moment by a key"
             );
-            self.sync_focus_overlays();
             self.bump();
         }
     }
@@ -136,7 +131,6 @@ impl MultiviewInstance {
     /// The marks appeared or went (the cursor was hidden or shown, a moment of shown marks ended).
     pub(super) fn marks_visibility_changed(&mut self) {
         if self.focus_marked().is_some() {
-            self.sync_focus_overlays();
             self.bump();
         }
     }
@@ -155,58 +149,6 @@ impl MultiviewInstance {
             corner,
             thickness,
         })
-    }
-
-    /// The corner marks of the selected tile in host pixels: in the corners of its view (`host_room`), whatever its medium,
-    /// zoom or kind. `None` while no tile carries marks (one tile, none selected, hidden with the cursor, no interactive host).
-    fn focus_corner_marks(&self) -> Option<(TileKey, CornerMarks)> {
-        if !self.host_is_interactive() || !self.marks_shown() {
-            return None;
-        }
-        let key = self.focus_marked()?;
-        let view = self.host_room(self.tile_index(key)?)?;
-        let (length, thickness) = self.focus_mark_size();
-        Some((key, CornerMarks::new(view, length, thickness)?))
-    }
-
-    /// Brings the corner marks that mpv draws over the videos in line with the selection: the selected video of several gets the
-    /// part of its marks that its window covers (all of them while it is zoomed and its window fills the view, none while it sits
-    /// letterboxed in the middle of a taller or wider view, where the canvas draws them), every other video has none. Costs a
-    /// comparison per video when nothing changed, so the host tick may call it to retry a mark mpv did not take yet (no picture).
-    pub(super) fn sync_focus_overlays(&mut self) {
-        let marked = self.focus_corner_marks();
-        for index in 0..self.tiles.len() {
-            let wanted = match marked {
-                Some((key, marks)) if key == self.tiles[index].key => self
-                    .video_placement(index)
-                    .map(|placement| marks.in_clipped_window(placement.window, placement.frame))
-                    .filter(focus_overlay::WindowMarks::any),
-                _ => None,
-            };
-            let tile = &mut self.tiles[index];
-            let Some(video) = tile.video.as_mut() else {
-                continue;
-            };
-            let wanted = wanted.filter(|_| tile.kind == TileKind::Video && tile.error.is_none());
-            if video.focus_overlay == wanted {
-                continue;
-            }
-            if let Some(marks) = wanted {
-                video.focus_overlay = focus_overlay::show(&video.player, &marks).then_some(marks);
-                if video.focus_overlay.is_some() {
-                    tracing::debug!(
-                        tile = tile.key,
-                        view = ?marks.marks.view,
-                        window = ?marks.window,
-                        corners = marks.parts.iter().flatten().count(),
-                        "[Multiview: Focus] Video marks shown"
-                    );
-                }
-            } else {
-                focus_overlay::hide(&video.player);
-                video.focus_overlay = None;
-            }
-        }
     }
 }
 
@@ -325,8 +267,6 @@ mod tests {
             focus.view,
             Rect::new(room.x - content.x, room.y - content.y, room.w, room.h)
         );
-        let (_, marks) = mv.focus_corner_marks().unwrap();
-        assert_eq!(marks.view, room);
     }
 
     #[test]

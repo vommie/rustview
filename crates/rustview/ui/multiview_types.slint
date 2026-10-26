@@ -84,10 +84,23 @@ export struct MultiviewTileView {
     mm-zoom-min: int,
     mm-zoom-max: int,
     mm-zoom-snaps: [int],
-    // The feedback icon of an interaction (`media_feedback`: 0..5 = a rating just given, 6 = saved, -1 = none) and how strong it
-    // is (1 = full, fading to 0). Videos get theirs from mpv.
+    // The feedback icon of an interaction (`media_feedback`: 0..5 = a rating just given, 6 = saved, 7/8 = a video's sound on/off by
+    // the mute key, -1 = none) and how strong it is (1 = full, fading to 0).
     feedback-icon: int,
     feedback-alpha: float,
+    // The volume bar of a video after the wheel or a key changed its volume (`volume_feedback`): the whole bar relative to the
+    // tile (its height is the speaker's square), the gap between square and bar, the filled share, the speaker (0 = muted,
+    // 1 = low, 2 = high), dimmed fill while muted, and how strong it is (1 = full, fading to 0).
+    volume-shown: bool,
+    volume-x: length,
+    volume-y: length,
+    volume-width: length,
+    volume-height: length,
+    volume-gap: length,
+    volume-share: float,
+    volume-icon: int,
+    volume-muted: bool,
+    volume-alpha: float,
     // The crop tool: the room it covers (relative to the tile), the picture and the crop rectangle (relative to that room), the
     // labels and whether the rule-of-thirds lines show.
     crop-open: bool,
@@ -109,7 +122,7 @@ export struct MultiviewTileView {
     crop-dragging: bool,
     // The selected medium of several (`focus`): the view of the tile (its canvas: the column at the full height of its row),
     // relative to the tile. It is brightened where the medium leaves room (by `focus-brighten`, 0..1) and the corner marks frame
-    // it, for images and videos alike (mpv draws the part of a mark that a video's window covers).
+    // it, for images and videos alike.
     focused: bool,
     focus-view-x: length,
     focus-view-y: length,

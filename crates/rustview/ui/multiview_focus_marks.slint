@@ -1,8 +1,7 @@
 import { Theme } from "styles.slint";
 
 /// The corner marks of the selected medium of a Multiview: four L-shaped marks inside the corners of the view of its tile (its
-/// canvas, never the medium itself). Where a video's native window covers a corner, mpv draws that part of the mark itself
-/// (`focus_overlay.rs`).
+/// canvas, never the medium itself), drawn over pictures and videos alike.
 export component MultiviewFocusCorners inherits Rectangle {
     in property <length> mark-length: 24px;
     in property <length> thickness: 2px;

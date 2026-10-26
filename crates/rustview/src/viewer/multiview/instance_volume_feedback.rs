@@ -1,13 +1,14 @@
-//! The volume bar and the mute icon of a video (`volume_feedback`): the wheel and the video player keys start them, the
-//! overlays of mpv draw them (`volume_overlay`, `feedback_overlay`), and they keep the time of the feedback pulse, so the host's
-//! feedback timer (`feedback_wakeup`, `poll_feedback`) drives them too.
+//! The volume bar and the mute icon of a video (`volume_feedback`): the wheel and the video player keys start them, the canvas
+//! of the host draws them over the picture (`TileView::volume`, `TileView::feedback`), and they keep the time of the feedback
+//! pulse, so the host's feedback timer (`feedback_wakeup`, `poll_feedback`) drives them too.
 
 use super::instance::MultiviewInstance;
+use super::layout::Rect;
 use super::media_feedback::FeedbackIcon;
 use super::model::TileKind;
 use super::route::HostMode;
+use super::view::VolumeBarTileView;
 use super::volume_feedback::{MuteInput, VolumeInput, VolumeLevel, fitted_picture, place_bar};
-use super::volume_overlay::{self, VolumeOverlayState};
 use crate::viewer::zoom::state::ZoomState;
 use rustview_core::util::cast::SaturatingAs;
 use std::time::Instant;
@@ -42,7 +43,6 @@ impl MultiviewInstance {
         );
         self.volume_feedback.trigger(tile.key, volume, now);
         self.feedback_requested = true;
-        self.sync_volume_overlays(now);
         self.bump();
     }
 
@@ -62,59 +62,37 @@ impl MultiviewInstance {
         self.show_feedback([key], FeedbackIcon::Sound { muted }, now);
     }
 
-    pub(super) fn has_volume_feedback(&self) -> bool {
-        self.volume_feedback.is_active()
-            || self
-                .tiles
-                .iter()
-                .any(|t| t.video.as_ref().is_some_and(|v| v.volume_overlay.is_some()))
-    }
-
-    /// Brings the volume bars that mpv draws in line with `volume_feedback`: shows, updates (fade, new level, new size of the
-    /// window) or removes them. Costs nothing while no bar runs and none is up.
-    pub(super) fn sync_volume_overlays(&mut self, now: Instant) {
-        self.volume_feedback
-            .retain_tiles(|key| self.tiles.iter().any(|t| t.key == key));
-        if !self.has_volume_feedback() {
-            return;
+    /// The volume bar tile `index` shows at `now` (relative to the tile, whose rectangle is the medium's place): centered in the
+    /// lower part of the picture, which is letterboxed in the part of the frame that shows (a zoomed video fills it).
+    pub(super) fn volume_bar_view(&self, index: usize, now: Instant) -> Option<VolumeBarTileView> {
+        let tile = self.tiles.get(index)?;
+        if !self.volume_feedback_shown() || tile.kind != TileKind::Video {
+            return None;
         }
-        let shown = self.volume_feedback_shown();
-        let dpi = self.host.surface.dpi;
-        let wanted: Vec<Option<VolumeOverlayState>> = (0..self.tiles.len())
-            .map(|index| {
-                let tile = &self.tiles[index];
-                if !shown || tile.kind != TileKind::Video {
-                    return None;
-                }
-                let view = self.volume_feedback.view(tile.key, now)?;
-                let placement = self.video_placement(index)?;
-                let window = placement.window;
-                let size = (window.w.saturating_as::<u32>(), window.h.saturating_as::<u32>());
-                // A zoomed video fills its window; otherwise the picture is letterboxed in the visible part of mpv's window.
-                let mut picture = if tile.zoom.as_ref().is_some_and(ZoomState::is_active) {
-                    fitted_picture(size, 0.0)
-                } else {
-                    fitted_picture(size, tile.aspect)
-                };
-                picture.x += i64::from(window.x - placement.frame.x);
-                picture.y += i64::from(window.y - placement.frame.y);
-                place_bar(picture, dpi).map(|geometry| VolumeOverlayState::new(view, geometry))
-            })
-            .collect();
-        for (tile, wanted) in self.tiles.iter_mut().zip(wanted) {
-            let Some(video) = tile.video.as_mut() else {
-                continue;
-            };
-            if video.volume_overlay == wanted {
-                continue;
-            }
-            if let Some(state) = wanted {
-                // When mpv does not take it (no picture yet) the next frame tries again.
-                video.volume_overlay = volume_overlay::show(&video.player, &state).then_some(state);
-            } else {
-                volume_overlay::hide(&video.player);
-                video.volume_overlay = None;
-            }
-        }
+        let view = self.volume_feedback.view(tile.key, now)?;
+        let (window, content) = (self.video_placement(index)?.window, self.host_content(index)?);
+        let size = (window.w.saturating_as::<u32>(), window.h.saturating_as::<u32>());
+        let aspect = if tile.zoom.as_ref().is_some_and(ZoomState::is_active) {
+            0.0
+        } else {
+            tile.aspect
+        };
+        let mut picture = fitted_picture(size, aspect);
+        picture.x += i64::from(window.x - content.x);
+        picture.y += i64::from(window.y - content.y);
+        let geometry = place_bar(picture, self.host.surface.dpi)?;
+        Some(VolumeBarTileView {
+            rect: Rect::new(
+                geometry.rect.x.saturating_as::<i32>(),
+                geometry.rect.y.saturating_as::<i32>(),
+                geometry.rect.w.saturating_as::<i32>(),
+                geometry.rect.h.saturating_as::<i32>(),
+            ),
+            gap: geometry.gap.saturating_as::<i32>(),
+            share: view.volume.share(),
+            icon: view.volume.icon(),
+            muted: view.volume.muted,
+            alpha: view.alpha,
+        })
     }
 }

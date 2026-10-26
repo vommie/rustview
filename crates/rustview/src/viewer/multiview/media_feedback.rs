@@ -5,8 +5,8 @@
 //! A tile gets a pulse: an icon in its middle ([`FeedbackIcon`], [`ICON_EDGE`] logical pixels), full strength for [`HOLD`], then
 //! fading out for [`FADE`] (one second in all). A new pulse cancels the running one of the tile at once: the new icon starts at
 //! full strength, with no cross-fade and no queue. Nothing here keeps time by itself: the host asks `wakeup` how long it may sleep
-//! and arms a single-shot timer only while a pulse is visible. An image tile draws the icon itself (`TileView::feedback`), a video
-//! tile gets it from mpv (`feedback_overlay`).
+//! and arms a single-shot timer only while a pulse is visible. The canvas of the host draws the icon over every tile, picture or
+//! video (`TileView::feedback`).
 
 use super::follow::TileKey;
 use std::collections::HashMap;
@@ -46,7 +46,7 @@ impl FeedbackIcon {
 
 /// `FeedbackIcon::Saved` for the canvas.
 pub const SAVED_CODE: i32 = 6;
-/// `FeedbackIcon::Sound` (only ever on a video tile, so only mpv draws it).
+/// `FeedbackIcon::Sound` (only ever on a video tile).
 pub const SOUND_ON_CODE: i32 = 7;
 pub const SOUND_OFF_CODE: i32 = 8;
 
