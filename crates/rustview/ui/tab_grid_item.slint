@@ -249,13 +249,14 @@ export component TabGridItemView inherits Rectangle {
                 height: 100%;
             }
 
-            // The pause badge of a single video (the canvas above draws its picture); its small control bar replaces it.
+            // The pause badge of a single video (the canvas above draws its picture), bottom left: the time badge of the canvas has the
+            // bottom right corner. Its small control bar replaces both.
             if root.item.is-video && root.item.error-message == "" && !root.away && root.item.mv-video-bars.length == 0 : Rectangle {
                 width: 100%;
                 height: 100%;
 
                 Rectangle {
-                    x: parent.width - 24px;
+                    x: 4px;
                     y: parent.height - 20px;
                     width: 20px;
                     height: 16px;

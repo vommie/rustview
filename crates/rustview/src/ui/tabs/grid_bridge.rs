@@ -111,6 +111,7 @@ impl BridgeTabGrid {
                 // Its own statement: a lock taken inside the struct literal below would be held until the whole literal is
                 // built, and `tab_icon` takes the same lock again (the tab grid hung as soon as a tab was open).
                 let has_unsaved = s.multiview.instance.lock().has_unsaved_edits();
+                let instance_id = s.multiview.instance.lock().id();
                 let (width, height) = s.display_size();
                 let multiview_item: GridItemView =
                     grid_host.place(&s.multiview.instance, canvas_rect(r, p_h, p_v, scroll_y));
@@ -136,8 +137,8 @@ impl BridgeTabGrid {
                     mv_tiles: ModelRc::new(VecModel::from(multiview_item.tiles)),
                     mv_gutters: ModelRc::new(VecModel::from(multiview_item.gutters)),
                     mv_screen: multiview_item.screen,
-                    mv_video_bars: crate::ui::multiview::grid_bars::model_for(s.multiview.instance.lock().id()),
-                    mv_time_badges: crate::ui::multiview::grid_bars::badges_for(s.multiview.instance.lock().id()),
+                    mv_video_bars: crate::ui::multiview::grid_bars::model_for(instance_id),
+                    mv_time_badges: crate::ui::multiview::grid_bars::badges_for(instance_id),
                     x: r.x,
                     y: r.y,
                     width: r.width,

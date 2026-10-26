@@ -61,3 +61,35 @@ fn row(target: &TimeBadgeTarget, dpi: f32) -> MultiviewTimeBadgeView {
         margin: MULTIVIEW_TIME_BADGE_MARGIN_LOGICAL_PX,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::viewer::multiview::layout::Rect;
+
+    fn target(key: TileKey, text: &str) -> TimeBadgeTarget {
+        TimeBadgeTarget {
+            key,
+            rect: Rect::new(20, 10, 400, 200),
+            text: text.to_owned(),
+        }
+    }
+
+    #[test]
+    fn rows_follow_the_targets_and_change_in_place() {
+        let mut badges = TimeBadgeModel::default();
+        let model = badges.model();
+        badges.sync(&[target(1, "0:01 / 0:08"), target(2, "0:02 / 0:08")], 2.0);
+        assert_eq!(model.row_count(), 2);
+        let first = model.row_data(0).unwrap();
+        assert_eq!((first.x, first.y, first.width, first.height), (10.0, 5.0, 200.0, 100.0));
+        badges.sync(&[target(1, "0:03 / 0:08"), target(2, "0:02 / 0:08")], 2.0);
+        assert_eq!(model.row_data(0).unwrap().text, "0:03 / 0:08");
+        // A small bar took the place of the first badge.
+        badges.sync(&[target(2, "0:02 / 0:08")], 2.0);
+        assert_eq!(model.row_count(), 1);
+        assert_eq!(model.row_data(0).unwrap().key, 2);
+        badges.clear();
+        assert_eq!(model.row_count(), 0);
+    }
+}
