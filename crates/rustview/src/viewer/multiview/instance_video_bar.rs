@@ -172,13 +172,16 @@ impl MultiviewInstance {
                 let secs = ProgressTrack::new(player.playback().duration, 0.0).time_at(share);
                 let precision = prefs.seek.seek_for(phase);
                 let exact = precision.map(|p| p == SeekPrecision::Exact);
-                video
+                let seeks = video
                     .bar
                     .seek_to(share, secs, Instant::now(), phase == DragPhase::Release, exact);
                 if phase != DragPhase::Move {
-                    tracing::debug!(media_id, ?phase, ?precision, secs, "[Multiview: VideoBar] Seek");
+                    tracing::debug!(media_id, ?phase, ?precision, seeks, secs, "[Multiview: VideoBar] Seek");
                 }
-                precision.map_or(Ok(()), |precision| player.seek_to(secs, precision))
+                match precision {
+                    Some(precision) if seeks => player.seek_to(secs, precision),
+                    _ => Ok(()),
+                }
             }
             VideoBarInput::Hover { share } => {
                 video.bar.set_hover(share);

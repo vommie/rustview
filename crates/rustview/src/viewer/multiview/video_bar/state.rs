@@ -32,6 +32,8 @@ pub struct VideoBarState {
     drag: Option<f32>,
     /// The time of the last seek, until when the bar shows it instead of mpv's position, and how close mpv has to come.
     pending_seek: Option<PendingSeek>,
+    /// Where on the bar the last seek of the running press went (a release there needs no second seek).
+    seeked_share: Option<f32>,
     /// The volume slider is dragged.
     volume_drag: bool,
     /// The pointer is over the progress bar: where, as a share of the bar.
@@ -63,20 +65,34 @@ impl VideoBarState {
     }
 
     /// The progress bar is pressed or dragged to `share` (`released`: let go there). `seek` is how the video goes to `secs`
-    /// (`None`: it does not seek for this step, `Some(true)`: exactly).
-    pub fn seek_to(&mut self, share: f32, secs: f64, now: Instant, released: bool, seek: Option<bool>) {
-        self.drag = (!released).then_some(share.clamp(0.0, 1.0));
-        if let Some(exact) = seek {
-            self.pending_seek = Some(PendingSeek {
-                target: secs,
-                until: now + SEEK_SETTLE,
-                arrived_within: if exact {
-                    SEEK_ARRIVED_SECS
-                } else {
-                    KEYFRAME_SEEK_ARRIVED_SECS
-                },
-            });
+    /// (`None`: it does not seek for this step, `Some(true)`: exactly). Returns whether the video has to seek: not when the
+    /// step makes none, and not when the release is where the last seek of this press already went (a plain click), since
+    /// a second seek to the same place while the video plays sends it back by the frames it played in between.
+    pub fn seek_to(&mut self, share: f32, secs: f64, now: Instant, released: bool, seek: Option<bool>) -> bool {
+        let share = share.clamp(0.0, 1.0);
+        self.drag = (!released).then_some(share);
+        let last = if released {
+            self.seeked_share.take()
+        } else {
+            self.seeked_share
+        };
+        let repeated = released && last.is_some_and(|last| (last - share).abs() < f32::EPSILON);
+        let Some(exact) = seek.filter(|_| !repeated) else {
+            return false;
+        };
+        if !released {
+            self.seeked_share = Some(share);
         }
+        self.pending_seek = Some(PendingSeek {
+            target: secs,
+            until: now + SEEK_SETTLE,
+            arrived_within: if exact {
+                SEEK_ARRIVED_SECS
+            } else {
+                KEYFRAME_SEEK_ARRIVED_SECS
+            },
+        });
+        true
     }
 
     /// The position the bar shows: the target of a seek until mpv is there (or gives up), else mpv's.
@@ -122,6 +138,7 @@ impl VideoBarState {
     /// The bar went away (its host does not show it): a drag or hover that was on it is over.
     pub fn release(&mut self) {
         self.drag = None;
+        self.seeked_share = None;
         self.volume_drag = false;
         self.hover = None;
         self.ab.release();
@@ -184,6 +201,57 @@ mod tests {
         assert!(
             (state.shown_position(56.0, t0) - 56.0).abs() < f64::EPSILON,
             "the keyframe before the target counts"
+        );
+    }
+
+    #[test]
+    fn a_click_seeks_once_and_a_drag_seeks_again_on_release_only_where_it_moved() {
+        let t0 = Instant::now();
+        let mut state = VideoBarState::default();
+        assert!(state.seek_to(0.3, 27.0, t0, false, Some(true)), "the press seeks");
+        state.seek_to(0.3, 27.0, t0, false, None);
+        assert!(
+            (state.shown_position(27.1, t0) - 27.0).abs() < f64::EPSILON,
+            "held: the target shows"
+        );
+        assert!(
+            !state.seek_to(0.3, 27.0, t0 + Duration::from_millis(120), true, Some(true)),
+            "a release where the press went does not seek a second time"
+        );
+        assert!(!state.dragging());
+        assert!(
+            (state.shown_position(27.1, t0 + Duration::from_millis(150)) - 27.1).abs() < f64::EPSILON,
+            "mpv arrived"
+        );
+        assert!(
+            (state.shown_position(27.5, t0 + Duration::from_millis(500)) - 27.5).abs() < f64::EPSILON,
+            "playback goes on from there"
+        );
+
+        assert!(state.seek_to(0.3, 27.0, t0, false, Some(true)));
+        assert!(
+            state.seek_to(0.5, 45.0, t0, false, Some(true)),
+            "a step of the drag seeks"
+        );
+        assert!(
+            !state.seek_to(0.5, 45.0, t0, true, Some(true)),
+            "released where the drag last went"
+        );
+
+        assert!(state.seek_to(0.3, 27.0, t0, false, Some(true)));
+        assert!(!state.seek_to(0.5, 45.0, t0, false, None), "a step that makes no seek");
+        assert!(
+            state.seek_to(0.5, 45.0, t0, true, Some(true)),
+            "released away from the last seek"
+        );
+
+        assert!(
+            !state.seek_to(0.5, 45.0, t0, true, None),
+            "a release that makes no seek"
+        );
+        assert!(
+            state.seek_to(0.5, 45.0, t0, false, Some(true)),
+            "a new press seeks again, even to the same place"
         );
     }
 

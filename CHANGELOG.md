@@ -13,10 +13,6 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 - **mpv shows and takes nothing of its own in RustView's videos**: no OSD bars, seek or status messages of mpv (also when your
   mpv.conf asks for them, for example `osd-level=3`), and no key bindings of mpv or your input.conf (RustView handles every key
   and click over a video anyway). Your mpv.conf otherwise applies as before (languages, cache, decoding).
-
-### Removed
-- The switch "Show the script's messages in the video" (Settings > Multiview > mpv script ab_repeat.lua): the script shows no
-  messages in RustView's videos any more, the control bar shows what happens. mpv itself is not changed.
 - **Videos no longer ask mpv for their state 50 times a second**: every player is told by mpv when its time, pause state,
   volume, mute or picture size changes and otherwise sleeps. A paused video tab now costs about 0.3 % of a CPU core instead of
   5 %.
@@ -29,7 +25,13 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   script-opts other than the A-B script's message switch are kept now.
 - A fresh crop tool covers the whole picture: dragging inside it now draws a new rectangle (before, nothing happened).
 
+### Removed
+- The switch "Show the script's messages in the video" (Settings > Multiview > mpv script ab_repeat.lua): the script shows no
+  messages in RustView's videos any more, the control bar shows what happens. mpv itself is not changed.
+
 ### Fixed
+- A click on the progress bar of a playing video no longer makes the picture jump back and forth for a moment: the click seeks
+  once instead of once on press and again on release.
 - **A video that cannot be played shows why**: instead of an empty black tile, the tile shows a warning icon and mpv's reason
   where the video would be (for example "avformat_open_input() failed (unrecognized file format)"); also when mpv stops by itself.
   A refresh (F5) tries the file again.
