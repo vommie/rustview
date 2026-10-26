@@ -2,7 +2,10 @@
 //! through the render API into a texture of the Slint window, and `RustView` handles every key, click and wheel over a video,
 //! draws the control bar and its messages, and drives mpv with commands (`mpv_command` never shows mpv's OSD). The user's
 //! `mpv.conf` and scripts are loaded (the script `ab_repeat.lua` is part of the player, `docs/mpv_ab_repeat.md`); what in them
-//! would collide with `RustView`'s own interface is set back after the configuration was read (`after_init`).
+//! would collide with `RustView`'s own interface is set back after the configuration was read (`after_init`): mpv shows nothing
+//! of its own over a video but the messages of scripts (the A-B script's follow Settings > Multiview), and takes no input
+//! (user decisions 2026-10-26, questionnaire `2026-10-26-rustview-mpv-einstellungen`; the cache and everything else of the
+//! user's `mpv.conf` stay as configured).
 
 use super::ab_repeat;
 use libmpv2::{Mpv, MpvInitializer};
@@ -18,6 +21,29 @@ const UNUSED_BUILTIN_SCRIPTS: [&str; 6] = [
     "load-context-menu",
 ];
 
+/// What `RustView` always sets, also over the user's `mpv.conf` (set before and again after `mpv_initialize`).
+const FORCED: [(&str, &str); 12] = [
+    // mpv's own OSD: no bars, no seek or playing messages, no permanent status line (`osd-level` 2 and 3) and no fixed
+    // message (`osd-msg1`); level 1 keeps the messages scripts show (`show-text`).
+    ("osd-level", "1"),
+    ("osd-bar", "no"),
+    ("osd-on-seek", "no"),
+    ("osd-playing-msg", ""),
+    ("osd-msg1", ""),
+    // No input of its own: no built-in or input.conf key bindings (scripts' forced bindings and `script-message` stay), no
+    // keyboard, pointer, terminal or media keys.
+    ("input-default-bindings", "no"),
+    ("input-vo-keyboard", "no"),
+    ("input-cursor", "no"),
+    ("input-terminal", "no"),
+    ("input-media-keys", "no"),
+    // No on-screen controller: RustView draws a control bar of its own (`viewer::multiview::video_bar`); `osc=yes` in mpv.conf
+    // would load mpv's controller again, which never sees the pointer but runs.
+    ("osc", "no"),
+    // Local files only: the youtube-dl hook would start a script in every player for nothing.
+    ("ytdl", "no"),
+];
+
 /// Options set before `mpv_initialize` (the user's `mpv.conf` is read afterwards and may override them).
 pub(super) fn before_init(init: &MpvInitializer) {
     let set = |name: &str, value: &str| {
@@ -31,8 +57,12 @@ pub(super) fn before_init(init: &MpvInitializer) {
     // Playback lifecycle: a finished video stays on its last frame, a player without a file waits.
     set("keep-open", "yes");
     set("idle", "yes");
-    // No on-screen controller: RustView draws a control bar of its own (`viewer::multiview::video_bar`).
-    set("osc", "no");
+    for (name, value) in FORCED {
+        set(name, value);
+    }
+    // Only read at the start: the built-in bindings are never loaded, and the user's input.conf is replaced by an empty one.
+    set("input-builtin-bindings", "no");
+    set("input-conf", "memory://");
     // The user's configuration and scripts (`ab_repeat.lua`); conditional profiles only load their script when there are any.
     set("config", "yes");
     set("load-scripts", "yes");
@@ -40,8 +70,6 @@ pub(super) fn before_init(init: &MpvInitializer) {
     for script in UNUSED_BUILTIN_SCRIPTS {
         set(script, "no");
     }
-    // Local files only: the youtube-dl hook would start a script in every player for nothing.
-    set("ytdl", "no");
 
     if let Some(config_dir) = super::self_test::user_config_dir() {
         set("config-dir", config_dir.to_string_lossy().as_ref());
@@ -54,16 +82,22 @@ pub(super) fn before_init(init: &MpvInitializer) {
 
 /// Sets back what the user's `mpv.conf` changed and `RustView` cannot allow, once the configuration was read.
 pub(super) fn after_init(mpv: &Mpv) {
-    // `osc=yes` in mpv.conf loads mpv's controller again, which never sees the pointer but runs; setting it now unloads it.
-    if mpv.get_property::<bool>("osc").unwrap_or(false) {
-        match mpv.set_property("osc", false) {
-            Ok(()) => tracing::info!(
-                "[MpvPlayer: Init] mpv's on-screen controller switched off again (the user's mpv.conf had it on)"
-            ),
-            Err(e) => {
-                tracing::warn!(error = ?e, "[MpvPlayer: Init] mpv's on-screen controller could not be switched off");
+    let mut overridden = Vec::new();
+    for (name, value) in FORCED {
+        if mpv.get_property::<String>(name).is_ok_and(|current| current != value) {
+            match mpv.set_property(name, value) {
+                Ok(()) => overridden.push(name),
+                Err(e) => {
+                    tracing::warn!(option = name, error = ?e, "[MpvPlayer: Init] mpv did not take an option back")
+                }
             }
         }
+    }
+    if !overridden.is_empty() {
+        tracing::info!(
+            options = ?overridden,
+            "[MpvPlayer: Init] Options of the user's mpv configuration set back to RustView's"
+        );
     }
     ab_repeat::apply_script_opts(mpv);
 }
