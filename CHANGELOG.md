@@ -9,6 +9,8 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-26
+
 ### Added
 - **A-B repeats of the mpv script ab_repeat.lua in the control bar of videos**: when your mpv script ab_repeat.lua (version 2.0
   with its interface) runs in a video's player, the control bar gets an A-B group in a capsule after the remaining time: set A,
@@ -950,7 +952,8 @@ First usable version: the application skeleton grew into a working media browser
 ### Added
 - Initial commit of the project.
 
-[Unreleased]: https://github.com/vommie/rustview/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/vommie/rustview/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/vommie/rustview/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/vommie/rustview/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/vommie/rustview/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/vommie/rustview/compare/v0.3.86...v0.4.0
