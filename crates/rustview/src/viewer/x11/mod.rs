@@ -23,7 +23,7 @@ pub use windows::{
     get_slint_window_xid_with_title_fallback,
 };
 pub use wm_state::{
-    force_x11_fullscreen, force_x11_fullscreen_on_monitor, force_x11_maximized, is_x11_window_maximized,
-    set_x11_initial_maximized, x11_root_size,
+    force_x11_fullscreen, force_x11_fullscreen_on_monitor, force_x11_maximized, is_x11_window_fullscreen,
+    is_x11_window_maximized, set_x11_initial_maximized, x11_root_size,
 };
 pub use xdnd::{XdndOutcome, drop_on_window_under_pointer};

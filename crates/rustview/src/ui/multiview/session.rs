@@ -22,7 +22,6 @@ use crate::viewer::multiview::instance::{MultiviewInstance, SharedInstance};
 use crate::viewer::multiview::route::{HostMode, UiAction};
 use crate::viewer::video_surface::FULLSCREEN_WINDOW;
 use crate::viewer::{TabId, ViewerTabManager};
-use crate::viewer::{force_x11_fullscreen_on_monitor, get_raw_window_xid};
 use parking_lot::RwLock;
 use rustview_core::settings::SettingsManager;
 use rustview_core::settings::schema::{
@@ -68,6 +67,7 @@ pub(super) struct Session {
     /// Source of the live selection; only a Multiview opened from the Browse view follows it.
     pub(super) state: Option<Arc<RwLock<UiState>>>,
     pub(super) monitor: MonitorInfo,
+    /// The window's XID for the pointer lock of the minimap drag; 0 on native Wayland (the lock falls back).
     pub(super) fs_xid: u64,
     pub(super) instance: SharedInstance,
     pub(super) tab_return: Option<TabReturn>,
@@ -420,16 +420,15 @@ fn launch(
     true
 }
 
-/// Waits for the native window handle (it appears shortly after `show()`), then builds the tiles.
+/// Waits for the window's handle (it appears shortly after `show()`), then builds the tiles.
 fn finish_open(generation: u64, attempt: u32) {
     if session_generation() != Some(generation) {
         return;
     }
-    let xid = window_weak()
+    let handle = window_weak()
         .and_then(|w| w.upgrade())
-        .and_then(|w| get_raw_window_xid(w.window()))
-        .unwrap_or(0);
-    if xid == 0 {
+        .and_then(|w| super::fullscreen_mode::native_handle(w.window()));
+    let Some(xid) = handle else {
         if attempt >= MULTIVIEW_OPEN_XID_ATTEMPTS {
             tracing::error!(
                 attempt,
@@ -442,7 +441,7 @@ fn finish_open(generation: u64, attempt: u32) {
             });
         }
         return;
-    }
+    };
     with_session(|s| s.populate(xid));
 }
 
@@ -605,15 +604,16 @@ impl Session {
         }
     }
 
-    /// Builds the tiles once the native window exists: positions it on the target monitor, lays the tiles out, starts
+    /// Builds the tiles once the window exists: puts it into the fullscreen on the target monitor, lays the tiles out, starts
     /// every video and decodes the images in the background.
     pub(super) fn populate(&mut self, xid: u64) {
         if self.populated {
             return;
         }
         self.fs_xid = xid;
-        let mon = &self.monitor;
-        force_x11_fullscreen_on_monitor(xid, mon.index, mon.x, mon.y, mon.width, mon.height);
+        if let Some(win) = self.window.upgrade() {
+            super::fullscreen_mode::enter(&win, xid, &self.monitor);
+        }
         let Some(surface) = self.host_surface() else {
             return;
         };

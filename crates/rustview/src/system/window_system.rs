@@ -2,8 +2,9 @@
 //! window exists.
 //!
 //! In a Wayland session `RustView` runs as an X11 program through `XWayland` (user decision 2026-10-25, `docs/rendering.md`): the
-//! X11 features (dialogs that belong to their window, dragging files to other programs, the pointer lock) exist only there
-//! (videos and bars are drawn by Slint since `video-in-slint` M1-M3; native Wayland becomes the default after M7). Every place
+//! X11 features (dialogs that belong to their window, dragging files to other programs, the pointer lock) exist only there.
+//! Videos and everything over them are drawn by Slint since `video-in-slint`, so native Wayland shows them too; it becomes the
+//! default after the joint test of M7 (`docs/video_in_slint/WAYLAND.md`). Every place
 //! that depends on the window system (the clipboard tool, drag and drop, the logs) asks [`current`] instead of reading the
 //! environment, which says "Wayland" while the windows are X11 windows.
 
@@ -104,7 +105,7 @@ fn log_decision(decision: &Decision) {
             tracing::warn!(
                 window_system,
                 why,
-                "[Startup: WindowSystem] RustView runs on native Wayland: videos are not shown and the X11 features degrade"
+                "[Startup: WindowSystem] RustView runs on native Wayland: the X11 features (dialog parents, dragging files out, the pointer lock) degrade"
             );
         }
         Choice::NoDisplay => tracing::warn!(

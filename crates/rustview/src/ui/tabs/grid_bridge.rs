@@ -173,7 +173,7 @@ impl BridgeTabGrid {
     ) {
         tracing::info!(tab_id, "[TabGrid: LeftClick] Opening selected tab in Tab Viewer mode");
 
-        // Hide all other video subwindows that were mapped on TabGrid tiles
+        // Pause the videos of every other tab shown in the grid
         tab_manager.deactivate_tabs_except(Some(tab_id));
 
         state.write().tab_selection.click_plain(tab_id);

@@ -1,7 +1,7 @@
 import { Theme } from "styles.slint";
 import { AppIcon, IconId, IconSize } from "icons.slint";
 
-/// The stand-in for a video whose player is in the fullscreen window right now (a native mpv window cannot be in two places, so the
+/// The stand-in for a video whose player is in the fullscreen window right now (its video is drawn in the fullscreen window's GL context and cannot be in two places, so the
 /// item would otherwise show an empty black area): a discreet badge with a "shown elsewhere" icon, and a caption where there is room.
 export component AwayBadge inherits Rectangle {
     background: #000000;

@@ -24,7 +24,7 @@ pub use types::{MULTIVIEW_TAB_MEDIA_ID, MediaTabSession, MpvPlaybackState, Multi
 pub use x11::{
     PointerWarp, find_window_by_pid_and_title, find_window_by_title, force_x11_fullscreen,
     force_x11_fullscreen_on_monitor, force_x11_maximized, get_raw_window_xid, get_slint_window_xid,
-    get_slint_window_xid_with_title_fallback, install_nonfatal_error_handler, is_x11_window_maximized,
-    request_x11_modal_state, set_x11_dialog_parent, set_x11_initial_maximized, x11_display_answers, x11_root_size,
-    x11_server_facts,
+    get_slint_window_xid_with_title_fallback, install_nonfatal_error_handler, is_x11_window_fullscreen,
+    is_x11_window_maximized, request_x11_modal_state, set_x11_dialog_parent, set_x11_initial_maximized,
+    x11_display_answers, x11_root_size, x11_server_facts,
 };

@@ -9,6 +9,7 @@ mod commands;
 pub mod cursor;
 pub mod eligibility;
 mod feedback;
+mod fullscreen_mode;
 pub mod grid_bars;
 pub mod grid_host;
 pub mod handle;

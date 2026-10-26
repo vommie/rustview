@@ -406,7 +406,9 @@ fn window_system_check(display: &DisplayFacts) -> Check {
             "window_system",
             Status::Warning,
             "Native Wayland",
-            format!("videos cannot be shown and the features of X11 are missing{reason}"),
+            format!(
+                "videos work; dialogs are not tied to their window, files cannot be dragged to other programs, the minimap drag has no pointer lock{reason}"
+            ),
         ),
         WindowSystemKind::NoDisplay => health(
             "window_system",

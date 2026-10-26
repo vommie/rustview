@@ -26,13 +26,24 @@ pub(super) fn set_atom_list(session: &Session, window: Window, property: Atom, a
 }
 
 pub fn is_x11_window_maximized(window_xid: u64) -> Option<bool> {
+    has_x11_states(
+        window_xid,
+        "the maximized check",
+        ["_NET_WM_STATE_MAXIMIZED_VERT", "_NET_WM_STATE_MAXIMIZED_HORZ"],
+    )
+}
+
+/// Whether the window manager shows the window in the fullscreen state (`_NET_WM_STATE_FULLSCREEN`); `None` without X11.
+pub fn is_x11_window_fullscreen(window_xid: u64) -> Option<bool> {
+    has_x11_states(window_xid, "the fullscreen check", ["_NET_WM_STATE_FULLSCREEN"])
+}
+
+/// Whether `_NET_WM_STATE` of the window holds every one of `names`.
+fn has_x11_states<const N: usize>(window_xid: u64, purpose: &str, names: [&str; N]) -> Option<bool> {
     let window = u32::try_from(window_xid).ok().filter(|&xid| xid != 0)?;
-    let session = Session::open("the maximized check").ok()?;
-    let [state, vert, horz] = session.atoms([
-        "_NET_WM_STATE",
-        "_NET_WM_STATE_MAXIMIZED_VERT",
-        "_NET_WM_STATE_MAXIMIZED_HORZ",
-    ])?;
+    let session = Session::open(purpose).ok()?;
+    let [state] = session.atoms(["_NET_WM_STATE"])?;
+    let wanted = session.atoms(names)?;
     let reply = session
         .conn
         .get_property(false, window, state, AtomEnum::ANY, 0, 1024)
@@ -40,7 +51,7 @@ pub fn is_x11_window_maximized(window_xid: u64) -> Option<bool> {
         .reply()
         .ok()?;
     let atoms: Vec<u32> = reply.value32().map(Iterator::collect).unwrap_or_default();
-    Some(atoms.contains(&vert) && atoms.contains(&horz))
+    Some(wanted.iter().all(|atom| atoms.contains(atom)))
 }
 
 /// Size of the X screen (the root window, i.e. all monitors together) in pixels. One short connection, no subprocess; `None`
