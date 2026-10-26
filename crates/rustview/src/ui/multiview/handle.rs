@@ -2,7 +2,6 @@
 //! the rest of the application holds: open/close requests, the F2 rename target and the "is a Multiview open" flag that the
 //! drag-and-drop lock, dialogs and the tab embedding ask about.
 
-use super::bar_overlay::{self, BarKind};
 use super::eligibility;
 use super::navigation;
 use super::session::{self, Session, TabReturn};
@@ -378,12 +377,10 @@ impl MultiviewHandle {
         );
     }
 
-    /// The application exits: the fullscreen (pinned or not) and the windows of both action bars are closed.
-    /// UI thread only.
+    /// The application exits: the fullscreen closes (pinned or not) and the tab view lets go of its Multiview. UI thread only.
     pub fn shutdown(&self) {
         session::shutdown();
         super::tab_host::shutdown();
-        super::bar_overlay::shutdown();
     }
 
     /// Closes the Multiview without the close handler because another fullscreen replaces it. UI thread only.
@@ -446,7 +443,7 @@ impl MultiviewHandle {
     /// The "Open With" button of a tile: the drop-down with the applications of the medium opens below the bar, or closes if
     /// it is open. The applications are looked up now, on the click, never while the bar is merely shown. UI thread only.
     pub(super) fn toggle_open_with(&self, media_id: MediaId) {
-        if bar_overlay::close_clicked_menu(BarKind::Media) {
+        if super::action_bar::close_clicked_menu() {
             return;
         }
         let Some((app, _)) = self.app_and_window() else {
@@ -457,11 +454,7 @@ impl MultiviewHandle {
             return;
         };
         let apps = MediaOpenWith::discover_apps(&app.state, &path);
-        bar_overlay::open_menu(
-            BarKind::Media,
-            MediaActionId::OpenWith.code(),
-            &MediaOpenWith::menu_items(&apps),
-        );
+        super::action_bar::open_menu(MediaActionId::OpenWith.code(), &MediaOpenWith::menu_items(&apps));
     }
 
     /// An item of the "Open With" drop-down was chosen: the medium is opened with that application, or the native chooser

@@ -2,7 +2,7 @@
 //! the single-shot timer of the Save button (its fade after a save) and the edit actions that need the application (saving,
 //! the drop-down of the Save button).
 
-use super::bar_overlay::{self, BarKind};
+use super::action_bar;
 use super::handle::MultiviewHandle;
 use super::{router, session, tab_host};
 use crate::ctx_menu::CtxMenuItem;
@@ -108,7 +108,7 @@ impl MultiviewHandle {
 
     /// The arrow of the Save button: its drop-down opens (Save, Save As..., Discard Changes), or closes when it is open.
     pub(super) fn toggle_save_menu() {
-        if bar_overlay::close_clicked_menu(BarKind::Media) {
+        if action_bar::close_clicked_menu() {
             return;
         }
         let item = |entry: SaveMenuItem, text: &str, icon: Icon| {
@@ -119,6 +119,6 @@ impl MultiviewHandle {
             item(SaveMenuItem::SaveAs, "Save As...", Icon::SaveAs),
             item(SaveMenuItem::Discard, "Discard Changes", Icon::DiscardChanges),
         ];
-        bar_overlay::open_menu(BarKind::Media, MediaActionId::Save.code(), &items);
+        action_bar::open_menu(MediaActionId::Save.code(), &items);
     }
 }

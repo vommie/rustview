@@ -180,18 +180,15 @@ pub struct HostedView {
     pub navigation: Navigation,
 }
 
-/// The hover bar a host may show: the tile the pointer is on, where that tile is in the host window (physical pixels),
-/// the pointer (host window coordinates) and the buttons the tile offers. The bar only appears while the pointer is
-/// within `reveal_distance_px` (logical pixels) of the place where it would be.
+/// A media bar the canvas of the host draws: the tile it belongs to, its place relative to the canvas (physical pixels) and the
+/// buttons of the tile.
 pub struct MediaBarTarget {
     pub tile: usize,
-    /// The tile's stable key: the bar window belongs to the tile, not to its place in the row (which changes when media come and go).
+    /// The tile's stable key: the bar belongs to the tile, not to its place in the row (which changes when media come and go).
     pub key: super::follow::TileKey,
-    pub rect: Rect,
+    pub bar: Rect,
     pub actions: Vec<MediaActionView>,
-    pub pointer: Option<(i32, i32)>,
-    pub reveal_distance_px: u32,
-    /// The bar stays whatever the pointer does (the tile has its zoom slider or a menu open), and follows its tile.
+    /// The bar stays whatever the pointer does (the tile has its zoom slider or a drop-down open), and follows its tile.
     pub forced: bool,
 }
 
@@ -207,13 +204,9 @@ pub struct PrimaryActionView {
     pub attention: bool,
 }
 
-/// The primary bar a host may show: the area of the whole Multiview in the host window (physical pixels), the pointer, and
-/// the buttons. The bar appears while the pointer is within `reveal_distance_px` (logical pixels) of its place in the top
-/// left corner of `area`, or while `forced` (it shows itself to give feedback).
+/// The primary bar the canvas of the host draws: its place in the top left corner of the Multiview relative to the canvas
+/// (physical pixels) and its buttons.
 pub struct PrimaryBarTarget {
-    pub area: Rect,
+    pub bar: Rect,
     pub actions: Vec<PrimaryActionView>,
-    pub pointer: Option<(i32, i32)>,
-    pub reveal_distance_px: u32,
-    pub forced: bool,
 }

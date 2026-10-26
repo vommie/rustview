@@ -3,11 +3,11 @@ import { AppIdentity } from "app_identity.slint";
 import { MultiviewTileView, MultiviewGutterView } from "multiview_types.slint";
 import { MultiviewCanvas } from "multiview_canvas.slint";
 import { MultiviewVideoBarView } from "multiview_video_bar.slint";
+import { MultiviewActionBarView } from "multiview_action_bar.slint";
 import { GlobalTooltipLayer } from "global_tooltip_layer.slint";
 
 /// Frameless fullscreen window showing one to four media (Multiview), drawn by the shared `MultiviewCanvas` (videos are the
-/// textures of their render threads, `video-frames`). The
-/// action bar floats above this window in a window of its own (`MultiviewBarWindow`). A single image of a Multiview opened from
+/// textures of their render threads, `video-frames`; the bars and the hint are part of the canvas). A single image of a Multiview opened from
 /// Browse can be browsed with the keys of the keymap and the mouse wheel (`navigation`); a video keeps them for mpv.
 export component MultiviewFullscreenWindow inherits Window {
     title: "RustView - Fullscreen (Multiview)";
@@ -20,6 +20,8 @@ export component MultiviewFullscreenWindow inherits Window {
     in property <[image]> video-frames;
     // The control bars of the videos (their events go to `VideoBarBus`).
     in property <[MultiviewVideoBarView]> video-bars;
+    // The action bars (their events go to `ActionBarBus`).
+    in property <[MultiviewActionBarView]> action-bars;
     // The hint of a key that had nothing to act on (`ui::multiview::hint`).
     in property <string> hint-text;
     in property <bool> hint-shown: false;
@@ -120,6 +122,7 @@ export component MultiviewFullscreenWindow inherits Window {
         gutters: root.gutters;
         video-frames: root.video-frames;
         video-bars: root.video-bars;
+        action-bars: root.action-bars;
         hint-text: root.hint-text;
         hint-shown: root.hint-shown;
         wheel-navigation: root.navigation != 0;
@@ -197,6 +200,6 @@ export component MultiviewFullscreenWindow inherits Window {
         }
     }
 
-    // The tooltips of the control bars (A-B buttons, the rows of the load menu).
+    // The tooltips of the bars.
     GlobalTooltipLayer {}
 }

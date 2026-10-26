@@ -1,6 +1,6 @@
 //! The colors of saved ranges (playbar and load menu): every range keeps its color while `RustView` runs, whatever is deleted
-//! or added around it, and in every player that shows the file. A color is an index into the palette of the control bar window
-//! (`ui/multiview_video_bar_window.slint`); yellow is reserved for the active A-B and is not in it.
+//! or added around it, and in every player that shows the file. A color is an index into the palette of the control bar
+//! (`ui/multiview_video_bar.slint`); yellow is reserved for the active A-B and is not in it.
 
 use super::protocol::SavedRange;
 use parking_lot::Mutex;

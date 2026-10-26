@@ -261,12 +261,12 @@ pub fn navigation_code(navigation: Navigation) -> i32 {
     }
 }
 
-/// The buttons of the primary action bar window.
+/// The buttons of the primary action bar.
 pub fn primary_action_views(actions: &[PrimaryActionView]) -> Vec<MultiviewBarButtonView> {
     actions.iter().map(primary_action_view).collect()
 }
 
-/// The buttons of the media action bar window.
+/// The buttons of the media action bar.
 pub fn action_views(actions: &[MediaActionView]) -> Vec<MultiviewBarButtonView> {
     actions.iter().map(action_view).collect()
 }

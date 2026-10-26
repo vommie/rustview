@@ -1,25 +1,15 @@
-//! Where the floating action bar goes, and what shape its window has (pure).
+//! Where an action bar goes and when it shows (pure).
 //!
-//! The bar lives in a small window of its own that floats above the Multiview window: a native video window is a child
-//! window of the Multiview window, and nothing drawn inside the parent can blend with it, but a window of its own can be
-//! blended with everything below it by the compositing manager. The window is a little larger than the bar so that the
-//! tooltip of a button fits below it; the bar sits in its top right corner, and that corner goes into the top right
-//! corner of the hovered tile. All rectangles are physical pixels on the screen (root window coordinates).
+//! The media bar sits in the top right corner of its tile's room, the primary bar in the top left corner of the Multiview, both
+//! a small margin inside. The canvas draws them (`ui/multiview_action_bar.slint`); the size of a bar follows from its buttons
+//! alone, so it is known here without asking Slint. All rectangles are physical pixels of the host window.
 
 use super::layout::Rect;
-use crate::viewer::XRectangle;
 use rustview_core::settings::schema::{
-    MULTIVIEW_BAR_MARGIN_LOGICAL_PX, MULTIVIEW_OVERLAY_HEIGHT_LOGICAL_PX, MULTIVIEW_OVERLAY_WIDTH_LOGICAL_PX,
+    MULTIVIEW_BAR_ARROW_LOGICAL_PX, MULTIVIEW_BAR_BUTTON_LOGICAL_PX, MULTIVIEW_BAR_INSET_LOGICAL_PX,
+    MULTIVIEW_BAR_MARGIN_LOGICAL_PX, MULTIVIEW_BAR_SPACING_LOGICAL_PX,
 };
-use rustview_core::util::cast::{Az, FloatToInt, SaturatingAs};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct BarPlacement {
-    /// The overlay window.
-    pub window: Rect,
-    /// The bar inside it.
-    pub bar: Rect,
-}
+use rustview_core::util::cast::{Az, FloatToInt};
 
 /// The corner of its area a bar sits in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,61 +18,34 @@ pub enum BarCorner {
     TopLeft,
 }
 
-/// Places the bar (`bar_logical` = its size in logical pixels) in the top right corner of `tile`. `None` if the tile is
-/// too small to carry the bar with its margin: then there is no bar for that tile.
-pub fn place_bar(tile: Rect, bar_logical: (f32, f32), scale: f32) -> Option<BarPlacement> {
-    place_bar_in(BarCorner::TopRight, tile, bar_logical, scale)
+/// The size of a bar with `buttons` buttons, one of them a split button with an arrow of its own when `split` (logical pixels).
+pub fn bar_size_logical(buttons: usize, split: bool) -> (f32, f32) {
+    let count = buttons.az::<f32>();
+    let width = count * MULTIVIEW_BAR_BUTTON_LOGICAL_PX
+        + if split { MULTIVIEW_BAR_ARROW_LOGICAL_PX } else { 0.0 }
+        + (count - 1.0).max(0.0) * MULTIVIEW_BAR_SPACING_LOGICAL_PX
+        + 2.0 * MULTIVIEW_BAR_INSET_LOGICAL_PX;
+    (
+        width,
+        MULTIVIEW_BAR_BUTTON_LOGICAL_PX + 2.0 * MULTIVIEW_BAR_INSET_LOGICAL_PX,
+    )
 }
 
-/// Places a bar in `corner` of `area` (the hovered tile for the media bar, the whole Multiview for the primary bar).
-pub fn place_bar_in(corner: BarCorner, area: Rect, bar_logical: (f32, f32), scale: f32) -> Option<BarPlacement> {
+/// Places a bar of `size_logical` in `corner` of `area` (the room of a tile for the media bar, the whole Multiview for the primary
+/// bar). `None` if the area is too small to carry the bar with its margin: then there is no bar.
+pub fn place_bar(corner: BarCorner, area: Rect, size_logical: (f32, f32), scale: f32) -> Option<Rect> {
     let scale = scale.max(0.5);
     let px = |logical: f32| (logical * scale).round().to_int::<i32>();
     let margin = px(MULTIVIEW_BAR_MARGIN_LOGICAL_PX);
-    let (bar_w, bar_h) = (px(bar_logical.0), px(bar_logical.1));
+    let (bar_w, bar_h) = (px(size_logical.0), px(size_logical.1));
     if bar_w <= 0 || bar_h <= 0 || area.w < bar_w + 2 * margin || area.h < bar_h + 2 * margin {
         return None;
     }
-    let window_w = px(MULTIVIEW_OVERLAY_WIDTH_LOGICAL_PX).max(bar_w);
-    let window_h = px(MULTIVIEW_OVERLAY_HEIGHT_LOGICAL_PX).max(bar_h);
-    let window_x = match corner {
-        BarCorner::TopRight => area.x + area.w - margin - window_w,
+    let x = match corner {
+        BarCorner::TopRight => area.x + area.w - margin - bar_w,
         BarCorner::TopLeft => area.x + margin,
     };
-    let window = Rect::new(window_x, area.y + margin, window_w, window_h);
-    let bar_x = match corner {
-        BarCorner::TopRight => window.x + window_w - bar_w,
-        BarCorner::TopLeft => window.x,
-    };
-    let bar = Rect::new(bar_x, window.y, bar_w, bar_h);
-    Some(BarPlacement { window, bar })
-}
-
-impl BarPlacement {
-    /// The same placement moved by (`dx`, `dy`): from coordinates of the host window to coordinates of the screen.
-    pub fn translated(self, dx: i32, dy: i32) -> Self {
-        let shift = |r: Rect| Rect::new(r.x + dx, r.y + dy, r.w, r.h);
-        Self {
-            window: shift(self.window),
-            bar: shift(self.bar),
-        }
-    }
-}
-
-/// Cheap superset test that needs no bar size: can the pointer be within `reveal_px` (logical pixels) of the bar in `corner`
-/// of `area`? The bar always lies inside the overlay window, which sits in that corner, so the corner region (window size
-/// plus margin plus reveal distance) covers every position from which the bar can be revealed.
-pub fn near_bar_corner(corner: BarCorner, area: Rect, pointer: (i32, i32), scale: f32, reveal_px: u32) -> bool {
-    let scale = scale.max(0.5);
-    let px = |logical: f32| (logical * scale).round().to_int::<i32>();
-    let reveal = px(reveal_px.az::<f32>());
-    let reach_x = px(MULTIVIEW_BAR_MARGIN_LOGICAL_PX + MULTIVIEW_OVERLAY_WIDTH_LOGICAL_PX) + reveal;
-    let reach_y = px(MULTIVIEW_BAR_MARGIN_LOGICAL_PX + MULTIVIEW_OVERLAY_HEIGHT_LOGICAL_PX) + reveal;
-    let in_x = match corner {
-        BarCorner::TopRight => pointer.0 >= area.x + area.w - reach_x,
-        BarCorner::TopLeft => pointer.0 <= area.x + reach_x,
-    };
-    in_x && pointer.1 <= area.y + reach_y
+    Some(Rect::new(x, area.y + margin, bar_w, bar_h))
 }
 
 /// The pointer is on the bar or within `reveal_px` (logical pixels) of its edge.
@@ -91,73 +54,45 @@ pub fn in_reveal_zone(bar: Rect, pointer: (i32, i32), scale: f32, reveal_px: u32
     Rect::new(bar.x - reveal, bar.y - reveal, bar.w + 2 * reveal, bar.h + 2 * reveal).contains(pointer.0, pointer.1)
 }
 
-/// `rect` (relative to its window, so never negative) as the X protocol wants it.
-pub fn xrectangle(rect: Rect) -> XRectangle {
-    XRectangle {
-        x: rect.x.clamp(0, i32::from(i16::MAX)).saturating_as::<i16>(),
-        y: rect.y.clamp(0, i32::from(i16::MAX)).saturating_as::<i16>(),
-        width: rect.w.clamp(1, i32::from(u16::MAX)).saturating_as::<u16>(),
-        height: rect.h.clamp(1, i32::from(u16::MAX)).saturating_as::<u16>(),
-    }
-}
-
-/// `rect` with rounded corners as the list of rectangles the X shape extension wants (one per pixel row of the corners,
-/// plus the straight middle). Used when no compositing manager blends the window: the corners must not show as black.
-pub fn rounded_region(rect: Rect, radius: i32) -> Vec<XRectangle> {
-    let r = radius.clamp(0, rect.w.min(rect.h) / 2);
-    let mut rects = Vec::with_capacity(2 * r.saturating_as::<usize>() + 1);
-    let mut push = |x: i32, y: i32, w: i32, h: i32| {
-        if w > 0 && h > 0 {
-            rects.push(XRectangle {
-                x: x.clamp(i32::from(i16::MIN), i32::from(i16::MAX)).saturating_as::<i16>(),
-                y: y.clamp(i32::from(i16::MIN), i32::from(i16::MAX)).saturating_as::<i16>(),
-                width: w.min(i32::from(u16::MAX)).saturating_as::<u16>(),
-                height: h.min(i32::from(u16::MAX)).saturating_as::<u16>(),
-            });
-        }
-    };
-    for row in 0..r {
-        // Distance of the row's center from the center line of the corner circle, in pixels.
-        let dy = f64::from(r - row) - 0.5;
-        let reach = (f64::from(r * r) - dy * dy).max(0.0).sqrt();
-        let inset = r - reach.round().to_int::<i32>();
-        push(rect.x + inset, rect.y + row, rect.w - 2 * inset, 1);
-        push(rect.x + inset, rect.y + rect.h - 1 - row, rect.w - 2 * inset, 1);
-    }
-    push(rect.x, rect.y + r, rect.w, rect.h - 2 * r);
-    rects
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn rounded_corners_cut_only_the_corner_rows() {
-        let rows = rounded_region(Rect::new(10, 20, 100, 30), 6);
-        let width = |r: &XRectangle| i32::from(r.width);
-        // Per corner row a top and a bottom rectangle, then the middle as one: the outermost rows are the narrowest.
-        assert_eq!(rows.len(), 2 * 6 + 1);
-        assert!(width(&rows[0]) < 100 && width(&rows[0]) == width(&rows[1]));
-        assert!(
-            rows[..12].chunks(2).map(|pair| width(&pair[0])).is_sorted(),
-            "the corner widens toward the middle"
-        );
-        let middle = rows.last().copied().unwrap_or(XRectangle {
-            x: 0,
-            y: 0,
-            width: 0,
-            height: 0,
-        });
-        assert_eq!((middle.x, middle.y, middle.width, middle.height), (10, 26, 100, 18));
-        assert!(
-            rows.iter().all(|r| i32::from(r.x) - 10 == (100 - width(r)) / 2),
-            "symmetric"
+    fn the_size_follows_from_the_buttons() {
+        assert_eq!(bar_size_logical(1, false), (34.0, 34.0));
+        // Three buttons, two gaps, the arrow of the split button.
+        assert_eq!(bar_size_logical(3, true), (3.0 * 28.0 + 16.0 + 2.0 * 2.0 + 6.0, 34.0));
+        assert_eq!(bar_size_logical(0, false), (6.0, 34.0));
+    }
+
+    #[test]
+    fn a_bar_sits_in_its_corner_with_a_margin() {
+        let area = Rect::new(100, 50, 400, 300);
+        let right = place_bar(BarCorner::TopRight, area, (100.0, 34.0), 1.0);
+        assert_eq!(right, Some(Rect::new(100 + 400 - 8 - 100, 58, 100, 34)));
+        let left = place_bar(BarCorner::TopLeft, area, (100.0, 34.0), 2.0);
+        assert_eq!(left, Some(Rect::new(116, 66, 200, 68)));
+    }
+
+    #[test]
+    fn an_area_too_small_carries_no_bar() {
+        assert_eq!(
+            place_bar(BarCorner::TopRight, Rect::new(0, 0, 110, 300), (100.0, 34.0), 1.0),
+            None
         );
         assert_eq!(
-            rounded_region(Rect::new(0, 0, 40, 10), 0).len(),
-            1,
-            "no radius: the plain rectangle"
+            place_bar(BarCorner::TopLeft, Rect::new(0, 0, 400, 40), (100.0, 34.0), 1.0),
+            None
         );
+    }
+
+    #[test]
+    fn the_reveal_zone_reaches_around_the_bar() {
+        let bar = Rect::new(100, 100, 50, 30);
+        assert!(in_reveal_zone(bar, (120, 110), 1.0, 0));
+        assert!(in_reveal_zone(bar, (95, 110), 1.0, 10));
+        assert!(!in_reveal_zone(bar, (85, 110), 1.0, 10));
+        assert!(in_reveal_zone(bar, (85, 110), 2.0, 10), "the distance is logical");
     }
 }

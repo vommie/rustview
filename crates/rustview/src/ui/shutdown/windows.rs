@@ -10,7 +10,6 @@ pub const WINDOWS: &[(&str, &str)] = &[
         "MultiviewFullscreenWindow",
         "MultiviewHandle::shutdown closes the session (pinned or not) and hides the window; Slint destroys it when the event loop ends",
     ),
-    ("MultiviewBarWindow", "bar_overlay::shutdown destroys both bar windows"),
     (
         "SettingsWindow",
         "SettingsDialogController::close; the changes that were not saved are discarded",

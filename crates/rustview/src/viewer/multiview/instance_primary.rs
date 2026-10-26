@@ -3,8 +3,9 @@
 //! fullscreen open and the idle mouse cursor.
 
 use super::audio::{AudioMode, AudioOrigin, TileAudio};
-use super::bar_placement::{BarCorner, near_bar_corner};
+use super::bar_placement::{BarCorner, bar_size_logical, in_reveal_zone, place_bar};
 use super::instance::MultiviewInstance;
+use super::layout::Rect;
 use super::prefs;
 use super::primary_actions::{PrimaryActionId, PrimaryActionSpec, PrimaryBarContext, primary_actions_for};
 use super::route::{HostMode, UiAction};
@@ -69,28 +70,15 @@ impl MultiviewInstance {
         })
     }
 
-    /// The primary bar the host may show now, or `None` while the user switched it off, nothing is on offer, or the pointer
-    /// is nowhere near its corner (unless the bar shows itself to give feedback).
+    /// The primary bar the canvas of the host draws now, or `None` while the user switched it off, nothing is on offer, the
+    /// Multiview is too small for it or the pointer is not within the reveal distance of it (unless the bar shows itself to give
+    /// feedback: a refused close blinks its pin button).
     pub fn primary_bar_target(&self) -> Option<PrimaryBarTarget> {
-        let bar = prefs::current().primary;
-        if !bar.enabled || !matches!(self.host.surface.mode, HostMode::Fullscreen | HostMode::TabView) {
+        let prefs = prefs::current().primary;
+        if !prefs.enabled || !matches!(self.host.surface.mode, HostMode::Fullscreen | HostMode::TabView) {
             return None;
         }
         let now = Instant::now();
-        let forced = self.pulsing(now);
-        let area = self.host.projection.screen();
-        let near = self.pointer.is_some_and(|p| {
-            near_bar_corner(
-                BarCorner::TopLeft,
-                area,
-                p,
-                self.host.surface.dpi,
-                bar.reveal_distance_px,
-            )
-        });
-        if !near && !forced {
-            return None;
-        }
         let blink = self.pin_blink_on(now);
         let actions: Vec<PrimaryActionView> = self
             .primary_specs()
@@ -104,12 +92,20 @@ impl MultiviewInstance {
                 active: spec.active,
             })
             .collect();
-        (!actions.is_empty()).then_some(PrimaryBarTarget {
-            area,
+        if actions.is_empty() {
+            return None;
+        }
+        let scale = self.host.surface.dpi;
+        let area = self.host.projection.screen();
+        let bar = place_bar(BarCorner::TopLeft, area, bar_size_logical(actions.len(), false), scale)?;
+        let revealed = self.pulsing(now)
+            || self
+                .pointer
+                .is_some_and(|p| in_reveal_zone(bar, p, scale, prefs.reveal_distance_px));
+        let origin = (self.host.surface.rect.x, self.host.surface.rect.y);
+        revealed.then(|| PrimaryBarTarget {
+            bar: Rect::new(bar.x - origin.0, bar.y - origin.1, bar.w, bar.h),
             actions,
-            pointer: self.pointer,
-            reveal_distance_px: bar.reveal_distance_px,
-            forced,
         })
     }
 

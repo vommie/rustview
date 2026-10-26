@@ -6,7 +6,6 @@
 //! channel from player threads back to the UI and `view` the Slint-free description a host draws.
 
 pub mod audio;
-pub mod bar_menu;
 pub mod bar_placement;
 pub mod click;
 pub mod command;

@@ -2,11 +2,10 @@
 //!
 //! The canvas `multiview-viewer` in `main.slint` draws the scene from the `MultiviewTabBus` global. This module gives the
 //! instance its rectangle (read from Slint, never from hard-wired chrome sizes), fills the bus from the instance, runs the
-//! tick for the hover bar while the tab is shown and turns the events of the canvas into instance calls and UI actions.
+//! tick for the bars while the tab is shown and turns the events of the canvas into instance calls and UI actions.
 //! All state lives on the UI thread; the instance stays the only copy of the Multiview itself.
 
-use super::bar_hosting::{self, BarHost, BarTargets};
-use super::bar_overlay::{self, BarOwner};
+use super::action_bar::{self, BarEvent};
 use super::cursor;
 use super::handle::MultiviewHandle;
 use super::router;
@@ -27,7 +26,6 @@ use rustview_core::settings::schema::MULTIVIEW_TICK_MS;
 use rustview_core::util::cast::SaturatingAs;
 use slint::{ComponentHandle, ModelRc, Timer, TimerMode};
 use std::cell::RefCell;
-use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -124,6 +122,12 @@ pub fn bind(window: &MainWindow, handle: MultiviewHandle) {
     });
     super::tab_video_bar::bind(window);
     super::pointer_events::install(window.window(), on_pointer);
+    action_bar::bind(
+        HostMode::TabView,
+        window,
+        |model| bus.set_action_bars(model),
+        on_bar_event,
+    );
     bus.on_gutter_drag_started(|index| act(|mv| mv.drag_started(index.max(0).saturating_as::<usize>())));
     bus.on_gutter_dragged(|_, distance| act(|mv| mv.dragged(distance)));
     bus.on_gutter_drag_finished(|_| act(MultiviewInstance::drag_finished));
@@ -257,18 +261,20 @@ fn act(f: impl FnOnce(&mut MultiviewInstance)) {
     refresh();
 }
 
-/// A button of the hover bar was clicked; what the application has to do about it runs after the instance lock is released.
-fn on_action(tile: i32, action: i32) {
-    let (Some(instance), Some(click)) = (current_instance(), BarClick::from_code(action)) else {
+/// A button of a bar was clicked (or an item of a drop-down chosen); what the application has to do about it runs after the
+/// instance lock is released.
+fn on_bar_event(event: BarEvent) {
+    let (key, code) = match event {
+        BarEvent::Media(key, code) => (key, code),
+        BarEvent::Primary(code) => {
+            on_primary_action(code);
+            return;
+        }
+    };
+    let (Some(instance), Some(click)) = (current_instance(), BarClick::from_code(code)) else {
         return;
     };
-    let outcome = {
-        let mut guard = instance.lock();
-        let Some(key) = usize::try_from(tile).ok().and_then(|index| guard.tile_key_at(index)) else {
-            return;
-        };
-        guard.perform_click(key, click)
-    };
+    let outcome = instance.lock().perform_click(key, click);
     drop(instance);
     refresh();
     run(outcome);
@@ -302,14 +308,13 @@ pub fn action_finished(media_id: MediaId, action: MediaActionId, ok: bool) {
     refresh();
 }
 
-/// Shows, moves or hides the two bar windows while the pointer is close to their place (only while the Multiview is shown
+/// Shows, moves or hides the bars of the canvas while the pointer is close to their place (only while the Multiview is shown
 /// in the viewer tab: a fullscreen over it has its own bars), and hides the mouse cursor while it rests and no bar is in use.
-fn update_bar_overlay() {
+fn update_bars() {
     super::pointer_lock::service();
-    let Some((window, instance, host_xid)) =
-        with_host(|h| Some((h.window.clone()?.upgrade()?, h.instance.upgrade()?, h.main_xid))).flatten()
+    let Some((window, instance)) = with_host(|h| Some((h.window.clone()?.upgrade()?, h.instance.upgrade()?))).flatten()
     else {
-        bar_overlay::hide(BarOwner::TabView);
+        action_bar::clear(HostMode::TabView);
         super::tab_video_bar::clear(None);
         return;
     };
@@ -324,17 +329,10 @@ fn update_bar_overlay() {
         }
         shown_here && !locked
     };
-    let host = BarHost {
-        owner: BarOwner::TabView,
-        host_xid,
-        scale: window.window().scale_factor(),
-        media_click: Rc::new(on_action),
-        primary_click: Rc::new(|_, action| on_primary_action(action)),
-    };
-    let bars_visible = bar_hosting::update(
-        &host,
-        BarTargets::of_instance(BarOwner::TabView, &instance, in_tab_view),
-        in_tab_view,
+    let bars_visible = action_bar::sync(
+        HostMode::TabView,
+        action_bar::targets(HostMode::TabView, &instance, in_tab_view),
+        window.window().scale_factor(),
     );
     let video_bars_visible = super::tab_video_bar::update(&window, &instance, in_tab_view);
     let mut window_hidden = with_host(|h| h.cursor_hidden).unwrap_or(false);
@@ -385,7 +383,6 @@ fn route_for(event: RoutedEvent, click: ClickKind) -> UiAction {
 
 /// Two quick clicks with the same modifier state are a double click; the routing table decides what that means here.
 fn on_click(is_ctrl: bool) {
-    bar_overlay::close_menu(bar_overlay::BarKind::Media);
     let Some(instance) = current_instance() else {
         return;
     };
@@ -412,7 +409,7 @@ fn run(action: UiAction) {
 /// Places the instance of the active tab in the viewer area and shows it. Called whenever the area or the tab may have changed;
 /// the instance ignores a surface it already has.
 pub fn sync(window: &MainWindow, instance: &SharedInstance) {
-    // The hint and the bar windows are placed relative to the X11 window (0 on Wayland, where they have no place yet).
+    // The pointer lock of the minimap drag needs the X11 window (0 on Wayland, where it falls back).
     let main_xid = get_slint_window_xid(window.window()).unwrap_or(0);
     let scale = window.window().scale_factor();
     let area = window.invoke_multiview_viewport();
@@ -438,7 +435,7 @@ pub fn suspend() {
     if !active {
         return;
     }
-    bar_overlay::hide(BarOwner::TabView);
+    action_bar::clear(HostMode::TabView);
     let window = with_host(|h| h.window.clone()).flatten().and_then(|w| w.upgrade());
     super::tab_video_bar::clear(window.as_ref());
     if let Some(instance) = with_host(|h| h.instance.upgrade()).flatten() {
@@ -507,7 +504,7 @@ pub fn refresh() {
     });
     let bus = window.global::<MultiviewTabBus>();
     bus.set_screen(views::screen_view(&view));
-    update_bar_overlay();
+    update_bars();
     manage_glide(instance.lock().zoom_animating());
 }
 
@@ -551,7 +548,7 @@ fn on_tick() {
     instance.lock().tick(pointer);
     drop(instance);
     refresh();
-    update_bar_overlay();
+    update_bars();
 }
 
 /// The pointer moved over the main window or left it: the bars of the tab view follow on this turn of the event loop.
@@ -566,8 +563,7 @@ fn on_pointer(pointer: Option<(i32, i32)>) {
     instance.lock().pointer_moved(pointer);
     with_host(|h| {
         if !h.pointer_sync.running() {
-            h.pointer_sync
-                .start(TimerMode::SingleShot, Duration::ZERO, update_bar_overlay);
+            h.pointer_sync.start(TimerMode::SingleShot, Duration::ZERO, update_bars);
         }
     });
 }

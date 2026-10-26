@@ -6,7 +6,6 @@
 //! [`with_session`], which serialize access to the thread-local session and skip re-entrant calls instead of panicking.
 //! Input handling lives in `session_input`; this file owns the lifecycle: open, close, window wiring.
 
-use super::bar_overlay::{self, BarOwner};
 use super::cursor;
 use super::eligibility::OpenPlan;
 use super::handle::{self, MultiviewHandle, Pace};
@@ -20,7 +19,7 @@ use crate::ui::MultiviewFullscreenWindow;
 use crate::ui::state::UiState;
 use crate::viewer::multiview::command::{MultiviewCommand, ZoomKey};
 use crate::viewer::multiview::instance::{MultiviewInstance, SharedInstance};
-use crate::viewer::multiview::route::UiAction;
+use crate::viewer::multiview::route::{HostMode, UiAction};
 use crate::viewer::video_surface::FULLSCREEN_WINDOW;
 use crate::viewer::{TabId, ViewerTabManager};
 use crate::viewer::{force_x11_fullscreen_on_monitor, get_raw_window_xid};
@@ -33,7 +32,6 @@ use rustview_core::util::cast::SaturatingAs;
 use rustview_core::util::hex_color;
 use slint::{CloseRequestResponse, Color, ComponentHandle, ModelRc, PhysicalPosition, PhysicalSize, Timer, TimerMode};
 use std::cell::RefCell;
-use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -78,10 +76,6 @@ pub(super) struct Session {
     /// Brings the bars in line with the pointer once per turn of the event loop, however many movements arrived in it.
     pub(super) pointer_sync: Timer,
     pub(super) models: ViewModels,
-    /// What a click on a button of the action bar window does (the window is shared with the viewer tab host).
-    pub(super) bar_click: Rc<dyn Fn(i32, i32)>,
-    /// What a click on a button of the primary bar window does.
-    pub(super) primary_click: Rc<dyn Fn(i32, i32)>,
     /// The mouse cursor is hidden over the window right now.
     pub(super) cursor_hidden: bool,
     pub(super) images: ImageCache,
@@ -209,6 +203,12 @@ fn create_window() -> Result<MultiviewFullscreenWindow, slint::PlatformError> {
     super::video_host::register(&win, FULLSCREEN_WINDOW, MultiviewFullscreenWindow::set_video_frames);
     super::video_host::install_notifier(&win, FULLSCREEN_WINDOW);
     super::session_video_bar::bind(&win);
+    super::action_bar::bind(
+        HostMode::Fullscreen,
+        &win,
+        |model| win.set_action_bars(model),
+        |event| run(|s| s.on_bar_event(event)),
+    );
     super::pointer_events::install(win.window(), |pointer| with_session(|s| s.on_pointer(pointer)));
     win.on_request_close(|| {
         close_by_user();
@@ -284,6 +284,13 @@ fn create_window() -> Result<MultiviewFullscreenWindow, slint::PlatformError> {
     Ok(win)
 }
 
+/// The tooltip settings changed: an open fullscreen window follows them (its bars show tooltips). UI thread only.
+pub(super) fn refresh_tooltips(appearance: &rustview_core::settings::schema::AppearanceSettings) {
+    if let Some(win) = existing_window() {
+        super::session_video_bar::apply_settings(&win, appearance);
+    }
+}
+
 /// The window, if it was made already (it is never made for this).
 pub(super) fn existing_window() -> Option<MultiviewFullscreenWindow> {
     WINDOW.with(|cell| cell.borrow().as_ref().and_then(|win| win.as_weak().upgrade()))
@@ -325,11 +332,6 @@ fn prepare_window(
     win.set_navigation(0);
     let appearance = &settings.get().appearance;
     super::session_video_bar::apply_settings(win, appearance);
-    bar_overlay::set_tooltip_settings(
-        appearance.enable_tooltips,
-        appearance.tooltip_delay_ms.saturating_as::<i32>(),
-    );
-    bar_overlay::prepare();
     win.window().set_position(PhysicalPosition::new(monitor.x, monitor.y));
     win.window().set_size(PhysicalSize::new(monitor.width, monitor.height));
 }
@@ -592,8 +594,6 @@ impl Session {
             pointer: None,
             pointer_sync: Timer::default(),
             models: ViewModels::default(),
-            bar_click: Rc::new(|tile, action| run(|s| s.on_action(tile, action))),
-            primary_click: Rc::new(|_, action| run(|s| s.on_primary_action(action))),
             cursor_hidden: false,
             images: ImageCache::default(),
             shown_revision: None,
@@ -659,7 +659,7 @@ impl Session {
         if let Some(win) = self.window.upgrade() {
             win.set_navigation(views::navigation_code(view.navigation));
         }
-        self.update_bar_overlay();
+        self.update_bars();
         self.manage_glide();
     }
 
@@ -690,9 +690,9 @@ impl Session {
         self.glide.stop();
         self.feedback_timer.stop();
         self.instance.lock().clear_feedback();
-        bar_overlay::hide(BarOwner::Fullscreen);
+        super::action_bar::clear(HostMode::Fullscreen);
         super::session_video_bar::clear();
-        super::hint::clear(crate::viewer::multiview::route::HostMode::Fullscreen);
+        super::hint::clear(HostMode::Fullscreen);
         if let Some(win) = self.window.upgrade() {
             cursor::release(win.window(), Some(&self.instance), &mut self.cursor_hidden);
             win.set_is_ready(false);

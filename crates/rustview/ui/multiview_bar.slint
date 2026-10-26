@@ -87,13 +87,18 @@ component MultiviewBarButton inherits Rectangle {
     }
 }
 
-/// Row of action buttons for the hovered medium. It is drawn in the window of its own that `MultiviewBarWindow` is,
-/// which floats above the Multiview (and its native video windows) and is blended with them by the compositing manager.
+/// The sizes of the action bars. Rust places the bars and needs their size before Slint lays them out, so it owns the numbers
+/// (`MULTIVIEW_BAR_*` in the settings schema) and sets them here for every window that draws bars; the defaults are the same.
+export global MultiviewBarMetrics {
+    in property <length> button-size: 28px;
+    in property <length> spacing: 2px;
+    in property <length> inset: 3px;
+    in property <length> arrow-width: 16px;
+}
+
+/// Row of action buttons: the media bar of a medium, or the primary bar of the view (`MultiviewActionBar` in the canvas).
 export component MultiviewBar inherits Rectangle {
     in property <[MultiviewBarButtonView]> actions;
-    // Glass: the window is blended with what is below it. Without a compositing manager the window cannot be blended, so
-    // the bar is solid then.
-    in property <bool> translucent: true;
     // Position of the button whose menu is open (-1 = none).
     in property <int> menu-owner-index: -1;
     // Position of the button with an arrow of its own (-1 = none): it is wider by the arrow, and its drop-down hangs from the arrow.
@@ -101,12 +106,11 @@ export component MultiviewBar inherits Rectangle {
 
     callback action-clicked(int /* action id */);
 
-    // The size follows from the number of buttons alone, so Rust can read it at any time (a layout is only computed when
-    // the window draws).
-    property <length> button-size: 28px;
-    property <length> button-spacing: 2px;
-    property <length> inset: 3px;
-    property <length> arrow-width: 16px;
+    // The size follows from the number of buttons alone (`bar_placement::bar_size_logical` computes the same).
+    property <length> button-size: MultiviewBarMetrics.button-size;
+    property <length> button-spacing: MultiviewBarMetrics.spacing;
+    property <length> inset: MultiviewBarMetrics.inset;
+    property <length> arrow-width: MultiviewBarMetrics.arrow-width;
 
     /// Center of the button at `index`, from the left edge of the bar (the layout is plain arithmetic, see `width`); for the
     /// split button the center of its arrow (its drop-down hangs from there).
@@ -118,10 +122,17 @@ export component MultiviewBar inherits Rectangle {
 
     width: root.actions.length * root.button-size + (root.split-index >= 0 ? root.arrow-width : 0px) + Math.max(root.actions.length - 1, 0) * root.button-spacing + 2 * root.inset;
     height: root.button-size + 2 * root.inset;
-    background: root.translucent ? Theme.surface.with-alpha(0.7) : Theme.surface;
+    background: Theme.surface.with-alpha(0.7);
     border-radius: 8px;
     border-width: 1px;
     border-color: Theme.border;
+
+    // The bar is solid for the pointer: a click between its buttons or a wheel over it does not reach the medium below.
+    TouchArea {
+        scroll-event(event) => {
+            accept
+        }
+    }
 
     layout := HorizontalLayout {
         padding: root.inset;

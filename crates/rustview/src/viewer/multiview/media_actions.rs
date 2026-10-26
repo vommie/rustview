@@ -36,7 +36,7 @@ pub enum MediaActionId {
     Redo,
 }
 
-/// What a click in the media bar window means: a button, an item of the drop-down menu that hangs below the bar, or a
+/// What a click in the media bar means: a button, an item of the drop-down menu that hangs below the bar, or a
 /// movement of the zoom slider (which hangs there too).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BarClick {

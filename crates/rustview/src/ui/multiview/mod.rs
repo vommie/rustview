@@ -4,8 +4,7 @@
 //! Slint window, `tab_host` shows it in a viewer tab (every tab is a Multiview: one tile for a tab opened on one medium), `router` turns player events into UI actions, `hint` shows the short hint over the view and `handle` is the
 //! thread-safe face used by the rest of the application. The state and logic of a running Multiview live in `crate::viewer::multiview::instance`.
 
-mod bar_hosting;
-pub mod bar_overlay;
+mod action_bar;
 mod commands;
 pub mod cursor;
 pub mod eligibility;
@@ -38,6 +37,11 @@ pub fn event_sink(handle: MultiviewHandle) -> std::sync::Arc<dyn crate::viewer::
     std::sync::Arc::new(router::UiEventSink::new(handle))
 }
 pub use handle::MultiviewHandle;
+
+/// Applies changed tooltip settings to a fullscreen that is open (the tooltips of its bars). UI thread only.
+pub fn refresh_tooltips(appearance: &rustview_core::settings::schema::AppearanceSettings) {
+    session::refresh_tooltips(appearance);
+}
 
 /// Applies changed settings to a fullscreen that is open (its background). UI thread only.
 pub fn refresh_settings(settings: &rustview_core::settings::SettingsManager) {

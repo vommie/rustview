@@ -5,7 +5,7 @@ use crate::ui::MainWindow;
 use crate::ui::folder_tree::BridgeFolders;
 use crate::ui::formats_policy::{FormatPolicyApplier, FormatPolicyContext};
 use crate::ui::media::BridgeMedia;
-use crate::ui::multiview::{self, bar_overlay};
+use crate::ui::multiview;
 use crate::ui::sidebar::BridgeSidebarPanelTabs;
 use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
@@ -89,10 +89,7 @@ impl UiBridge {
                 if diff_clone.tooltip_settings_changed {
                     window.set_enable_tooltips(new_clone.appearance.enable_tooltips);
                     window.set_tooltip_delay_ms(new_clone.appearance.tooltip_delay_ms.saturating_as::<i32>());
-                    bar_overlay::set_tooltip_settings(
-                        new_clone.appearance.enable_tooltips,
-                        new_clone.appearance.tooltip_delay_ms.saturating_as::<i32>(),
-                    );
+                    multiview::refresh_tooltips(&new_clone.appearance);
                 }
 
                 if diff_clone.type_ahead_changed {

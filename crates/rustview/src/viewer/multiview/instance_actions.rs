@@ -58,7 +58,7 @@ impl MultiviewInstance {
             .collect()
     }
 
-    /// A click in the media bar window of tile `key`: a button, or an item of its "Open With" drop-down. Any click in the bar
+    /// A click in the media bar of tile `key`: a button, or an item of its "Open With" drop-down. Any click in the bar
     /// of a tile also selects that tile, so the keys act on it afterwards.
     pub fn perform_click(&mut self, key: TileKey, click: BarClick) -> UiAction {
         self.select_tile(key);

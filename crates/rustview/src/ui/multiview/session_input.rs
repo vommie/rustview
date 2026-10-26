@@ -1,8 +1,7 @@
 //! Session behavior around input: window geometry, the tick, clicks, gutter drag, swap, rename and the live selection.
 //! Everything here translates a UI event into a call on the instance and syncs the result into the window.
 
-use super::bar_hosting::{self, BarHost, BarTargets};
-use super::bar_overlay::{self, BarKind, BarOwner};
+use super::action_bar::{self, BarEvent};
 use super::cursor;
 use super::eligibility;
 use super::session::{Session, with_session};
@@ -49,7 +48,7 @@ impl Session {
     pub(super) fn on_tick(&mut self) {
         self.instance.lock().tick(self.pointer);
         self.refresh();
-        self.update_bar_overlay();
+        self.update_bars();
     }
 
     /// The pointer moved over the window or left it: the bars follow on this turn of the event loop.
@@ -61,7 +60,7 @@ impl Session {
         self.instance.lock().pointer_moved(pointer);
         if !self.pointer_sync.running() {
             self.pointer_sync.start(TimerMode::SingleShot, Duration::ZERO, || {
-                with_session(Session::update_bar_overlay)
+                with_session(Session::update_bars);
             });
         }
     }
@@ -153,21 +152,20 @@ impl Session {
         self.refresh();
     }
 
-    /// A button of the hover bar was clicked. What the application has to do about it runs after the session borrow is
-    /// released.
-    pub(super) fn on_action(&mut self, tile: i32, action: i32) -> UiAction {
-        let Some(click) = BarClick::from_code(action) else {
-            return UiAction::None;
-        };
-        let outcome = {
-            let mut instance = self.instance.lock();
-            let Some(key) = usize::try_from(tile).ok().and_then(|index| instance.tile_key_at(index)) else {
-                return UiAction::None;
-            };
-            instance.perform_click(key, click)
-        };
-        self.refresh();
-        outcome
+    /// A button of a bar was clicked (or an item of a drop-down chosen). What the application has to do about it runs after the
+    /// session borrow is released.
+    pub(super) fn on_bar_event(&mut self, event: BarEvent) -> UiAction {
+        match event {
+            BarEvent::Media(key, code) => {
+                let Some(click) = BarClick::from_code(code) else {
+                    return UiAction::None;
+                };
+                let outcome = self.instance.lock().perform_click(key, click);
+                self.refresh();
+                outcome
+            }
+            BarEvent::Primary(code) => self.on_primary_action(code),
+        }
     }
 
     /// The application finished what a button asked for: the button flashes green, or red if it failed.
@@ -186,22 +184,15 @@ impl Session {
         outcome
     }
 
-    /// Shows, moves or hides the two bar windows (each appears while the pointer is close to the place of its bar) and
-    /// hides the mouse cursor while it rests and no bar is in use.
-    pub(super) fn update_bar_overlay(&mut self) {
+    /// Shows, moves or hides the bars of the canvas (an action bar appears while the pointer is close to its place) and hides the
+    /// mouse cursor while it rests and no bar is in use.
+    pub(super) fn update_bars(&mut self) {
         super::pointer_lock::service();
         if !self.populated {
             return;
         }
         let Some(win) = self.window.upgrade() else {
             return;
-        };
-        let host = BarHost {
-            owner: BarOwner::Fullscreen,
-            host_xid: self.fs_xid,
-            scale: win.window().scale_factor(),
-            media_click: self.bar_click.clone(),
-            primary_click: self.primary_click.clone(),
         };
         // While a dialog (or the settings window) locks the main window, no bar is shown, so none can be used.
         let dialog_open = self
@@ -210,10 +201,10 @@ impl Session {
             .and_then(|main| main.upgrade())
             .is_some_and(|main| main.get_is_modal_locked());
         self.sync_modal_lock(&win, dialog_open && crate::ui::dialog_parent::modal_dialog_open());
-        let bars_visible = bar_hosting::update(
-            &host,
-            BarTargets::of_instance(BarOwner::Fullscreen, &self.instance, !dialog_open),
-            !dialog_open,
+        let bars_visible = action_bar::sync(
+            HostMode::Fullscreen,
+            action_bar::targets(HostMode::Fullscreen, &self.instance, !dialog_open),
+            win.window().scale_factor(),
         );
         let video_bars_visible = self.update_video_bars(!dialog_open);
         if dialog_open {
@@ -253,8 +244,6 @@ impl Session {
     /// A click on a Slint part of the Multiview. Two quick clicks with the same modifier state are a double click, and what
     /// that means is decided by the routing table.
     pub(super) fn on_click(&mut self, is_ctrl: bool) -> UiAction {
-        // A click on the Multiview itself dismisses an open bar menu (the pointer poll of the bar can miss a very short click).
-        bar_overlay::close_menu(BarKind::Media);
         let (click, origin) = {
             let mut instance = self.instance.lock();
             (instance.register_click(is_ctrl), instance.origin())

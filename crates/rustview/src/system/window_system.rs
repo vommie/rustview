@@ -2,9 +2,10 @@
 //! window exists.
 //!
 //! In a Wayland session `RustView` runs as an X11 program through `XWayland` (user decision 2026-10-25, `docs/rendering.md`): the
-//! floating bar windows and the other X11 features exist only there (videos are drawn by Slint since `video-in-slint` M1; native
-//! Wayland becomes the default after M7). Every place that depends on the window system (the clipboard tool, drag and drop, the
-//! logs) asks [`current`] instead of reading the environment, which says "Wayland" while the windows are X11 windows.
+//! X11 features (dialogs that belong to their window, dragging files to other programs, the pointer lock) exist only there
+//! (videos and bars are drawn by Slint since `video-in-slint` M1-M3; native Wayland becomes the default after M7). Every place
+//! that depends on the window system (the clipboard tool, drag and drop, the logs) asks [`current`] instead of reading the
+//! environment, which says "Wayland" while the windows are X11 windows.
 
 mod choice;
 

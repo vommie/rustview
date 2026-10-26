@@ -41,7 +41,7 @@ pub enum Choice {
     X11Session,
     /// A Wayland session: `RustView` runs as an X11 program through `XWayland`, so everything works as on X11.
     XWayland,
-    /// Native Wayland: the floating bar windows and the other X11 features degrade.
+    /// Native Wayland: the X11 features (dialog parents, dragging files out, the pointer lock) degrade.
     Wayland(WaylandReason),
     /// Neither a Wayland nor an X display: winit's own error ends the start, as it always did.
     NoDisplay,

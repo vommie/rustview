@@ -1,0 +1,154 @@
+import { Theme } from "styles.slint";
+import { ContextMenuItemModel } from "types.slint";
+import { MultiviewBarButtonView } from "multiview_types.slint";
+import { MultiviewBar } from "multiview_bar.slint";
+import { MultiviewBarMenu } from "multiview_bar_menu.slint";
+import { MultiviewZoomSlider } from "multiview_zoom_slider.slint";
+
+/// One action bar the canvas draws (`MultiviewCanvas.action-bars`): the media bar of a tile (top right of its room) or the primary
+/// bar of the view (top left). Rust places it and fills it (`ui::multiview::action_bar`); `x`/`y` are the bar's top left corner in
+/// the canvas.
+export struct MultiviewActionBarView {
+    // The tile's key (`TileKey`, wrapped to 32 bits); 0 for the primary bar.
+    key: int,
+    primary: bool,
+    x: length,
+    y: length,
+    actions: [MultiviewBarButtonView],
+    // Position of the button that has an arrow of its own (-1 = none).
+    split-index: int,
+    // The drop-down below the bar ("Open With", the Save menu): its rows, shown while `menu-open`.
+    menu-items: [ContextMenuItemModel],
+    menu-open: bool,
+    // Position in `actions` of the button the drop-down or the zoom slider belongs to (-1 = none): it shows as open and the
+    // bubble points at it.
+    menu-owner-index: int,
+    // The zoom slider of a picture, in the same bubble below the bar. Tenths of a percent.
+    zoom-open: bool,
+    zoom-permille: int,
+    zoom-min-permille: int,
+    zoom-max-permille: int,
+    zoom-snaps: [int],
+}
+
+/// The events of every action bar of a window (each window that draws a canvas has its own instance; Rust finds the bar by its
+/// key). Kinds: 0 = a button (or the zoom slider: its codes) of a media bar, 1 = an item of the drop-down of a media bar, 2 = a
+/// button of the primary bar, 3 = a press outside the open drop-down (it closes; the press does nothing else).
+export global ActionBarBus {
+    callback event(int /* kind */, int /* tile key */, int /* code */);
+}
+
+/// An action bar with its bubble (drop-down or zoom slider) hanging below it, inside the window: the bubble is centered under its
+/// opener where the canvas leaves room for it, its caret points at the opener. While a drop-down is open a backdrop over the whole
+/// canvas (below the bar) takes the next press anywhere else and closes it.
+export component MultiviewActionBar inherits Rectangle {
+    in property <MultiviewActionBarView> bar;
+    // The size of the canvas: the bubble stays inside it and the backdrop covers it.
+    in property <length> canvas-width;
+    in property <length> canvas-height;
+
+    width: strip.width;
+    height: strip.height;
+
+    if root.bar.menu-open : TouchArea {
+        x: -root.x;
+        y: -root.y;
+        width: root.canvas-width;
+        height: root.canvas-height;
+
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down {
+                ActionBarBus.event(3, root.bar.key, 0);
+            }
+        }
+        scroll-event(event) => {
+            accept
+        }
+    }
+
+    strip := MultiviewBar {
+        x: 0px;
+        y: 0px;
+        actions: root.bar.actions;
+        split-index: root.bar.split-index;
+        menu-owner-index: (root.bar.menu-open || root.bar.zoom-open) ? root.bar.menu-owner-index : -1;
+
+        action-clicked(id) => {
+            ActionBarBus.event(root.bar.primary ? 2 : 0, root.bar.key, id);
+        }
+    }
+
+    property <length> menu-width: root.bar.zoom-open ? 210px : 230px;
+    property <length> menu-gap: 2px;
+    property <length> opener-x: strip.button-center-x(root.bar.menu-owner-index);
+    // Relative to the bar; the bubble never leaves the canvas.
+    property <length> menu-x: Math.max(-root.x, Math.min(root.canvas-width - root.x - root.menu-width, root.opener-x - root.menu-width / 2));
+    property <length> menu-y: strip.height + root.menu-gap;
+    property <bool> menu-shown: root.bar.zoom-open || (root.bar.menu-open && root.bar.menu-items.length > 0);
+
+    if root.menu-shown : MultiviewBarMenu {
+        x: root.menu-x;
+        y: root.menu-y;
+        width: root.menu-width;
+        max-content-height: Math.max(root.canvas-height - root.y - root.menu-y - 2px, 0px);
+        items: root.bar.zoom-open ? [] : root.bar.menu-items;
+        custom-height: root.bar.zoom-open ? 28px + 8px : 0px;
+        anchor-x: root.opener-x - root.menu-x;
+
+        item-clicked(id) => {
+            ActionBarBus.event(1, root.bar.key, id);
+        }
+
+        if root.bar.zoom-open : MultiviewZoomSlider {
+            x: 4px;
+            y: 4px;
+            width: parent.width - 8px;
+            value-permille: root.bar.zoom-permille;
+            min-permille: root.bar.zoom-min-permille;
+            max-permille: root.bar.zoom-max-permille;
+            snaps: root.bar.zoom-snaps;
+
+            pill-changed(shown, center) => {
+                root.zoom-pill-visible = shown;
+                root.zoom-handle-x = center;
+            }
+            request(code) => {
+                ActionBarBus.event(0, root.bar.key, code);
+            }
+        }
+    }
+
+    property <bool> zoom-pill-visible: false;
+    property <length> zoom-handle-x: 0px;
+    // The percentage of the zoom slider floats below its bubble, so the bubble itself stays as slim as possible.
+    property <length> pill-width: 46px;
+    property <length> pill-height: 18px;
+    // The bubble of the zoom slider: its caret and its body.
+    property <length> zoom-bubble-height: 7px + 28px + 8px;
+
+    changed menu-shown => {
+        if !root.bar.zoom-open {
+            root.zoom-pill-visible = false;
+        }
+    }
+
+    if root.bar.zoom-open && root.zoom-pill-visible : Rectangle {
+        x: Math.clamp(root.menu-x + 4px + root.zoom-handle-x - root.pill-width / 2, 1px - root.x, root.canvas-width - root.x - root.pill-width - 1px);
+        y: root.menu-y + root.zoom-bubble-height + 3px;
+        width: root.pill-width;
+        height: root.pill-height;
+        border-radius: root.pill-height / 2;
+        background: Theme.surface;
+        border-width: 1px;
+        border-color: Theme.border;
+
+        Text {
+            text: Math.round(root.bar.zoom-permille / 10.0) + "%";
+            font-size: 10px;
+            font-weight: 700;
+            color: Theme.text;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+}

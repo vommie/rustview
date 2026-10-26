@@ -4,9 +4,9 @@ import { ContextMenuItemRow } from "context_menu.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
 
 /// Drop-down of a button of the media action bar, drawn as a speech bubble: a caret points at the button that opened it, the body is
-/// slightly translucent (solid without a compositing manager) and holds the same rows as a context menu. Any bar button with a menu
-/// uses this component; the window around it decides where it sits (`anchor-x` is the center of the opener, relative to the left edge
-/// of this component).
+/// slightly translucent and holds the same rows as a context menu. Any bar button with a menu uses this component, and the zoom
+/// sliders (of the bar and of the minimap) sit in the same bubble; its owner decides where it sits (`anchor-x` is the center of the
+/// opener, relative to the left edge of this component).
 export component MultiviewBarMenu inherits Rectangle {
     in property <[ContextMenuItemModel]> items;
     in property <length> anchor-x: 0px;

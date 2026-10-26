@@ -5,9 +5,10 @@
 //! coordinates; the hovered tile is found by testing it against the tile layout. The action bars are drawn by the canvas; the
 //! instance says which bars show (the tile under the pointer near the corner of the bar, plus the bars that stay) and where.
 
-use super::bar_placement::{BarCorner, near_bar_corner};
+use super::bar_placement::{BarCorner, bar_size_logical, in_reveal_zone, place_bar};
 use super::follow::TileKey;
 use super::instance::MultiviewInstance;
+use super::layout::Rect;
 use super::model::{AspectSource, aspect_differs, aspect_from_video_params};
 use super::prefs;
 use super::tile::StaleProbe;
@@ -75,31 +76,25 @@ impl MultiviewInstance {
         })
     }
 
-    /// The media bars the host may show now. Every tile has a bar of its own:
-    /// - the tile whose canvas the pointer is in gets its bar when the pointer is near the corner that carries it (the top right
+    /// The media bars the canvas of the host draws now. Every tile has a bar of its own:
+    /// - the tile whose canvas the pointer is in gets its bar while the pointer is within the reveal distance of it (the top right
     ///   of the canvas of the medium, at the height of the primary bar, whatever the medium's size or zoom);
-    /// - a tile that has its zoom slider open, or whose key is in `keep` (the host: a menu is open there), keeps its bar whatever the
-    ///   pointer does, and the bar follows the tile when media come and go or the layout changes.
+    /// - a tile that has its zoom slider open, or whose key is in `keep` (the host: a drop-down is open there), keeps its bar
+    ///   whatever the pointer does, and the bar follows the tile when media come and go or the layout changes.
     ///
-    /// Nothing while the user switched the bars off. A tile that offers no button has no bar.
+    /// Nothing while the user switched the bars off. A tile that offers no button, or whose room is too small for the bar, has no
+    /// bar.
     pub fn media_bar_targets(&self, keep: &[TileKey]) -> Vec<MediaBarTarget> {
-        let bar = prefs::current().media_bar;
-        if !bar.enabled {
+        let prefs = prefs::current().media_bar;
+        if !prefs.enabled {
             return Vec::new();
         }
-        let hovered = self.pointer.and_then(|pointer| {
-            let tile = self.canvas_tile_at(pointer)?;
-            let rect = self.host_room(tile)?;
-            near_bar_corner(
-                BarCorner::TopRight,
-                rect,
-                pointer,
-                self.host.surface.dpi,
-                bar.reveal_distance_px,
-            )
-            .then_some(tile)
-        });
-        let mut wanted: Vec<(usize, bool)> = hovered.map(|tile| (tile, false)).into_iter().collect();
+        let mut wanted: Vec<(usize, bool)> = self
+            .pointer
+            .and_then(|pointer| self.canvas_tile_at(pointer))
+            .map(|tile| (tile, false))
+            .into_iter()
+            .collect();
         for key in self.zoom_slider.iter().chain(keep) {
             if let Some(tile) = self.tile_index(*key) {
                 match wanted.iter_mut().find(|(t, _)| *t == tile) {
@@ -108,18 +103,27 @@ impl MultiviewInstance {
                 }
             }
         }
+        let scale = self.host.surface.dpi;
+        let origin = (self.host.surface.rect.x, self.host.surface.rect.y);
         wanted
             .into_iter()
             .filter_map(|(tile, forced)| {
-                let rect = self.host_room(tile)?;
+                let room = self.host_room(tile)?;
                 let actions = self.action_views(tile);
-                (!actions.is_empty()).then(|| MediaBarTarget {
+                if actions.is_empty() {
+                    return None;
+                }
+                let split = actions.iter().any(|a| a.split);
+                let bar = place_bar(BarCorner::TopRight, room, bar_size_logical(actions.len(), split), scale)?;
+                let revealed = forced
+                    || self
+                        .pointer
+                        .is_some_and(|p| in_reveal_zone(bar, p, scale, prefs.reveal_distance_px));
+                revealed.then(|| MediaBarTarget {
                     tile,
                     key: self.tiles[tile].key,
-                    rect,
+                    bar: Rect::new(bar.x - origin.0, bar.y - origin.1, bar.w, bar.h),
                     actions,
-                    pointer: self.pointer,
-                    reveal_distance_px: bar.reveal_distance_px,
                     forced,
                 })
             })

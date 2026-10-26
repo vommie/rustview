@@ -31,42 +31,20 @@ component HoldBadge inherits Rectangle {
 }
 
 /// The tooltip bubble of `GlobalTooltip`, drawn on the highest z level of a window. Every window that hosts tooltip
-/// sources puts one of these over its content (the main window and the Multiview window). `state-changed` reports the bubble
-/// rectangle (logical pixels in this layer) whenever it appears, moves or disappears (the bar windows grow to hold it).
+/// sources puts one of these over its content (the main window and the Multiview window).
 export component GlobalTooltipLayer inherits Rectangle {
-    callback state-changed(bool /* is_visible */, length /* x */, length /* y */, length /* width */, length /* height */);
 
     property <bool> active: GlobalTooltip.is-visible && TooltipSettings.enabled;
     property <bool> show-hold: GlobalTooltip.hold && HoldConfirm.duration > 0ms;
     // Long tooltips wrap at the maximum width; `measure` is the text on one line, `wrapped` the same text at the final width.
-    // The bubble stays inside the window it is drawn in (the bar windows are narrow): 8px margin on both sides, the padding
-    // of the bubble, and room for an icon or a shortcut badge.
+    // The bubble stays inside the window it is drawn in: 8px margin on both sides, the padding of the bubble, and room for an
+    // icon or a shortcut badge.
     property <length> room: root.width - 16px - 2 * TooltipSettings.default-padding-h - (GlobalTooltip.shortcut != "" ? 60px : 0px) - (GlobalTooltip.icon != IconId.none ? 22px : 0px) - (root.show-hold ? 76px : 0px);
     property <length> text-w: Math.max(40px, Math.min(Math.min(TooltipSettings.max-width, root.room), measure.preferred-width));
     property <length> bubble-w: tooltip-bubble.preferred-width;
     property <length> bubble-h: Math.max(tooltip-bubble.preferred-height, wrapped.preferred-height + 2 * TooltipSettings.default-padding-v);
     property <length> bubble-x: Math.max(8px, Math.min(root.width - root.bubble-w - 8px, GlobalTooltip.pos-x));
     property <length> bubble-y: Math.max(8px, Math.min(root.height - root.bubble-h - 8px, GlobalTooltip.pos-y));
-
-    changed active => {
-        if self.active {
-            root.state-changed(true, self.bubble-x, self.bubble-y, self.bubble-w, self.bubble-h);
-        } else {
-            root.state-changed(false, 0px, 0px, 0px, 0px);
-        }
-    }
-
-    changed bubble-x => {
-        if self.active {
-            root.state-changed(true, self.bubble-x, self.bubble-y, self.bubble-w, self.bubble-h);
-        }
-    }
-
-    changed bubble-y => {
-        if self.active {
-            root.state-changed(true, self.bubble-x, self.bubble-y, self.bubble-w, self.bubble-h);
-        }
-    }
 
     z: 200;
     background: transparent;

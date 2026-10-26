@@ -14,9 +14,9 @@ use crate::ui::folder_tree::dnd_autoscroller::DndFolderTreeAutoScroller;
 use crate::ui::media::BridgeMedia;
 use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::media::thumbnails::BridgeThumbnails;
+use crate::ui::multiview::MultiviewHandle;
 use crate::ui::multiview::handle::{AppContext, KEEP_VIEW};
 use crate::ui::multiview::tab_host;
-use crate::ui::multiview::{MultiviewHandle, bar_overlay};
 use crate::ui::selection::rubberband::RubberbandAutoScroller;
 use crate::ui::selection::{BridgeFileSelection, FileClickContext, LastClickRecord};
 use crate::ui::settings_dialog::SettingsDialogController;
@@ -262,10 +262,6 @@ impl UiBridge {
         window.set_grid_item_corner_radius(app_settings.appearance.grid_item_corner_radius.saturating_as::<i32>());
         window.set_enable_tooltips(app_settings.appearance.enable_tooltips);
         window.set_tooltip_delay_ms(app_settings.appearance.tooltip_delay_ms.saturating_as::<i32>());
-        bar_overlay::set_tooltip_settings(
-            app_settings.appearance.enable_tooltips,
-            app_settings.appearance.tooltip_delay_ms.saturating_as::<i32>(),
-        );
         type_ahead::config::apply(&app_settings.appearance);
         crate::ui::hold_confirm::install(&window, app_settings.general.hold_to_confirm_ms);
         crate::ui::hotkeys::apply(&app_settings.hotkeys);

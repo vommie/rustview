@@ -9,11 +9,11 @@
 //! This is done on the X server (`XWarpPointer`, the cursor hidden with `XFixes`). Where it does not work (Wayland, a pointer that
 //! does not follow, no X connection) `begin` says so and the drag stays absolute: the rectangle under the pointer.
 
-use crate::viewer::x11::OverlayServer;
+use crate::viewer::x11::PointerWarp;
 use std::cell::RefCell;
 
 struct Lock {
-    server: OverlayServer,
+    server: PointerWarp,
     /// Where the pointer is held (screen coordinates) and where it goes back to.
     center: (i32, i32),
     restore: (i32, i32),
@@ -32,7 +32,7 @@ pub fn begin(host_xid: u64) -> bool {
     LOCK.with(|cell| {
         let mut slot = cell.borrow_mut();
         if slot.is_none() {
-            match OverlayServer::new() {
+            match PointerWarp::new() {
                 Ok(server) => {
                     *slot = Some(Lock {
                         server,

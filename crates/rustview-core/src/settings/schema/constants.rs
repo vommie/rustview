@@ -707,14 +707,21 @@ pub const MULTIVIEW_OPEN_XID_ATTEMPTS: u32 = 40;
 /// Videos smaller than this (host pixels) are not drawn (their textures would be too small to show anything).
 pub const MULTIVIEW_MIN_VIDEO_WINDOW_PX: i32 = 16;
 
-/// The action bar floats in a small window of its own (see `viewer/multiview/bar_placement.rs`): its distance from the
-/// corner of the hovered tile, and the size of the window, which leaves room for a tooltip below the bar.
+/// The action bars of the Multiview (`viewer/multiview/bar_placement.rs`, drawn by `ui/multiview_bar.slint`, which gets the sizes
+/// below through its `MultiviewBarMetrics` global): the distance of a bar from the corner of its area.
 pub const MULTIVIEW_BAR_MARGIN_LOGICAL_PX: f32 = 8.0;
 
-pub const MULTIVIEW_OVERLAY_WIDTH_LOGICAL_PX: f32 = 360.0;
+/// A button of an action bar is a square of this size.
+pub const MULTIVIEW_BAR_BUTTON_LOGICAL_PX: f32 = 28.0;
 
-/// Room below the bar for a tooltip bubble and for the "Open With" drop-down.
-pub const MULTIVIEW_OVERLAY_HEIGHT_LOGICAL_PX: f32 = 344.0;
+/// The gap between two buttons of an action bar.
+pub const MULTIVIEW_BAR_SPACING_LOGICAL_PX: f32 = 2.0;
+
+/// The padding of an action bar around its buttons.
+pub const MULTIVIEW_BAR_INSET_LOGICAL_PX: f32 = 3.0;
+
+/// The arrow of a split button (the Save button's drop-down) makes it this much wider.
+pub const MULTIVIEW_BAR_ARROW_LOGICAL_PX: f32 = 16.0;
 
 /// Base title of a tab that holds a Multiview; further ones get the usual numbered suffix.
 pub const MULTIVIEW_TAB_TITLE: &str = "Multiview";

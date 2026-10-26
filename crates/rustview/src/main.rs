@@ -138,15 +138,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     startup_clock::mark("Thumbnails");
 
     // Initialize Slint Window
-    // The action bar of the Multiview floats in a window of its own; it has to be an override-redirect window, which Slint only
-    // lets us request before the first window is created. The same goes for the window system winit opens.
+    // The window system winit opens has to be chosen before the first window is created.
     // Videos are drawn with mpv's OpenGL render API into textures Slint shows (`viewer::video_surface`): Slint must use desktop
     // OpenGL (on its default OpenGL ES 2.0 context mpv drew only black in the lab).
     let renderer = rustview::system::renderer::decide();
     let selector = slint::BackendSelector::new()
         .renderer_name(renderer.slint_name().into())
-        .require_opengl()
-        .with_winit_window_attributes_hook(rustview::ui::multiview::bar_overlay::window_attributes_hook);
+        .require_opengl();
     window_system::select_backend(selector, window_system).select()?;
 
     startup_clock::mark("Backend");

@@ -1,11 +1,12 @@
 import { Theme } from "styles.slint";
 
-/// The zoom slider that hangs below the media bar of an image (inside the speech bubble of `MultiviewBarMenu`).
+/// The zoom slider that hangs below the media bar of an image, and above the minimap (inside the speech bubble of
+/// `MultiviewBarMenu`).
 ///
 /// The reset (100%) is in the middle, zooming in is to the right, zooming out to the left; both halves are logarithmic (the
 /// same distance is the same factor). A thin line from the middle to the handle shows which way the zoom went, small ticks mark
 /// the points the handle snaps to (the snapping itself is done by Rust, which answers with the snapped value at once). The
-/// percentage is not drawn here: the bar window floats it below the bubble (`pill-visible`, `handle-center-x`) while the pointer
+/// percentage is not drawn here: its owner floats it next to the bubble (`pill-visible`, `handle-center-x`) while the pointer
 /// is over the slider, so it takes no room. The mouse wheel over it steps (5%, Shift 10%, Ctrl 25%), a double click on the track
 /// or a click on the middle tick resets.
 ///
