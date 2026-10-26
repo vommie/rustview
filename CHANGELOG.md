@@ -52,6 +52,11 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   compositing manager, tooltips and menus of the window lie over them, and a drop-down closes on a click anywhere else in the view
   (that click does nothing else). RustView no longer asks the X server where the pointer is every 50 ms: the bars follow the pointer
   events of their window, so they also appear with native Wayland.
+- **Everything over a video is drawn by RustView's own window** (branch video-in-slint, fourth step): the rating and save icon, the
+  speaker of the mute key, the volume bar of the wheel and the keys and the corner marks of the selected medium look exactly as over
+  a picture; mpv draws nothing over the picture any more. In the Tab-Grid the time badge of a video ("0:03 / 0:08") is drawn by
+  RustView too, and the pause badge of a single video moved to the bottom left corner, so the two no longer cover each other.
+  Messages of mpv scripts no longer get the dark box the time badge used to give them.
 - **The save bubble and the menu of saved A-B repeats open right above their button**: the caret points at the button that opened
   them (also on a narrow video and with the pill style), the bubble touches the bar (no gap any more), and opening or closing them
   no longer makes the whole bar flicker. A menu that is wider than its video may use the room next to it. A click anywhere else in

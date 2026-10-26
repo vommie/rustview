@@ -153,10 +153,10 @@ also offered as a German questionnaire with a tick and a note field per item.
 ## I. The selected medium (focus marks)
 
 - [ ] **I1** With 2+ media, a click on a medium (or on any button of its media bar) selects it; hover, wheel, dragging,
-  the minimap and Ctrl+click do not. — *Test:* click, then wheel over another one.
+  the minimap and Ctrl+click do not. — *Test:* click, then wheel over another one. *Checked in M4: a click on a video of two videos and a picture selects it (marks), the wheel over the other video changes its volume and does not select it.*
 - [ ] **I2** Corner marks in the corners of the selected medium's VIEW (its column at the full row height, not the video
   itself), in the primary color, also where the video covers the corner; the free part of the view is brightened (Off /
-  Weak / Medium / Strong; marks Short / Medium / Long). — *Test:* a letterboxed and a full video, a zoomed one; each setting.
+  Weak / Medium / Strong; marks Short / Medium / Long). — *Test:* a letterboxed and a full video, a zoomed one; each setting. *Checked in M4: the marks of a selected letterboxed video and of a zoomed one sit in the corners of its view, drawn by the canvas above the video texture (no mpv overlay any more); the settings not run through.*
 - [ ] **I3** The marks hide with the resting cursor (when "Hide the selection marks too" is on) and a key that acts on the
   selected medium shows them for about a second. — *Test:* let the cursor hide, press Space.
 - [ ] **I4** With 2+ media and none selected, a key that needs a medium does nothing and the hint "Select a medium first"
@@ -168,15 +168,15 @@ also offered as a German questionnaire with a tick and a note field per item.
 ## J. Feedback over a video
 
 - [ ] **J1** Ctrl+0..5 rates the selected video and shows the rating icon centered over it for 750 ms, then a 250 ms fade;
-  a new rating replaces it at once. — *Test:* Ctrl+4, then quickly Ctrl+2.
+  a new rating replaces it at once. — *Test:* Ctrl+4, then quickly Ctrl+2. *Checked in M4: Ctrl+4 then Ctrl+2 on the selected video: the 2 replaced the 4 at once, centered over the video, drawn by the canvas; also over a zoomed video.*
 - [ ] **J2** The rating animation can be switched off (Settings > Multiview > Rating); the rating is saved anyway. —
   *Test:* switch off, rate, look at the badge in Browse.
 - [ ] **J3** The mute key (M) shows the speaker icon (crossed out when muted) like the rating icon; the mute buttons show
-  none. — *Test:* M, then the bar's speaker.
+  none. — *Test:* M, then the bar's speaker. *Checked in M4: M shows the crossed-out speaker on a white disc centered over the video (canvas).*
 - [ ] **J4** The wheel and the Louder/Quieter keys show a flat, semi-transparent volume bar centered in the lower part of the
   picture, at most half its width, dimmed while muted, same timing; the bar's slider shows none. — *Test:* wheel, Ctrl+Up,
-  then the slider.
-- [ ] **J5** The feedback also shows over a paused video. — *Test:* pause, Ctrl+3.
+  then the slider. *Checked in M4: the wheel over a playing video and over a muted one (dimmed fill, crossed-out speaker) shows the bar in the lower part of the picture (canvas).*
+- [ ] **J5** The feedback also shows over a paused video. — *Test:* pause, Ctrl+3. *Checked in M4: Ctrl+3 over a video that had stopped at its end.*
 
 ## K. Keys
 

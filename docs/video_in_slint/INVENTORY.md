@@ -144,6 +144,13 @@ from `MULTIVIEW_BAR_*` constants that Slint gets through `MultiviewBarMetrics` (
 
 ## 5. What mpv draws over the picture (M4)
 
+**Done in M4 (0.5.10):** every row of this section. The feedback pulse (rating, save, the speaker of the mute key), the corner marks
+and the volume bar (`TileView::volume`, `volume-*` of `MultiviewTileView`) are drawn by `ui/multiview_canvas.slint` over videos as over
+pictures; the grid's time badge is a row of a `TimeBadgeModel` per Multiview (`ui/multiview/time_badges.rs`, filled by the grid tick
+from `grid_time_badges`) drawn by the canvas of the grid item (done in M4, not with M6). Deleted: `mpv_engine/overlay.rs`, `rating.rs`,
+`osd_text.rs`, `feedback_overlay.rs`, `focus_overlay.rs`, `volume_overlay.rs`, the overlay sync functions and the `VideoTile` fields
+`feedback_overlay`, `focus_overlay`, `volume_overlay`, `time_badge`. mpv draws nothing over the picture any more.
+
 | File / function | What it does today | Milestone |
 |---|---|---|
 | `src/viewer/mpv_engine/overlay.rs` (`show_overlay`, `remove_overlay`, the id table incl. `VOLUME_BAR_OVERLAY_ID`, focus corner ids) | `overlay-add` / `overlay-remove` of premultiplied BGRA bitmaps | **M4** delete |
