@@ -87,7 +87,7 @@ impl BridgeViewerTabs {
             Self::sync_video_embedding(&win_close, &tm_close, &fs_close, &set_close);
             fs_close.sync_tab(&tm_close);
             if win_close.get_active_view_mode() == 2 {
-                BridgeTabGrid::sync_tab_grid_ui(&win_close, &tm_close, &lib_close, &set_close, &st_close);
+                BridgeTabGrid::sync_tab_grid_ui(&win_close, &tm_close, &set_close, &st_close);
             }
         });
 
@@ -184,7 +184,7 @@ impl BridgeViewerTabs {
                 Self::sync_video_embedding(&win_v_close, &tm_v_close, &fs_v_close, &set_v_close);
                 fs_v_close.sync_tab(&tm_v_close);
                 if win_v_close.get_active_view_mode() == 2 {
-                    BridgeTabGrid::sync_tab_grid_ui(&win_v_close, &tm_v_close, &lib_v_close, &set_v_close, &st_v_close);
+                    BridgeTabGrid::sync_tab_grid_ui(&win_v_close, &tm_v_close, &set_v_close, &st_v_close);
                 }
             }
         });

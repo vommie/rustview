@@ -145,7 +145,7 @@ impl BridgeViewerTabs {
         Self::sync_ui(window, tab_manager, library, settings, state);
 
         if window.get_active_view_mode() == 2 {
-            BridgeTabGrid::sync_tab_grid_ui(window, tab_manager, library, settings, state);
+            BridgeTabGrid::sync_tab_grid_ui(window, tab_manager, settings, state);
         }
 
         StatusBarBridge::success(window, format!("Opened {opened_count} tabs in background"));
@@ -217,7 +217,7 @@ impl BridgeViewerTabs {
                 Self::sync_ui(window, tab_manager, library, settings, state);
 
                 if window.get_active_view_mode() == 2 {
-                    BridgeTabGrid::sync_tab_grid_ui(window, tab_manager, library, settings, state);
+                    BridgeTabGrid::sync_tab_grid_ui(window, tab_manager, settings, state);
                 }
 
                 let all_tabs = tab_manager.list_tabs();

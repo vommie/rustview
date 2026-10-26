@@ -2,8 +2,8 @@
 
 User decision 2026-10-26 (M0 questionnaire, question 4): a general cleanup and optimization pass of RustView comes as a
 branch of its own **after** the acceptance of `video-in-slint`. Every milestone logs here what it notices outside the video
-work (one line each: where, what, why it matters, a rough size). Nothing here is done on this branch. At the end the list is
-presented to the user as a questionnaire, and the user decides what is done.
+work (one line each: where, what, why it matters, a rough size). Nothing here is done on this branch. At the end the list was
+presented to the user as a questionnaire; the outcome per row is at the end of this file.
 
 | # | Found in | Where | What | Why it matters |
 |---|---|---|---|---|
@@ -28,3 +28,29 @@ presented to the user as a questionnaire, and the user decides what is done.
 | 19 | M7 (W1) | native Wayland, `system/dnd/`, `viewer/x11/xdnd.rs` | no drag source to other programs on native Wayland (winit offers none; a Wayland data device of our own needs the serial of the pointer press) | user decision 2026-10-26: solve later, in the cleanup branch |
 | 20 | M7 (W2) | native Wayland, `ui/dialog_parent.rs` | dialogs are ordinary windows (no `xdg_toplevel.set_parent`, no xdg-dialog in winit 0.30); a click on the locked main window closes them | user decision 2026-10-26: solve later |
 | 21 | M7 (W3) | native Wayland, `ui/multiview/pointer_lock.rs` | the minimap drag has no pointer lock (winit's `CursorGrabMode::Locked` + relative motion would do, Slint does not forward device events) | user decision 2026-10-26: solve later |
+
+## Outcome (questionnaire `2026-10-26-rustview-aufraeumen`, done on `claude` from 0.6.1)
+
+| # | Decision | Outcome |
+|---|---|---|
+| 1 | do | Done. The observer thread observes `time-pos`, `duration`, `pause`, `volume`, `mute`, `eof-reached`, `idle-active` and `video-params/{dw,dh,rotate}` (`mpv_observe_property`) and sleeps in `mpv_wait_event(-1)`; nothing is polled any more (`viewer/mpv_engine/events.rs`). `fullscreen`/`window-maximized` were already gone. The video size is cached by the player and invalidated by `loadfile` until the new file starts, which replaced the tick-counting `StaleProbe` of recycled players. |
+| 2 | do | Done. The 50 ms repeating timers of the fullscreen, the tab view and the tab grid are single-shot `WakeTimer`s armed for `MultiviewInstance::tick_deadline` (`instance_tick.rs`); pointer, key and player events (`PlayerEvent::{Playback, VideoParams}`), `modal-lock-changed` and `tab-grid-active-changed` of the main window update the hosts at once. Measured: a tab with one paused video 3 ticks of 100 Hz in 10 s = 0.3 % of a core (M7: 5 %). It still ticks every 50 ms while the bar of a playing video shows (its time moves) and, in the tab grid, while a video plays (its time badge). |
+| 3 | later | `docs/BACKLOG.md` B1 (no upstream report; first look for a cause of our own). |
+| 4 | do | Done. One listener per player (`MpvPlayer::on_notice`, `MpvNotice`) instead of the callback lists (the general `subscribe` list had no subscriber at all); the stale OSC/wheel docs are rewritten. |
+| 5 | later | `docs/BACKLOG.md` B2 (`video_bar/window.rs` went in M2; `session.rs` stays over the limit for now). |
+| 6 | do | Done. The options moved to `viewer/mpv_engine/options.rs`: `load-osd-console` (no mpv option) is gone, `script-opts` is no longer set twice nor overwritten (the A-B script's message switch goes through `change-list`), the OSC deadzone options are gone. The mpv defaults check of the same questionnaire is in its own questionnaire `2026-10-26-rustview-mpv-einstellungen`. |
+| 7 | do | Done (`set_interactive` removed). |
+| 8 | do | The second placement went with M6; `sync_tab_grid_ui` places each Multiview once and takes the instance lock once per tab instead of three times. |
+| 9 | do | Already in CLAUDE.md's VM notes ("When the viewer of the VM ... ~1 frame/s"); nothing more to do. |
+| 10 | do | Done: `crates/rustview/tests/tooltip_policy.rs` (every `TooltipHost` has an id and its file calls `on-hover-enter` and `on-hover-leave` of it). |
+| 11 | do | Done in the test environment (outside the repository): `gen_ab_repeats.py --help` prints its usage and changes nothing; an unknown argument does the same with exit code 2. |
+| 12 | do | Done. While the crop rectangle is the whole picture, a drag inside it draws a new rectangle (`CropTool::hit_test`, the overlay shows the crosshair there). |
+| 13 | do | Done: `MultiviewBarMenu.translucent` became the color property `fill`. |
+| 14 | do | Done: `incremental = false` in `[profile.dev]` (a `CARGO_INCREMENTAL` in `.cargo/config.toml` would not reach cargo itself). |
+| 15 | do | Done: the unused library parameter of `sync_tab_grid_ui` is gone (all call sites), every tab grid callback holds the main window weakly, the "Requirement N" comments are rewritten. |
+| 16 | do | Done. An `end-file` with an error (and an unexpected `shutdown` of mpv) reaches the tile as `PlayerEvent::Failed`; the tile shows the warning icon with "This video could not be played" and mpv's reason (its last error line for the file plus the error code's text) where the video would be; F5 tries again. Checked with `Corrupt/truncated.mp4`. A crash inside libmpv itself ends the whole process and cannot be caught. |
+| 17 | do | Done: the shared handler is `BridgeTabGrid::open_tab_fullscreen` behind the main window callback `open-tab-fullscreen` (grid middle click, F11, the bar's button) and logs `[TabFullscreen: Open]`. |
+| 18 | later | Same as #5 (`docs/BACKLOG.md` B2). |
+| 19 | later | `docs/BACKLOG.md` B3. |
+| 20 | later | `docs/BACKLOG.md` B4. |
+| 21 | later | `docs/BACKLOG.md` B5. |

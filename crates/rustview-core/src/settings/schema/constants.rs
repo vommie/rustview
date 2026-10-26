@@ -670,7 +670,12 @@ pub const MULTIVIEW_PIN_BLINK_MS: u64 = 200;
 
 pub const MULTIVIEW_SELECTION_DEBOUNCE_MS: u64 = 150;
 
+/// How often a host ticks while something moves continuously (the time on the visible bar of a playing video, a blinking pin);
+/// with nothing pending it does not tick at all (`MultiviewInstance::tick_deadline`).
 pub const MULTIVIEW_TICK_MS: u64 = 50;
+
+/// A dialog that locks the main window is mapped a moment after the lock: the hosts look at it again after this long.
+pub const MULTIVIEW_MODAL_RECHECK_MS: u64 = 300;
 
 pub const MULTIVIEW_DOUBLE_CLICK_MS: u64 = 400;
 
@@ -695,9 +700,6 @@ pub const MULTIVIEW_FOCUS_CORNER_LEVELS: [(&str, u32); 3] = [
 ];
 
 pub const MULTIVIEW_FOCUS_CORNER_THICKNESS_LOGICAL_PX: u32 = 2;
-
-/// Ticks during which the display parameters of a recycled player are taken for those of the previous file if they are equal.
-pub const MULTIVIEW_STALE_PROBE_TICKS: u32 = 20;
 
 /// The native window handle appears a moment after `show()`; the session polls for it every `MULTIVIEW_OPEN_POLL_MS`.
 pub const MULTIVIEW_OPEN_POLL_MS: u64 = 15;
@@ -725,12 +727,6 @@ pub const MULTIVIEW_BAR_ARROW_LOGICAL_PX: f32 = 16.0;
 
 /// Base title of a tab that holds a Multiview; further ones get the usual numbered suffix.
 pub const MULTIVIEW_TAB_TITLE: &str = "Multiview";
-
-// --- mpv event observer ---
-/// Polling interval of the observer thread of a player that is shown (or in the tab grid) and of one that is hidden.
-pub const MPV_OBSERVER_ACTIVE_POLL_MS: u64 = 20;
-
-pub const MPV_OBSERVER_IDLE_POLL_MS: u64 = 100;
 
 // --- shutdown ---
 /// A shutdown that has not finished after this long is ended by the watchdog (a stuck teardown must not leave an invisible

@@ -3,7 +3,7 @@
 //! The user's policy (Settings > Multiview > Sound) decides which videos are muted automatically. By default only one
 //! video is audible: the leftmost one when the Multiview opens. `Native` means "mpv's own state is left alone"; a tile
 //! that returns to `Native` gets the mute value mpv started with (captured at tile creation), never a blind "unmuted".
-//! A mute set by the user (badge, `m`, mpv OSC) is never overridden by the policy.
+//! A mute set by the user (badge, mute key, control bar) is never overridden by the policy.
 
 /// Who carries the sound while several videos are shown.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

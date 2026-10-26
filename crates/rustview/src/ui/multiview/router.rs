@@ -44,6 +44,9 @@ fn route_event(handle: &MultiviewHandle, weak: &WeakInstance, event: PlayerEvent
             PlayerEvent::MuteChanged { tile, muted } => guard.on_player_mute_changed(tile, muted),
             PlayerEvent::AbRepeat { tile, change } => guard.on_ab_repeat_changed(tile, change),
             PlayerEvent::PauseChanged { tile, paused } => guard.on_player_pause_changed(tile, paused),
+            PlayerEvent::Playback { tile } => guard.on_player_playback(tile),
+            PlayerEvent::VideoParams { tile } => guard.on_video_params(tile),
+            PlayerEvent::Failed { tile, message } => guard.on_player_failed(tile, &message),
         }
         guard.host_mode()
     };

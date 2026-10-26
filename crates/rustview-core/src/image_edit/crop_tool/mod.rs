@@ -204,13 +204,19 @@ impl CropTool {
     }
 
     /// What is under the pointer at (`x`, `y`). `tolerance` is the reach of a handle in image pixels (the host derives it from
-    /// the size of the handles on screen and the zoom). A rectangle too small for its handles is moved from inside.
+    /// the size of the handles on screen and the zoom). A rectangle too small for its handles is moved from inside. While the
+    /// rectangle is the whole picture (a fresh tool) it cannot move anywhere, so a drag inside it draws a new one.
     pub fn hit_test(&self, x: f64, y: f64, tolerance: f64) -> Hit {
         let rect = self.rect;
         let inside = rect.contains(x, y);
+        let inside_hit = if self.is_whole_image() {
+            Hit::Outside
+        } else {
+            Hit::Inside
+        };
         let small = f64::from(rect.width) < tolerance * 4.0 || f64::from(rect.height) < tolerance * 4.0;
         if small && inside {
-            return Hit::Inside;
+            return inside_hit;
         }
         let near = |handle: Handle| {
             let (hx, hy) = handle.position(rect);
@@ -239,7 +245,7 @@ impl CropTool {
         if within_y && (x - x1).abs() <= tolerance {
             return Hit::Handle(Handle::Right);
         }
-        if inside { Hit::Inside } else { Hit::Outside }
+        if inside { inside_hit } else { Hit::Outside }
     }
 
     /// The button went down at (`x`, `y`) on `hit`; nothing changes until the pointer moves.

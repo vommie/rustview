@@ -713,6 +713,24 @@ impl ZoomState {
                     || self.minimap.reveal_until.is_some_and(|until| now < until))
     }
 
+    /// The next moment after `now` at which `poll` or `minimap_shown` may answer differently without any input: the animation
+    /// runs (now), a new zoom has rested long enough to be rendered, the original is released or the minimap goes. `None`:
+    /// nothing changes by itself.
+    pub fn wakeup(&self, now: Instant) -> Option<Instant> {
+        if self.animation.is_some() {
+            return Some(now);
+        }
+        let render = self
+            .changed_at
+            .map(|at| at + RENDER_DEBOUNCE)
+            .filter(|_| self.renders && !self.target.is_fit() && self.in_flight.is_none());
+        [render, self.release_at, self.minimap.reveal_until]
+            .into_iter()
+            .flatten()
+            .filter(|at| *at > now)
+            .min()
+    }
+
     /// When the minimap will go away if nothing happens (so the owner knows to look again then).
     pub fn minimap_deadline(&self) -> Option<Instant> {
         self.minimap.reveal_until

@@ -17,6 +17,8 @@ pub struct PlaybackNumbers {
     pub paused: bool,
     /// Percent (mpv's `volume`).
     pub volume: f64,
+    /// The file played to its end, or there is none (nothing moves any more).
+    pub ended: bool,
 }
 
 impl MpvPlayer {
@@ -30,6 +32,8 @@ impl MpvPlayer {
         let path_str = path.to_string_lossy();
         // A zoom belongs to the file it was made on: the next file of a reused player starts whole.
         self.reset_video_zoom();
+        // The size mpv reports until the new file starts is still the previous file's.
+        self.params.write().reset(true);
 
         self.mpv
             .command("loadfile", &[&path_str, "replace"])
@@ -61,7 +65,6 @@ impl MpvPlayer {
             "[MpvPlayer: LoadFile] Loaded and started video playback"
         );
 
-        self.notify_subscribers();
         Ok(())
     }
 
@@ -91,7 +94,6 @@ impl MpvPlayer {
             st.is_user_paused = false;
             st.is_playing = true;
         }
-        self.notify_subscribers();
         Ok(())
     }
 
@@ -108,7 +110,6 @@ impl MpvPlayer {
             st.is_paused = true;
             st.is_user_paused = self.is_user_paused.load(Ordering::SeqCst);
         }
-        self.notify_subscribers();
         Ok(())
     }
 
@@ -140,7 +141,6 @@ impl MpvPlayer {
             .map_err(|e| ViewerError::Mpv(format!("Failed to set volume: {e:?}")))?;
 
         self.state.write().volume = clamped;
-        self.notify_subscribers();
         Ok(())
     }
 
@@ -153,6 +153,7 @@ impl MpvPlayer {
     /// shutdown then races with the destruction of the window. Must be called with the last reference to the player.
     pub fn shutdown_blocking(self: Arc<Self>) {
         self.observer_running.store(false, Ordering::Release);
+        self.wake_observer();
         let _ = self.mpv.command("stop", &[]);
         if let Some(observer) = self.observer_handle.lock().take() {
             let _ = observer.join();
@@ -182,13 +183,10 @@ impl MpvPlayer {
             .map_err(|e| ViewerError::Mpv(format!("Failed to set mute: {e:?}")))
     }
 
-    /// Display size and rotation of the playing video as reported by mpv (`video-params/dw`, `dh`, `rotate`).
-    /// `dw`/`dh` are not rotated; `None` until the first frame of the file is decoded.
+    /// Display size and rotation of the playing video as reported by mpv (`video-params/dw`, `dh`, `rotate`; observed).
+    /// `dw`/`dh` are not rotated; `None` until the first frame of the loaded file is decoded.
     pub fn video_display_params(&self) -> Option<(i64, i64, i64)> {
-        let width = self.mpv.get_property::<i64>("video-params/dw").ok()?;
-        let height = self.mpv.get_property::<i64>("video-params/dh").ok()?;
-        let rotate = self.mpv.get_property::<i64>("video-params/rotate").unwrap_or(0);
-        Some((width, height, rotate))
+        self.params.read().get()
     }
 
     pub fn get_position(&self) -> f64 {
@@ -219,7 +217,6 @@ impl MpvPlayer {
             st.position_secs = 0.0;
             st.filename.clear();
         }
-        self.notify_subscribers();
         tracing::debug!("[MpvPlayer: Stop] Playback stopped and reset to idle");
     }
 
@@ -235,6 +232,7 @@ impl MpvPlayer {
             duration: st.duration_secs,
             paused: st.is_paused,
             volume: st.volume,
+            ended: st.is_eof || st.is_idle,
         }
     }
 }

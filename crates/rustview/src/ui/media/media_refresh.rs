@@ -526,7 +526,7 @@ impl BridgeMedia {
                     Self::update_virtual_folder_button_state(&w, &lib_arc, &st_arc);
                     BridgeViewerTabs::sync_ui(&w, &tab_mgr_arc, &lib_arc, &set_arc, &st_arc);
                     if w.get_active_view_mode() == 2 {
-                        BridgeTabGrid::sync_tab_grid_ui(&w, &tab_mgr_arc, &lib_arc, &set_arc, &st_arc);
+                        BridgeTabGrid::sync_tab_grid_ui(&w, &tab_mgr_arc, &set_arc, &st_arc);
                     }
                     let busy = Self::is_system_busy(&w, &thumb_arc, &st_arc);
                     w.set_is_system_busy(busy);

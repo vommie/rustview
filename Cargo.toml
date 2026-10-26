@@ -4,7 +4,7 @@ members = ["crates/rustview-core", "crates/rustview"]
 default-members = ["crates/rustview-core", "crates/rustview"]
 
 [workspace.package]
-version = "0.6.0"
+version = "0.6.1"
 edition = "2024"
 # The lowest toolchain known to work: the code uses `AtomicUsize::try_update` (1.95). rust-toolchain.toml pins `stable`.
 rust-version = "1.95"
@@ -135,6 +135,8 @@ fn_params_excessive_bools = "allow"
 [profile.dev]
 opt-level = 3
 debug = "line-tables-only"
+# The incremental cache of an optimized dev profile grows by tens of GB a day (it once filled the disk) and saves little here.
+incremental = false
 
 [profile.dev.package."*"]
 opt-level = 3

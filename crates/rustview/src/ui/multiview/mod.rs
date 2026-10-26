@@ -31,6 +31,7 @@ mod time_badges;
 pub mod video_bar;
 pub mod video_host;
 mod views;
+mod wake_timer;
 
 pub use eligibility::OpenSummary;
 
@@ -48,4 +49,11 @@ pub fn refresh_tooltips(appearance: &rustview_core::settings::schema::Appearance
 /// Applies changed settings to a fullscreen that is open (its background). UI thread only.
 pub fn refresh_settings(settings: &rustview_core::settings::SettingsManager) {
     session::refresh_settings(settings);
+}
+
+/// A dialog or the settings window locked the main window or let it go: the hosts hide or show their bars at once (and look
+/// again a moment later, when the dialog's window is mapped).
+pub fn modal_lock_changed() {
+    tab_host::modal_lock_changed();
+    session::with_session(session::Session::modal_lock_changed);
 }

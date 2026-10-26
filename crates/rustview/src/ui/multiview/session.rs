@@ -25,7 +25,7 @@ use crate::viewer::{TabId, ViewerTabManager};
 use parking_lot::RwLock;
 use rustview_core::settings::SettingsManager;
 use rustview_core::settings::schema::{
-    MULTIVIEW_OPEN_POLL_MS, MULTIVIEW_OPEN_XID_ATTEMPTS, MULTIVIEW_SELECTION_DEBOUNCE_MS, MULTIVIEW_TICK_MS,
+    MULTIVIEW_OPEN_POLL_MS, MULTIVIEW_OPEN_XID_ATTEMPTS, MULTIVIEW_SELECTION_DEBOUNCE_MS,
 };
 use rustview_core::util::cast::SaturatingAs;
 use rustview_core::util::hex_color;
@@ -81,7 +81,8 @@ pub(super) struct Session {
     pub(super) images: ImageCache,
     shown_revision: Option<u64>,
     pub(super) debounce: Timer,
-    pub(super) tick: Timer,
+    pub(super) tick: super::wake_timer::WakeTimer,
+    pub(super) modal_recheck: Timer,
     /// Redraws every frame while a zoom glides to its new value (the tick is too slow for that).
     pub(super) glide: Timer,
     /// Wakes the session for the next change of a rating icon; armed only while one is shown.
@@ -446,14 +447,18 @@ fn finish_open(generation: u64, attempt: u32) {
 }
 
 /// Whether the fullscreen refuses to close because it is pinned. A refusal makes the primary bar show itself and its pin
-/// button blink (the instance does that); the next tick draws it.
+/// button blink (the instance does that); the tick draws it.
 pub(super) fn close_refused() -> bool {
-    SESSION.with(|cell| {
+    let refused = SESSION.with(|cell| {
         cell.try_borrow()
             .ok()
             .and_then(|slot| slot.as_ref().map(|s| s.instance.lock().refuse_close()))
             .unwrap_or(false)
-    })
+    });
+    if refused {
+        with_session(Session::update_bars);
+    }
+    refused
 }
 
 /// A close the user asked for (Esc, double or middle click, the window's close button, the close button of the bar). A
@@ -597,7 +602,8 @@ impl Session {
             images: ImageCache::default(),
             shown_revision: None,
             debounce: Timer::default(),
-            tick: Timer::default(),
+            tick: super::wake_timer::WakeTimer::default(),
+            modal_recheck: Timer::default(),
             glide: Timer::default(),
             feedback_timer: Timer::default(),
             populated: false,
@@ -631,10 +637,7 @@ impl Session {
         if let Some(win) = self.window.upgrade() {
             win.set_is_ready(true);
         }
-        self.tick
-            .start(TimerMode::Repeated, Duration::from_millis(MULTIVIEW_TICK_MS), || {
-                with_session(Session::on_tick);
-            });
+        self.update_bars();
         tracing::info!(
             generation = self.generation,
             monitor = self.monitor.index,
@@ -686,6 +689,7 @@ impl Session {
     pub(super) fn shutdown(mut self) {
         self.debounce.stop();
         self.tick.stop();
+        self.modal_recheck.stop();
         self.pointer_sync.stop();
         self.glide.stop();
         self.feedback_timer.stop();

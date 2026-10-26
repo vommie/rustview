@@ -1,5 +1,5 @@
 //! The video player keys of `RustView` (Settings > Hotkeys > Video Player) and the control bar of a video on mpv: mpv takes
-//! no keys and no pointer input itself, these commands do what its own keys and its on-screen controller did.
+//! no keys and no pointer input itself, these commands carry out what the keys and the control bar ask for.
 
 use super::MpvPlayer;
 use crate::viewer::error::ViewerError;

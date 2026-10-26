@@ -12,11 +12,11 @@ use super::media_actions::MediaActionId;
 use super::model::{AspectSource, TileKind};
 use super::video_bar::state::VideoBarState;
 use crate::ui::button_feedback::ButtonFeedback;
-use crate::viewer::MpvPlayer;
 use crate::viewer::edit::save_badge::SaveBadge;
 use crate::viewer::edit::tile_edit::{EditSource, TileEdit};
 use crate::viewer::video_surface::{HostWindowId, VideoSurface};
 use crate::viewer::zoom::state::ZoomState;
+use crate::viewer::{MpvNotice, MpvPlayer};
 use parking_lot::RwLock;
 use rustview_core::library::models::MediaId;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
@@ -36,7 +36,7 @@ pub struct VideoTile {
     pub surface: VideoSurface,
     /// Mute state mpv started with (user config); `Native` audio restores it.
     pub native_mute: bool,
-    /// Last mute state known, to tell our own changes from changes made inside mpv (`m`, OSC).
+    /// Last mute state known, to tell our own changes from changes made inside mpv (a script).
     pub last_mute: bool,
     /// The tile the player currently serves (`TileKey`). A recycled player moves on to another tile, and the callbacks that
     /// were installed once at creation read this instead of the key they were created for.
@@ -112,8 +112,6 @@ pub struct TileState {
     pub pin: Option<f64>,
     /// Feedback of the action buttons of this tile.
     pub feedback: HashMap<MediaActionId, ButtonFeedback>,
-    /// Display parameters mpv reported for the file a recycled player showed before: they are stale until they change.
-    pub stale_probe: Option<StaleProbe>,
     /// The zoom of an image that is shown (`None` for a video, an image that is still loading or one that failed).
     pub zoom: Option<ZoomState>,
     /// The minimap was shown the last time the zoom was looked at (a change of it makes the view redraw).
@@ -124,13 +122,6 @@ pub struct TileState {
     pub edit: Option<TileEdit>,
     /// The Save button of the tile (it outlives the edit for a moment after saving, fading out).
     pub save_badge: SaveBadge,
-}
-
-/// Parameters that must not be taken for the new file, and how many ticks to ignore them at most.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct StaleProbe {
-    pub params: (i64, i64, i64),
-    pub ticks_left: u32,
 }
 
 impl TileState {
@@ -157,7 +148,6 @@ impl TileState {
             sticky: seed.sticky,
             pin: None,
             feedback: HashMap::new(),
-            stale_probe: None,
             zoom: seed.orig_size.filter(|_| decoded).map(ZoomState::new),
             zoom_minimap_shown: false,
             source: seed.source,
@@ -175,26 +165,19 @@ pub(super) fn connect_callbacks(
     owner: &EventOwner,
     current_tile: &Arc<AtomicU64>,
 ) {
-    let tile = current_tile.clone();
-    let (mute_sink, mute_owner) = (Arc::clone(sink), Arc::clone(owner));
-    player.on_mute_changed(move |muted| {
+    let (tile, sink, owner) = (Arc::clone(current_tile), Arc::clone(sink), Arc::clone(owner));
+    player.on_notice(move |notice| {
         let tile = tile.load(Ordering::SeqCst);
-        let me = mute_owner.read().clone();
-        mute_sink.post(me, PlayerEvent::MuteChanged { tile, muted });
-    });
-    let tile = current_tile.clone();
-    let (pause_sink, pause_owner) = (Arc::clone(sink), Arc::clone(owner));
-    player.on_user_pause_changed(move |paused| {
-        let tile = tile.load(Ordering::SeqCst);
-        let me = pause_owner.read().clone();
-        pause_sink.post(me, PlayerEvent::PauseChanged { tile, paused });
-    });
-    let tile = current_tile.clone();
-    let (ab_sink, ab_owner) = (Arc::clone(sink), Arc::clone(owner));
-    player.on_ab_repeat_changed(move |change| {
-        let tile = tile.load(Ordering::SeqCst);
-        let me = ab_owner.read().clone();
-        ab_sink.post(me, PlayerEvent::AbRepeat { tile, change });
+        let event = match notice {
+            MpvNotice::Mute(muted) => PlayerEvent::MuteChanged { tile, muted },
+            MpvNotice::UserPause(paused) => PlayerEvent::PauseChanged { tile, paused },
+            MpvNotice::Playback => PlayerEvent::Playback { tile },
+            MpvNotice::VideoParams => PlayerEvent::VideoParams { tile },
+            MpvNotice::Failed(message) => PlayerEvent::Failed { tile, message },
+            MpvNotice::AbRepeat(change) => PlayerEvent::AbRepeat { tile, change },
+        };
+        let me = owner.read().clone();
+        sink.post(me, event);
     });
 }
 

@@ -10,7 +10,8 @@ import { SmoothScrollArea } from "smooth_scroll_view.slint";
 export component MultiviewBarMenu inherits Rectangle {
     in property <[ContextMenuItemModel]> items;
     in property <length> anchor-x: 0px;
-    in property <bool> translucent: true;
+    // The body's fill: slightly see-through by default; the minimap's slider bubble sits on the picture and is opaque.
+    in property <color> fill: Theme.surface.with-alpha(0.9);
     // The caret is under the bubble and points down (a bubble that sits above its opener) instead of up.
     in property <bool> caret-down: false;
     in property <length> max-content-height: 300px;
@@ -22,7 +23,6 @@ export component MultiviewBarMenu inherits Rectangle {
     out property <length> caret-center-x: root.caret-x;
 
     property <length> body-height: root.custom-height > 0px ? root.custom-height : Math.min(menu-layout.preferred-height + 8px, Math.max(root.max-content-height - root.caret-height, 0px));
-    property <color> fill: root.translucent ? Theme.surface.with-alpha(0.9) : Theme.surface;
     property <length> caret-x: Math.max(14px, Math.min(root.width - 14px, root.anchor-x));
 
     callback item-clicked(int /* item id */);

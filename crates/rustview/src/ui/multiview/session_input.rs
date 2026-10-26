@@ -15,9 +15,10 @@ use crate::viewer::multiview::route::{HostMode, OriginKind, RoutedEvent, UiActio
 use crate::viewer::multiview::tile::TileSeed;
 use crate::viewer::video_surface::FULLSCREEN_WINDOW;
 use rustview_core::library::models::MediaId;
+use rustview_core::settings::schema::MULTIVIEW_MODAL_RECHECK_MS;
 use rustview_core::util::cast::SaturatingAs;
 use slint::{ComponentHandle, TimerMode};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 impl Session {
     /// The fullscreen window as host rectangle, or `None` when the window is gone.
@@ -45,9 +46,32 @@ impl Session {
     }
 
     pub(super) fn on_tick(&mut self) {
+        self.tick.fired();
         self.instance.lock().tick(self.pointer);
         self.refresh();
         self.update_bars();
+    }
+
+    /// Arms the tick for the next moment the instance changes by itself (continuously while a drag holds the pointer).
+    fn rearm_tick(&mut self) {
+        let now = Instant::now();
+        let deadline = if super::pointer_lock::active() {
+            Some(now + crate::viewer::multiview::instance_tick::TICK)
+        } else {
+            self.instance.lock().tick_deadline(now)
+        };
+        self.tick.arm(deadline, now, || with_session(Session::on_tick));
+    }
+
+    /// The main window was locked by a dialog or let go (see `multiview::modal_lock_changed`): the bars follow at once, and once
+    /// more when the dialog's window is mapped.
+    pub(crate) fn modal_lock_changed(&mut self) {
+        self.update_bars();
+        self.modal_recheck.start(
+            TimerMode::SingleShot,
+            Duration::from_millis(MULTIVIEW_MODAL_RECHECK_MS),
+            || with_session(Session::update_bars),
+        );
     }
 
     /// The pointer moved over the window or left it: the bars follow on this turn of the event loop.
@@ -58,8 +82,13 @@ impl Session {
         }
         self.instance.lock().pointer_moved(pointer);
         if !self.pointer_sync.running() {
+            // The minimap of a zoomed picture shows near the pointer, then the bars follow.
             self.pointer_sync.start(TimerMode::SingleShot, Duration::ZERO, || {
-                with_session(Session::update_bars);
+                with_session(|s| {
+                    s.instance.lock().poll_zoom();
+                    s.refresh();
+                    s.update_bars();
+                });
             });
         }
     }
@@ -216,6 +245,7 @@ impl Session {
                 &mut self.cursor_hidden,
             );
         }
+        self.rearm_tick();
     }
 
     /// Locks the fullscreen while a dialog is open (its own or one of the main window): the overlay of the window takes every

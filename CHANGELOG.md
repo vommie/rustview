@@ -9,6 +9,25 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ## [Unreleased]
 
+### Changed
+- **Videos no longer ask mpv for their state 50 times a second**: every player is told by mpv when its time, pause state,
+  volume, mute or picture size changes and otherwise sleeps. A paused video tab now costs about 0.3 % of a CPU core instead of
+  5 %.
+- **The views with videos and pictures no longer wake up every 50 ms**: the fullscreen, the tab view and the tab grid react to the
+  pointer, keys and the players at once and only wake up when something changes by itself (a bar hides, the cursor hides, a
+  zoomed picture is sharpened). Only while the control bar of a playing video (or, in the tab grid, a playing video) is on
+  screen does its time move every 50 ms.
+- mpv's built-in helper scripts that only react to its own keys (statistics, console, command prompt, selection lists, panning,
+  context menu) and the youtube-dl hook are no longer started in every video player; mpv gets no keys in RustView. Your
+  script-opts other than the A-B script's message switch are kept now.
+- A fresh crop tool covers the whole picture: dragging inside it now draws a new rectangle (before, nothing happened).
+
+### Fixed
+- **A video that cannot be played shows why**: instead of an empty black tile, the tile shows a warning icon and mpv's reason
+  where the video would be (for example "avformat_open_input() failed (unrecognized file format)"); also when mpv stops by itself.
+  A refresh (F5) tries the file again.
+- The log line of F11 in the tab view no longer claims a middle click in the tab grid.
+
 ## [0.6.0] - 2026-10-26
 
 ### Added

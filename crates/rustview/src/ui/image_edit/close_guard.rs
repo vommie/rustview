@@ -153,7 +153,7 @@ pub fn defer_tab_close(handle: &MultiviewHandle, ids: Vec<TabId>) -> bool {
         BridgeViewerTabs::sync_video_embedding(&window, &app.tab_manager, &handle, &app.settings);
         handle.sync_tab(&app.tab_manager);
         if window.get_active_view_mode() == 2 {
-            BridgeTabGrid::sync_tab_grid_ui(&window, &app.tab_manager, &app.library, &app.settings, &app.state);
+            BridgeTabGrid::sync_tab_grid_ui(&window, &app.tab_manager, &app.settings, &app.state);
         }
     })
 }

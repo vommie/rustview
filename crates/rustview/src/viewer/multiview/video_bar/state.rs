@@ -91,6 +91,11 @@ impl VideoBarState {
         pending.target
     }
 
+    /// When the shown target of a seek gives way to mpv's position at the latest (`None`: no seek on its way).
+    pub fn seek_deadline(&self) -> Option<Instant> {
+        self.pending_seek.map(|pending| pending.until)
+    }
+
     pub fn set_volume_drag(&mut self, dragging: bool) {
         self.volume_drag = dragging;
     }

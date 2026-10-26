@@ -44,7 +44,7 @@ pub fn handle(window: &MainWindow, tab_manager: &Arc<ViewerTabManager>, state: &
         }),
         GridKey::Fullscreen => marked.is_some_and(|id| {
             tracing::debug!(tab_id = id, "[TabGrid: Keys] Show the marked item in the fullscreen");
-            window.invoke_tab_grid_item_middle_clicked(id.wrapping_as::<i32>());
+            window.invoke_open_tab_fullscreen(id.wrapping_as::<i32>());
             true
         }),
         GridKey::Close => marked.is_some_and(|id| {

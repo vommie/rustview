@@ -139,6 +139,11 @@ pub fn end() {
     });
 }
 
+/// A drag holds the pointer: the host ticks until it ends (`service` notices a release that never arrived as an event).
+pub fn active() -> bool {
+    LOCK.with(|cell| cell.borrow().as_ref().is_some_and(|l| l.active))
+}
+
 /// Called on every tick of a host: a lock that outlived its mouse button (the release never arrived) ends.
 pub fn service() {
     LOCK.with(|cell| {

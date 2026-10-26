@@ -120,6 +120,15 @@ export component MainWindow inherits Window {
 
     in-out property <bool> is-table-view: false;
     in-out property <bool> is-modal-locked: false;
+    // The Multiview hosts follow the lock and the tab grid by these events instead of looking every tick.
+    callback modal-lock-changed();
+    changed is-modal-locked => {
+        root.modal-lock-changed();
+    }
+    callback tab-grid-active-changed();
+    changed is-tab-grid-active => {
+        root.tab-grid-active-changed();
+    }
     // A fullscreen that belongs to a tab is open above the main window. Kept apart from `is-modal-locked` (a dialog or the
     // settings window is open) so that closing a dialog does not release this lock, and the action bars know about dialogs.
     in-out property <bool> is-fullscreen-locked: false;
@@ -356,7 +365,8 @@ export component MainWindow inherits Window {
     // Tab Grid View Callbacks
     callback tab-grid-item-left-clicked(int /* tab_id */);
     callback tab-grid-item-selection-clicked(int /* tab_id */, bool /* ctrl */, bool /* shift */);
-    callback tab-grid-item-middle-clicked(int /* tab_id */);
+    // A middle click on a grid item, F11 in the tab view or the grid, the bar's fullscreen button of a tab.
+    callback open-tab-fullscreen(int /* tab_id */);
     callback tab-grid-item-close-clicked(int /* tab_id */);
     // A key of the tab grid (Settings > Hotkeys > Tab-Grid; codes of `GridKey`): returns whether it was used.
     callback tab-grid-key(int) -> bool;
@@ -1061,7 +1071,7 @@ export component MainWindow inherits Window {
                         item-left-clicked(id) => { root.tab-grid-item-left-clicked(id); }
                         item-selection-clicked(id, ctrl, shift) => { root.tab-grid-item-selection-clicked(id, ctrl, shift); }
                         selection-cleared => { root.tab-selection-cleared(); }
-                        item-middle-clicked(id) => { root.tab-grid-item-middle-clicked(id); }
+                        item-middle-clicked(id) => { root.open-tab-fullscreen(id); }
                         item-close-clicked(id) => { root.tab-grid-item-close-clicked(id); }
                         item-context-menu(id, x, y) => { root.tab-context-menu(id, x, y + 38px); }
                         columns-changed(c) => { root.tab-grid-columns-changed(c); }

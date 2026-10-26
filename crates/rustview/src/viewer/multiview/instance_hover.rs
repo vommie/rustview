@@ -1,4 +1,4 @@
-//! Instance behavior around the pointer: the 50 ms tick, which tile is hovered, which tile the hover bar belongs to and
+//! Instance behavior around the pointer: which tile is hovered, which tile the hover bar belongs to and
 //! the runtime correction of aspect ratios reported by mpv.
 //!
 //! The host hands in the pointer from the pointer events of its window (`ui::multiview::pointer_events`), in window
@@ -11,25 +11,10 @@ use super::instance::MultiviewInstance;
 use super::layout::Rect;
 use super::model::{AspectSource, aspect_differs, aspect_from_video_params};
 use super::prefs;
-use super::tile::StaleProbe;
 use super::view::MediaBarTarget;
 use std::time::Instant;
 
 impl MultiviewInstance {
-    /// Runs every tick while the Multiview is shown. `pointer` is the last pointer position the host saw over its window
-    /// (window coordinates, `None` outside it); the hovered tile is found again, the layout may have changed. Sound changes
-    /// inside mpv and aspect probing only matter for videos.
-    pub fn tick(&mut self, pointer: Option<(i32, i32)>) {
-        self.ticks = self.ticks.wrapping_add(1);
-        self.pointer_moved(pointer);
-        self.poll_zoom();
-        self.poll_mark_reveal(Instant::now());
-        if !self.has_video() {
-            return;
-        }
-        self.probe_aspects();
-    }
-
     /// The tile under a point given in host window coordinates.
     fn tile_at_host(&self, x: i32, y: i32) -> Option<usize> {
         // A zoomed picture fills its whole room, which counts as the tile.
@@ -142,16 +127,6 @@ impl MultiviewInstance {
             let Some((width, height, rotate)) = video.player.video_display_params() else {
                 continue;
             };
-            if let Some(stale) = tile.stale_probe {
-                if stale.params == (width, height, rotate) && stale.ticks_left > 0 {
-                    tile.stale_probe = Some(StaleProbe {
-                        ticks_left: stale.ticks_left - 1,
-                        ..stale
-                    });
-                    continue;
-                }
-                tile.stale_probe = None;
-            }
             let Some(aspect) = aspect_from_video_params(width, height, rotate) else {
                 continue;
             };

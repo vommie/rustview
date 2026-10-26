@@ -26,7 +26,6 @@ impl BridgeTabGrid {
     pub fn sync_tab_grid_ui(
         window: &MainWindow,
         tab_manager: &Arc<ViewerTabManager>,
-        _library: &Arc<Library>,
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
@@ -107,11 +106,13 @@ impl BridgeTabGrid {
             .enumerate()
             .map(|(idx, s)| {
                 let r = &rects[idx];
-                let solo_kind = s.multiview.instance.lock().solo_tile().map(|(_, kind, _)| kind);
                 // Its own statement: a lock taken inside the struct literal below would be held until the whole literal is
                 // built, and `tab_icon` takes the same lock again (the tab grid hung as soon as a tab was open).
-                let has_unsaved = s.multiview.instance.lock().has_unsaved_edits();
-                let instance_id = s.multiview.instance.lock().id();
+                let (solo_kind, has_unsaved, instance_id) = {
+                    let instance = s.multiview.instance.lock();
+                    let solo_kind = instance.solo_tile().map(|(_, kind, _)| kind);
+                    (solo_kind, instance.has_unsaved_edits(), instance.id())
+                };
                 let (width, height) = s.display_size();
                 let multiview_item: GridItemView = grid_host.place(&s.multiview.instance, canvas_rect(r, p_h, p_v));
 
@@ -161,7 +162,7 @@ impl BridgeTabGrid {
         );
     }
 
-    /// Handles Left-Click on a `TabGrid` item: switches to Tab Viewer view (mode 1) and foregrounds the tab (Requirement 5: seamless playback continuation).
+    /// A click on a grid item: the tab view (mode 1) shows that tab, whose videos play on where they were.
     pub fn handle_item_left_clicked(
         tab_id: TabId,
         window: &MainWindow,
@@ -186,18 +187,16 @@ impl BridgeTabGrid {
         BridgeViewerTabs::sync_video_embedding(window, tab_manager, fullscreen, settings);
     }
 
-    /// Handles Middle-Click on a `TabGrid` item: launches Fullscreen Viewer directly for that tab without changing active tab (Requirement 3: auto-plays).
-    pub fn handle_item_middle_clicked(
+    /// Shows tab `tab_id` in the fullscreen without making it the active tab (`open-tab-fullscreen`: a middle click on its grid
+    /// item, F11 in the tab view or the grid, the fullscreen button of its bar).
+    pub fn open_tab_fullscreen(
         tab_id: TabId,
         window: &MainWindow,
         tab_manager: &Arc<ViewerTabManager>,
         settings: &Arc<SettingsManager>,
         fullscreen: &MultiviewHandle,
     ) {
-        tracing::info!(
-            tab_id,
-            "[TabGrid: MiddleClick] Launching fullscreen for media item directly from TabGrid (Requirement 3: auto-plays)"
-        );
+        tracing::info!(tab_id, "[TabFullscreen: Open] Showing the tab in the fullscreen");
 
         fullscreen.open_tab(tab_id, tab_manager, settings, &window.as_weak());
     }
@@ -215,7 +214,7 @@ impl BridgeTabGrid {
 
         tab_manager.close_tab(tab_id);
         BridgeViewerTabs::sync_ui(window, tab_manager, library, settings, state);
-        Self::sync_tab_grid_ui(window, tab_manager, library, settings, state);
+        Self::sync_tab_grid_ui(window, tab_manager, settings, state);
     }
 
     /// The grid scrolled: Slint moves and clips the items (videos included); only the small bars follow the content under the

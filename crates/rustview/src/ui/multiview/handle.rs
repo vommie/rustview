@@ -194,7 +194,7 @@ impl MultiviewHandle {
             return;
         };
         if window.get_active_view_mode() == 2 {
-            BridgeTabGrid::sync_tab_grid_ui(&window, &app.tab_manager, &app.library, &app.settings, &app.state);
+            BridgeTabGrid::sync_tab_grid_ui(&window, &app.tab_manager, &app.settings, &app.state);
         }
     }
 
@@ -206,7 +206,7 @@ impl MultiviewHandle {
         };
         BridgeViewerTabs::sync_ui(&window, &app.tab_manager, &app.library, &app.settings, &app.state);
         if window.get_active_view_mode() == 2 {
-            BridgeTabGrid::sync_tab_grid_ui(&window, &app.tab_manager, &app.library, &app.settings, &app.state);
+            BridgeTabGrid::sync_tab_grid_ui(&window, &app.tab_manager, &app.settings, &app.state);
         }
         tracing::debug!("[Multiview: TabMembers] The application caught up with the media left in the tab");
     }
@@ -519,11 +519,11 @@ impl MultiviewHandle {
         }
     }
 
-    /// Opens the tab that owns the Multiview instance `instance_id` in the fullscreen window, through the same main window
-    /// callback as a middle click on its grid item.
+    /// Opens the tab that owns the Multiview instance `instance_id` in the fullscreen window, through the main window's
+    /// `open-tab-fullscreen` (also a middle click on its grid item and F11).
     pub(super) fn open_tab_fullscreen(&self, instance_id: u64) {
         self.on_tab_of_instance(instance_id, |w, tab_id| {
-            w.invoke_tab_grid_item_middle_clicked(tab_id.wrapping_as::<i32>());
+            w.invoke_open_tab_fullscreen(tab_id.wrapping_as::<i32>());
         });
     }
 

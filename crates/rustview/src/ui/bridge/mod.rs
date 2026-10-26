@@ -341,7 +341,7 @@ impl UiBridge {
                     // the tab list too (the Multiview may have been moved into a new tab as it closed).
                     BridgeViewerTabs::sync_ui(&w, &tm, &lib, &set, &st);
                     if w.get_active_view_mode() == 2 {
-                        BridgeTabGrid::sync_tab_grid_ui(&w, &tm, &lib, &set, &st);
+                        BridgeTabGrid::sync_tab_grid_ui(&w, &tm, &set, &st);
                     }
                     BridgeViewerTabs::sync_video_embedding(&w, &tm, &fs_ctrl, &set);
                     StatusBarBridge::update_metrics(&w, &st);
@@ -355,7 +355,7 @@ impl UiBridge {
                 if origin_mode == 2 {
                     tm.deactivate_all_tabs();
                     BridgeViewerTabs::sync_ui(&w, &tm, &lib, &set, &st);
-                    BridgeTabGrid::sync_tab_grid_ui(&w, &tm, &lib, &set, &st);
+                    BridgeTabGrid::sync_tab_grid_ui(&w, &tm, &set, &st);
                 } else if origin_mode == 1 {
                     if let Some(tab_id) = tab_id_opt {
                         tm.set_active_tab_internal(tab_id, true);

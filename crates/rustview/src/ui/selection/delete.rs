@@ -446,7 +446,7 @@ impl DeleteSelectionDialogController {
         BridgeInspector::update(window, &ctx.state);
         BridgeTags::sync_tag_selection(window, &ctx.library, &ctx.state);
         if window.get_active_view_mode() == 2 {
-            BridgeTabGrid::sync_tab_grid_ui(window, &ctx.tab_manager, &ctx.library, &ctx.settings, &ctx.state);
+            BridgeTabGrid::sync_tab_grid_ui(window, &ctx.tab_manager, &ctx.settings, &ctx.state);
         }
     }
 

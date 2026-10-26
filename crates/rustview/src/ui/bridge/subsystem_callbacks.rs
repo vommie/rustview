@@ -381,7 +381,6 @@ impl UiBridge {
         let fs_right = self.fullscreen.clone();
         let set_right = self.settings.clone();
         let win_right = self.window.clone_strong();
-        let lib_right = self.library.clone();
         let st_right = self.state.clone();
 
         self.window.on_sidebar_right_resized(move |new_width| {
@@ -391,7 +390,7 @@ impl UiBridge {
             if win_right.get_active_view_mode() == 1 {
                 BridgeViewerTabs::sync_video_embedding(&win_right, &tm_right, &fs_right, &set_right);
             } else if win_right.get_active_view_mode() == 2 {
-                BridgeTabGrid::sync_tab_grid_ui(&win_right, &tm_right, &lib_right, &set_right, &st_right);
+                BridgeTabGrid::sync_tab_grid_ui(&win_right, &tm_right, &set_right, &st_right);
             }
 
             let mut last_log = last_right_clone.lock();
@@ -420,7 +419,6 @@ impl UiBridge {
         let tm_right_fin = self.tab_manager.clone();
         let fs_right_fin = self.fullscreen.clone();
         let win_right_fin = self.window.clone_strong();
-        let lib_right_fin = self.library.clone();
         let st_right_fin = self.state.clone();
 
         self.window.on_sidebar_right_resize_finished(move |final_width| {
@@ -432,13 +430,7 @@ impl UiBridge {
             if win_right_fin.get_active_view_mode() == 1 {
                 BridgeViewerTabs::sync_video_embedding(&win_right_fin, &tm_right_fin, &fs_right_fin, &set_right_fin);
             } else if win_right_fin.get_active_view_mode() == 2 {
-                BridgeTabGrid::sync_tab_grid_ui(
-                    &win_right_fin,
-                    &tm_right_fin,
-                    &lib_right_fin,
-                    &set_right_fin,
-                    &st_right_fin,
-                );
+                BridgeTabGrid::sync_tab_grid_ui(&win_right_fin, &tm_right_fin, &set_right_fin, &st_right_fin);
             }
         });
     }

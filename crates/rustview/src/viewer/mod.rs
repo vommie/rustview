@@ -17,7 +17,7 @@ pub mod zoom;
 pub use error::ViewerError;
 pub use loader::HighResImageLoader;
 pub use manager::ViewerTabManager;
-pub use mpv_engine::{MpvEventCallback, MpvPlayer};
+pub use mpv_engine::{MpvNotice, MpvPlayer};
 pub use tab_item::{TabCollection, TabTitleFormatter};
 pub use tab_merge::{MergeError, MergeMenu, MergeRefusal, MergeSide, MergeSource, MergedTabs};
 pub use types::{MULTIVIEW_TAB_MEDIA_ID, MediaTabSession, MpvPlaybackState, MultiviewTabPayload, TabId, ViewerAction};

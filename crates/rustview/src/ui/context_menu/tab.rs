@@ -270,13 +270,7 @@ impl TabContextMenu {
                         );
 
                         if ctx.window.get_active_view_mode() == 2 {
-                            BridgeTabGrid::sync_tab_grid_ui(
-                                ctx.window,
-                                ctx.tab_manager,
-                                ctx.library,
-                                ctx.settings,
-                                ctx.state,
-                            );
+                            BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.settings, ctx.state);
                         }
 
                         let all_tabs = ctx.tab_manager.list_tabs();
@@ -302,13 +296,7 @@ impl TabContextMenu {
                 if ctx.tab_manager.move_tab_to_start(tab_id) {
                     BridgeViewerTabs::sync_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
                     if ctx.window.get_active_view_mode() == 2 {
-                        BridgeTabGrid::sync_tab_grid_ui(
-                            ctx.window,
-                            ctx.tab_manager,
-                            ctx.library,
-                            ctx.settings,
-                            ctx.state,
-                        );
+                        BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.settings, ctx.state);
                     }
                 }
             }
@@ -317,13 +305,7 @@ impl TabContextMenu {
                 if ctx.tab_manager.move_tab_left(tab_id) {
                     BridgeViewerTabs::sync_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
                     if ctx.window.get_active_view_mode() == 2 {
-                        BridgeTabGrid::sync_tab_grid_ui(
-                            ctx.window,
-                            ctx.tab_manager,
-                            ctx.library,
-                            ctx.settings,
-                            ctx.state,
-                        );
+                        BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.settings, ctx.state);
                     }
                 }
             }
@@ -332,13 +314,7 @@ impl TabContextMenu {
                 if ctx.tab_manager.move_tab_right(tab_id) {
                     BridgeViewerTabs::sync_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
                     if ctx.window.get_active_view_mode() == 2 {
-                        BridgeTabGrid::sync_tab_grid_ui(
-                            ctx.window,
-                            ctx.tab_manager,
-                            ctx.library,
-                            ctx.settings,
-                            ctx.state,
-                        );
+                        BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.settings, ctx.state);
                     }
                 }
             }
@@ -347,13 +323,7 @@ impl TabContextMenu {
                 if ctx.tab_manager.move_to_end(tab_id) {
                     BridgeViewerTabs::sync_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
                     if ctx.window.get_active_view_mode() == 2 {
-                        BridgeTabGrid::sync_tab_grid_ui(
-                            ctx.window,
-                            ctx.tab_manager,
-                            ctx.library,
-                            ctx.settings,
-                            ctx.state,
-                        );
+                        BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.settings, ctx.state);
                     }
                 }
             }
@@ -379,7 +349,7 @@ impl TabContextMenu {
                 ctx.fullscreen.sync_tab(ctx.tab_manager);
 
                 if ctx.window.get_active_view_mode() == 2 {
-                    BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
+                    BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.settings, ctx.state);
                 }
 
                 if closed_count > 0 {
@@ -411,7 +381,7 @@ impl TabContextMenu {
                 ctx.fullscreen.sync_tab(ctx.tab_manager);
 
                 if ctx.window.get_active_view_mode() == 2 {
-                    BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
+                    BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.settings, ctx.state);
                 }
 
                 if closed_count > 0 {
@@ -443,7 +413,7 @@ impl TabContextMenu {
                 ctx.fullscreen.sync_tab(ctx.tab_manager);
 
                 if ctx.window.get_active_view_mode() == 2 {
-                    BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
+                    BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.settings, ctx.state);
                 }
 
                 if closed_count > 0 {
@@ -469,7 +439,7 @@ impl TabContextMenu {
                 ctx.fullscreen.sync_tab(ctx.tab_manager);
 
                 if ctx.window.get_active_view_mode() == 2 {
-                    BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
+                    BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.settings, ctx.state);
                 }
             }
             _ => {}

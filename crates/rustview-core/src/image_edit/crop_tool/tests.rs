@@ -92,7 +92,11 @@ fn the_hit_test_finds_corners_edges_inside_and_outside() {
     assert_eq!(tool.hit_test(120.0, 299.0, 6.0), Hit::Handle(Handle::Bottom));
     assert_eq!(tool.hit_test(395.0, 150.0, 6.0), Hit::Handle(Handle::Right));
     assert_eq!(tool.hit_test(1.0, 100.0, 6.0), Hit::Handle(Handle::Left));
-    assert_eq!(tool.hit_test(200.0, 150.0, 6.0), Hit::Inside);
+    // The whole picture cannot move: inside it a drag draws.
+    assert_eq!(tool.hit_test(200.0, 150.0, 6.0), Hit::Outside);
+    let mut part = self::tool((400, 300));
+    drag(&mut part, (400.0, 300.0), (200.0, 150.0), false, &ratios(&[]));
+    assert_eq!(part.hit_test(100.0, 75.0, 6.0), Hit::Inside);
     let mut small = self::tool((400, 300));
     let set = ratios(&[]);
     drag(&mut small, (400.0, 300.0), (10.0, 10.0), false, &set);
@@ -181,6 +185,14 @@ fn shift_on_an_edge_grows_the_other_axis_around_its_middle() {
     let rect = drag(&mut tool, (500.0, 750.0), (500.0, 1000.0), true, &set);
     assert_eq!(rect.size(), (750, 750));
     assert!(rect.right() <= 1000 && rect.bottom() <= 1000);
+}
+
+#[test]
+fn the_first_drag_inside_a_fresh_tool_draws_a_rectangle() {
+    let set = ratios(&[]);
+    let mut tool = tool((400, 300));
+    let rect = drag(&mut tool, (100.0, 50.0), (300.0, 250.0), false, &set);
+    assert_eq!(rect, PixelRect::new(100, 50, 200, 200));
 }
 
 #[test]

@@ -78,7 +78,6 @@ pub struct MultiviewInstance {
     pub(super) pin_pulse_until: Option<Instant>,
     /// The color the fullscreen paints behind the media (also around a single video, whose window covers the display).
     pub(super) video_background: Option<[u8; 3]>,
-    pub(super) ticks: u32,
     /// The medium the F2 that is being handled acts on (set by `run_command`).
     pub(super) rename_target: Option<MediaId>,
     pub(super) clicks: ClickDetector,
@@ -134,7 +133,6 @@ impl MultiviewInstance {
                 cursor_hidden: false,
                 pin_pulse_until: None,
                 video_background: None,
-                ticks: 0,
                 rename_target: None,
                 clicks: ClickDetector::default(),
                 revision: 0,

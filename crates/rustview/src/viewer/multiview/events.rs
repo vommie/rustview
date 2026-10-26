@@ -16,10 +16,16 @@ use std::sync::Arc;
 pub type DecodedImage = Result<(u32, u32, SharedPixelBuffer<Rgb8Pixel>), String>;
 
 pub enum PlayerEvent {
-    /// The mute state of the player of this tile changed (a hotkey or the on-screen controller of mpv, or us).
+    /// The mute state of the player of this tile changed (a key, the control bar or a button of `RustView`, or a script inside mpv).
     MuteChanged { tile: TileKey, muted: bool },
     /// The user's pause state of the player of this tile changed.
     PauseChanged { tile: TileKey, paused: bool },
+    /// Pause, end of file, duration or volume of the player of this tile changed (its numbers: `MpvPlayer::playback`).
+    Playback { tile: TileKey },
+    /// mpv knows the display size of the video of this tile.
+    VideoParams { tile: TileKey },
+    /// mpv cannot play the video of this tile (or stopped by itself): the tile shows `message` where the video would be.
+    Failed { tile: TileKey, message: String },
     /// The mpv script `ab_repeat.lua` in the player of this tile published a change (its support, A-B or saved repeats).
     AbRepeat {
         tile: TileKey,

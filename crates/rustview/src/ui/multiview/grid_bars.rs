@@ -1,20 +1,22 @@
 //! The video tiles of the tab grid (UI thread only): the small control bar of the video under the pointer (`video_bar`: a model
 //! per Multiview, drawn by the canvas of its grid item) and the time badges of every other video (`time_badges`, another model per
 //! Multiview). The pointer comes from the main window's own events (`pointer_events`, forwarded by the tab host), a scroll of the
-//! grid moves it over the content; a tick keeps the badges' times and the bars' fade going while the grid is shown and stops
-//! itself when it is not.
+//! grid moves it over the content; a tick keeps the badges' times and the bars' fade going while the grid is shown and a video in
+//! it plays or a bar fades, and stops when nothing moves or the grid goes (`active_changed`).
 
 use super::time_badges::TimeBadgeModel;
 use super::video_bar::VideoBarModel;
+use super::wake_timer::WakeTimer;
 use crate::ui::tabs::grid::canvas::visible_grid;
 use crate::ui::{MainWindow, MultiviewTimeBadgeView, MultiviewVideoBarView};
 use crate::viewer::ViewerTabManager;
 use crate::viewer::multiview::instance::SharedInstance;
+use crate::viewer::multiview::instance_tick::TICK;
 use crate::viewer::multiview::layout::Rect;
 use crate::viewer::multiview::route::HostMode;
 use crate::viewer::multiview::video_bar::prefs::{self, BarStyle, VideoBarPrefs};
 use crate::viewer::multiview::video_bar::view::VideoBarInput;
-use rustview_core::settings::schema::{MULTIVIEW_TICK_MS, MULTIVIEW_VIDEO_BAR_MINI_HEIGHT_LOGICAL_PX};
+use rustview_core::settings::schema::MULTIVIEW_VIDEO_BAR_MINI_HEIGHT_LOGICAL_PX;
 use rustview_core::util::cast::FloatToInt;
 use slint::{ComponentHandle, ModelRc, Timer, TimerMode};
 use std::cell::RefCell;
@@ -25,7 +27,9 @@ use std::time::{Duration, Instant};
 struct GridBars {
     window: slint::Weak<MainWindow>,
     tabs: Weak<ViewerTabManager>,
-    timer: Timer,
+    /// The grid is shown: pointer movements and scrolling update the bars.
+    active: bool,
+    timer: WakeTimer,
     /// Brings the bars in line with the pointer once per turn of the event loop, however many movements arrived in it.
     pointer_sync: Timer,
 }
@@ -53,23 +57,35 @@ pub fn badges_for(instance_id: u64) -> ModelRc<MultiviewTimeBadgeView> {
     BADGES.with(|badges| badges.borrow_mut().entry(instance_id).or_default().model())
 }
 
-/// The grid is shown (or was synced): the tick runs from now on until the grid goes.
+/// The grid is shown (or was synced): the bars and badges follow it from now on until it goes.
 pub fn ensure_running(window: &MainWindow, tabs: &Arc<ViewerTabManager>) {
-    GRID.with(|cell| {
+    let started = GRID.with(|cell| {
         let mut grid = cell.borrow_mut();
         let state = grid.get_or_insert_with(|| GridBars {
             window: window.as_weak(),
             tabs: Arc::downgrade(tabs),
-            timer: Timer::default(),
+            active: false,
+            timer: WakeTimer::default(),
             pointer_sync: Timer::default(),
         });
-        if !state.timer.running() {
-            state
-                .timer
-                .start(TimerMode::Repeated, Duration::from_millis(MULTIVIEW_TICK_MS), tick);
-            tracing::debug!("[Multiview: GridBars] Started");
-        }
+        !std::mem::replace(&mut state.active, true)
     });
+    if started {
+        tracing::debug!("[Multiview: GridBars] Started");
+    }
+    request_update();
+}
+
+/// The tab grid was shown or left (`is-tab-grid-active` of the main window): leaving it hides its bars and badges at once.
+pub fn active_changed() {
+    let shown = GRID
+        .with(|cell| cell.borrow().as_ref().and_then(|g| g.window.upgrade()))
+        .is_some_and(|window| window.get_is_tab_grid_active());
+    if shown {
+        request_update();
+    } else if GRID.with(|cell| cell.borrow().as_ref().is_some_and(|g| g.active)) {
+        stop();
+    }
 }
 
 /// The preferences of the small bars: the user's opacity and fade, a fixed height, always a bar.
@@ -105,7 +121,7 @@ pub fn on_scrolled() {
 fn request_update() {
     GRID.with(|cell| {
         if let Some(grid) = cell.borrow().as_ref()
-            && grid.timer.running()
+            && grid.active
             && !grid.pointer_sync.running()
         {
             grid.pointer_sync.start(TimerMode::SingleShot, Duration::ZERO, tick);
@@ -125,6 +141,37 @@ fn tick() {
     // While a dialog locks the main window no bar shows (the badges stay).
     let pointer = POINTER.get().filter(|_| !window.get_is_modal_locked());
     update(&window, pointer);
+    rearm();
+}
+
+/// Arms the tick while something in the grid moves by itself: the time badge of a playing video, a bar that fades.
+fn rearm() {
+    let now = Instant::now();
+    let deadline = grid_instances()
+        .iter()
+        .filter_map(|instance| {
+            let guard = instance.lock();
+            if guard.has_playing_video() {
+                Some(now + TICK)
+            } else {
+                guard.tick_deadline(now)
+            }
+        })
+        .min();
+    GRID.with(|cell| {
+        if let Some(grid) = cell.borrow_mut().as_mut() {
+            grid.timer.arm(deadline, now, on_timer);
+        }
+    });
+}
+
+fn on_timer() {
+    GRID.with(|cell| {
+        if let Some(grid) = cell.borrow_mut().as_mut() {
+            grid.timer.fired();
+        }
+    });
+    tick();
 }
 
 /// The visible part of the grid and `pointer` in grid content coordinates (physical pixels; the Multiviews of the grid are placed
@@ -212,7 +259,8 @@ pub(super) fn on_input(key: i32, input: VideoBarInput) {
 /// The grid went: its small bars and badges hide.
 fn stop() {
     GRID.with(|cell| {
-        if let Some(grid) = cell.borrow().as_ref() {
+        if let Some(grid) = cell.borrow_mut().as_mut() {
+            grid.active = false;
             grid.timer.stop();
             grid.pointer_sync.stop();
         }

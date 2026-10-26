@@ -3,7 +3,7 @@
 //! commands. When this player changed the saved ranges of a file, every other player showing that file is asked to read them
 //! again (event-driven: the script publishes the change, the observer thread of this player forwards it).
 
-use super::MpvPlayer;
+use super::{MpvNotice, MpvPlayer};
 use crate::viewer::ab_repeat::protocol::{
     self, Cause, Command, INFO_PATH, RANGES_PATH, RangeList, STATE_PATH, ScriptInfo, ScriptState,
 };
@@ -27,8 +27,6 @@ pub enum AbChange {
     Ranges,
 }
 
-pub type MpvAbCallback = Arc<dyn Fn(AbChange) + Send + Sync>;
-
 /// What the player knows about the script right now.
 #[derive(Debug, Clone, Default)]
 pub struct AbSnapshot {
@@ -51,20 +49,21 @@ struct Registered {
     id: u64,
     mpv: Weak<Mpv>,
     ab: Arc<RwLock<AbSnapshot>>,
-    callbacks: Arc<RwLock<Vec<MpvAbCallback>>>,
+    listener: Listener,
 }
 
 /// A registered player that is still alive.
 struct Live {
     mpv: Arc<Mpv>,
     ab: Arc<RwLock<AbSnapshot>>,
-    callbacks: Arc<RwLock<Vec<MpvAbCallback>>>,
+    listener: Listener,
 }
 
 impl Live {
     fn notify(&self, change: AbChange) {
-        for cb in self.callbacks.read().clone() {
-            cb(change);
+        let callback = self.listener.read().clone();
+        if let Some(callback) = callback {
+            callback(MpvNotice::AbRepeat(change));
         }
     }
 }
@@ -77,30 +76,35 @@ fn live_players() -> Vec<Live> {
             p.mpv.upgrade().map(|mpv| Live {
                 mpv,
                 ab: Arc::clone(&p.ab),
-                callbacks: Arc::clone(&p.callbacks),
+                listener: Arc::clone(&p.listener),
             })
         })
         .collect()
 }
 
+/// The `script-opts` key of the script's on-screen messages (`prefs::AbRepeatPrefs::script_opt` sets it to `no`).
+const OSD_MESSAGES_KEY: &str = "ab_repeat-osd_messages";
+
+/// The listener slot of a player (`MpvPlayer::on_notice`).
+type Listener = Arc<RwLock<Option<super::MpvNoticeCallback>>>;
+
 static PLAYERS: Mutex<Vec<Registered>> = Mutex::new(Vec::new());
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
-/// The `script-opts` of every player: mpv's controller (off anyway) and, when wanted, the script's messages switched off.
-pub(super) fn script_opts() -> String {
-    let mut opts = String::from("osc-deadzonesize=0,osc-minmousemove=0");
-    if let Some(opt) = prefs::current().script_opt() {
-        opts.push(',');
-        opts.push_str(opt);
+/// The script's own on-screen messages follow Settings > Multiview: switched off, `ab_repeat-osd_messages=no` is added to the
+/// player's `script-opts`; switched on, the key is removed again (the script's own configuration decides). Other script options
+/// of the user stay as they are.
+pub(super) fn apply_script_opts(mpv: &Mpv) {
+    let result = match prefs::current().script_opt() {
+        Some(opt) => mpv.command("change-list", &["script-opts", "append", opt]),
+        None => mpv.command("change-list", &["script-opts", "remove", OSD_MESSAGES_KEY]),
+    };
+    if let Err(e) = result {
+        tracing::warn!(error = ?e, "[AbRepeat: Player] The script options could not be set");
     }
-    opts
 }
 
-pub(super) fn register(
-    mpv: &Arc<Mpv>,
-    ab: &Arc<RwLock<AbSnapshot>>,
-    callbacks: &Arc<RwLock<Vec<MpvAbCallback>>>,
-) -> u64 {
+pub(super) fn register(mpv: &Arc<Mpv>, ab: &Arc<RwLock<AbSnapshot>>, listener: &Listener) -> u64 {
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
     let mut players = PLAYERS.lock();
     players.retain(|p| p.mpv.strong_count() > 0);
@@ -108,7 +112,7 @@ pub(super) fn register(
         id,
         mpv: Arc::downgrade(mpv),
         ab: Arc::clone(ab),
-        callbacks: Arc::clone(callbacks),
+        listener: Arc::clone(listener),
     });
     id
 }
@@ -119,12 +123,9 @@ pub(super) fn unregister(id: u64) {
 
 /// Settings > Multiview changed: every player watches the script or stops, and gets the script's message switch.
 pub fn apply_prefs() {
-    let opts = script_opts();
     let enabled = prefs::current().enabled;
     for player in live_players() {
-        if let Err(e) = player.mpv.set_property("script-opts", opts.as_str()) {
-            tracing::warn!(error = ?e, "[AbRepeat: Player] The script options could not be set");
-        }
+        apply_script_opts(&player.mpv);
         if player.ab.read().watching != enabled {
             watch(&player.mpv, &player.ab, enabled);
             player.notify(AbChange::Support);
@@ -212,7 +213,7 @@ fn bindings(mpv: &Mpv) -> Vec<(String, String)> {
         .collect()
 }
 
-/// An observed path changed (observer thread). Returns what changed for the callbacks.
+/// An observed path changed (observer thread). Returns what changed for the listener.
 pub(super) fn on_property(mpv: &Mpv, ab: &RwLock<AbSnapshot>, id: u64, json: &str) -> Option<AbChange> {
     match id {
         INFO_ID => {
@@ -301,16 +302,6 @@ impl MpvPlayer {
     /// What the player knows about the script now.
     pub fn ab_repeat(&self) -> AbSnapshot {
         self.ab.read().clone()
-    }
-
-    /// Called from the observer thread when the script's support, state or saved ranges changed.
-    pub fn on_ab_repeat_changed<F>(&self, callback: F)
-    where
-        F: Fn(AbChange) + Send + Sync + 'static,
-    {
-        let mut cbs = self.ab_callbacks.write();
-        cbs.clear();
-        cbs.push(Arc::new(callback));
     }
 
     /// Sends `command` to the script. Fails when the script is not there (or the support is off).

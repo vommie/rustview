@@ -31,9 +31,9 @@ pub(super) fn layout_params(container: &Container, gutter_floor: i32) -> LayoutP
 }
 
 impl MultiviewInstance {
-    /// The aspect ratios the layout is solved with. A lone video fills the whole display (mpv letterboxes inside its
-    /// window, so wheel, keys and on-screen controller work everywhere); it is laid out with the aspect of the container,
-    /// which makes its window the whole container.
+    /// The aspect ratios the layout is solved with. A lone video fills the whole display (its picture is fitted inside the
+    /// tile, so the wheel, the keys and its control bar work everywhere); it is laid out with the aspect of the container,
+    /// which makes its tile the whole container.
     ///
     /// In the tab view every lone medium (also an image) takes the whole tab area: its tile is laid out with the aspect of the
     /// solving container, which is the shape of that area (`lone_medium_fills_host`), and an image is fitted inside the tile.

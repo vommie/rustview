@@ -216,13 +216,7 @@ impl BridgeViewerTabs {
         Self::sync_video_embedding(params.window, params.tab_manager, params.fullscreen, params.settings);
 
         if params.window.get_active_view_mode() == 2 {
-            BridgeTabGrid::sync_tab_grid_ui(
-                params.window,
-                params.tab_manager,
-                params.library,
-                params.settings,
-                params.state,
-            );
+            BridgeTabGrid::sync_tab_grid_ui(params.window, params.tab_manager, params.settings, params.state);
         }
     }
 }

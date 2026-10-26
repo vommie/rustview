@@ -97,8 +97,9 @@ impl MultiviewInstance {
             return;
         };
         tile::reload_video(video, key, &path);
-        // The zoom belonged to the file before; the new one gets its own once probed.
+        // The zoom belonged to the file before; the new one gets its own once probed. A failure is tried again.
         self.tiles[index].zoom = None;
+        self.tiles[index].error = None;
         tracing::info!(
             media_id,
             index,

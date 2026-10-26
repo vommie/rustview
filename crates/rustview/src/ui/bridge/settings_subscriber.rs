@@ -130,7 +130,7 @@ impl UiBridge {
                     window.set_grid_item_corner_radius(new_clone.appearance.grid_item_corner_radius.saturating_as::<i32>());
 
                     if window.get_active_view_mode() == 2 {
-                        BridgeTabGrid::sync_tab_grid_ui(&window, &tab_manager, &library, &settings, &state);
+                        BridgeTabGrid::sync_tab_grid_ui(&window, &tab_manager, &settings, &state);
                     }
                 }
 
@@ -210,7 +210,7 @@ impl UiBridge {
                 tracing::info!("[UiBridge: TabsChanged] A created tab was not rendered yet; rendering the tab list");
                 BridgeViewerTabs::sync_ui(&w, &tm, &lib, &set, &st);
                 if w.get_active_view_mode() == 2 {
-                    BridgeTabGrid::sync_tab_grid_ui(&w, &tm, &lib, &set, &st);
+                    BridgeTabGrid::sync_tab_grid_ui(&w, &tm, &set, &st);
                 }
             });
         });

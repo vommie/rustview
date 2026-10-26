@@ -158,7 +158,7 @@ fn run(window: &MainWindow, action: Action, trigger: &Trigger<'_>) -> bool {
         Action::TabSaveAs => return window.invoke_edit_key(3),
         Action::TabUndo => return window.invoke_edit_key(4),
         Action::TabRedo => return window.invoke_edit_key(5),
-        Action::TabFullscreen => window.invoke_tab_grid_item_middle_clicked(window.get_viewer_tab_id()),
+        Action::TabFullscreen => window.invoke_open_tab_fullscreen(window.get_viewer_tab_id()),
         Action::TabClose => window.invoke_viewer_close_tab(),
         // Esc and type-ahead find are handled by the window itself; the fullscreen and the video player have their own keys.
         _ => return false,

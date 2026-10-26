@@ -96,6 +96,21 @@ impl BarReveal {
         self.pulse_until = Some(self.pulse_until.map_or(until, |current| current.max(until)));
     }
 
+    /// The bar is on screen (shown or fading out): it shows the playing time, which moves.
+    pub fn visible(&self) -> bool {
+        self.shown || self.gone_at.is_some()
+    }
+
+    /// The next moment after `now` at which `decide` may answer differently without the pointer moving: the idle time after the
+    /// last movement runs out, the fade ends or a pulse is over. `None`: nothing changes until the pointer moves.
+    pub fn deadline(&self, idle: Duration, now: Instant) -> Option<Instant> {
+        [self.moved_at.map(|at| at + idle), self.gone_at, self.pulse_until]
+            .into_iter()
+            .flatten()
+            .filter(|at| *at > now)
+            .min()
+    }
+
     /// The bar goes at once (the host does not show it any more).
     pub fn reset(&mut self) {
         *self = Self::default();
@@ -105,6 +120,26 @@ impl BarReveal {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_deadline_is_the_next_change_without_movement() {
+        let t0 = Instant::now();
+        let idle = Duration::from_millis(1500);
+        let mut reveal = BarReveal::default();
+        assert_eq!(reveal.deadline(idle, t0), None);
+        let mut moving = input(RevealMode::Anywhere, Some((100, 100)));
+        moving.fade = Some(Duration::from_millis(200));
+        assert_eq!(reveal.decide(&moving, t0), Phase::Shown);
+        assert!(reveal.visible());
+        assert_eq!(reveal.deadline(idle, t0), Some(t0 + idle));
+        let later = t0 + idle;
+        assert_eq!(reveal.decide(&moving, later), Phase::FadingOut);
+        assert_eq!(reveal.deadline(idle, later), Some(later + Duration::from_millis(200)));
+        let gone = later + Duration::from_millis(200);
+        assert_eq!(reveal.decide(&moving, gone), Phase::Hidden);
+        assert!(!reveal.visible());
+        assert_eq!(reveal.deadline(idle, gone), None);
+    }
 
     const VIDEO: Rect = Rect::new(0, 0, 800, 450);
     const BAR: Rect = Rect::new(0, 420, 800, 30);

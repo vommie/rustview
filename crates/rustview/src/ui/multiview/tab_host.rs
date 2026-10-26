@@ -2,7 +2,7 @@
 //!
 //! The canvas `multiview-viewer` in `main.slint` draws the scene from the `MultiviewTabBus` global. This module gives the
 //! instance its rectangle (read from Slint, never from hard-wired chrome sizes), fills the bus from the instance, runs the
-//! tick for the bars while the tab is shown and turns the events of the canvas into instance calls and UI actions.
+//! tick for the bars while the tab is shown and something changes by itself (`MultiviewInstance::tick_deadline`) and turns the events of the canvas into instance calls and UI actions.
 //! All state lives on the UI thread; the instance stays the only copy of the Multiview itself.
 
 use super::action_bar::{self, BarEvent};
@@ -10,6 +10,7 @@ use super::cursor;
 use super::handle::MultiviewHandle;
 use super::router;
 use super::views::{self, ImageCache, ViewModels};
+use super::wake_timer::WakeTimer;
 use crate::ui::{MainWindow, MultiviewTabBus};
 use crate::viewer::multiview::HostSurface;
 use crate::viewer::multiview::click::ClickKind;
@@ -22,12 +23,12 @@ use crate::viewer::multiview::route::{HostMode, OriginKind, RoutedEvent, UiActio
 use crate::viewer::video_surface::MAIN_WINDOW;
 use crate::viewer::{ViewerTabManager, get_slint_window_xid};
 use rustview_core::library::models::MediaId;
-use rustview_core::settings::schema::MULTIVIEW_TICK_MS;
+use rustview_core::settings::schema::MULTIVIEW_MODAL_RECHECK_MS;
 use rustview_core::util::cast::SaturatingAs;
 use slint::{ComponentHandle, ModelRc, Timer, TimerMode};
 use std::cell::RefCell;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[derive(Default)]
 struct TabHost {
@@ -43,7 +44,9 @@ struct TabHost {
     images: ImageCache,
     /// Instance id and revision that the bus shows right now.
     shown: Option<(u64, u64)>,
-    tick: Timer,
+    tick: WakeTimer,
+    /// Looks at the lock of the main window again a moment after it changed (the dialog's window is mapped by then).
+    modal_recheck: Timer,
     /// Redraws every frame while a zoom glides to its new value (the tick is too slow for that).
     glide: Timer,
     /// Wakes the host for the next change of a feedback icon (`media_feedback`); armed only while one is shown.
@@ -121,6 +124,8 @@ pub fn bind(window: &MainWindow, handle: MultiviewHandle) {
         bus.set_gutters(ModelRc::from(h.models.gutters.clone()));
     });
     super::tab_video_bar::bind(window);
+    window.on_modal_lock_changed(super::modal_lock_changed);
+    window.on_tab_grid_active_changed(super::grid_bars::active_changed);
     // The main window has one pointer filter: the tab view and the tab grid's small bars both follow it.
     super::pointer_events::install(window.window(), |pointer| {
         on_pointer(pointer);
@@ -351,6 +356,7 @@ fn update_bars() {
         cursor::release(window.window(), Some(&instance), &mut window_hidden);
     }
     with_host(|h| h.cursor_hidden = window_hidden);
+    rearm(&instance);
 }
 
 /// Runs `f` on the shown instance; when it changed something, the view and the control bars follow at once.
@@ -424,10 +430,6 @@ pub fn sync(window: &MainWindow, instance: &SharedInstance) {
         h.window = Some(window.as_weak());
         h.instance = Arc::downgrade(instance);
         h.main_xid = main_xid;
-        if !h.tick.running() {
-            h.tick
-                .start(TimerMode::Repeated, Duration::from_millis(MULTIVIEW_TICK_MS), on_tick);
-        }
     });
     refresh();
 }
@@ -453,6 +455,7 @@ pub fn suspend() {
     }
     let released = with_host(|h| {
         h.tick.stop();
+        h.modal_recheck.stop();
         h.pointer_sync.stop();
         h.glide.stop();
         h.feedback.stop();
@@ -545,6 +548,37 @@ fn manage_glide(animating: bool) {
     });
 }
 
+/// Arms the tick for the next moment the instance changes by itself (continuously while a drag holds the pointer).
+fn rearm(instance: &SharedInstance) {
+    let now = Instant::now();
+    let deadline = if super::pointer_lock::active() {
+        Some(now + crate::viewer::multiview::instance_tick::TICK)
+    } else {
+        instance.lock().tick_deadline(now)
+    };
+    with_host(|h| {
+        h.tick.arm(deadline, now, || {
+            with_host(|h| h.tick.fired());
+            on_tick();
+        });
+    });
+}
+
+/// The main window was locked by a dialog or let go (see `multiview::modal_lock_changed`).
+pub(super) fn modal_lock_changed() {
+    if with_host(|h| h.instance.upgrade().is_none()).unwrap_or(true) {
+        return;
+    }
+    update_bars();
+    with_host(|h| {
+        h.modal_recheck.start(
+            TimerMode::SingleShot,
+            Duration::from_millis(MULTIVIEW_MODAL_RECHECK_MS),
+            update_bars,
+        );
+    });
+}
+
 fn on_tick() {
     let Some((instance, pointer)) = with_host(|h| Some((h.instance.upgrade()?, h.pointer))).flatten() else {
         return;
@@ -567,9 +601,20 @@ fn on_pointer(pointer: Option<(i32, i32)>) {
     instance.lock().pointer_moved(pointer);
     with_host(|h| {
         if !h.pointer_sync.running() {
-            h.pointer_sync.start(TimerMode::SingleShot, Duration::ZERO, update_bars);
+            h.pointer_sync
+                .start(TimerMode::SingleShot, Duration::ZERO, on_pointer_sync);
         }
     });
+}
+
+/// The pointer moved during the last turn of the event loop: the minimap of a zoomed picture follows it (it shows near the
+/// pointer), then the bars.
+fn on_pointer_sync() {
+    if let Some(instance) = current_instance() {
+        instance.lock().poll_zoom();
+    }
+    refresh();
+    update_bars();
 }
 
 /// The medium an F2 rename acts on in the active tab: its selected medium (the hint shows when several are shown and none is).

@@ -46,7 +46,7 @@ an element of the canvas.
   `reveal` (when it shows, fade-out), `progress` (the span model), `time_text`, `volume` (the speaker logic), `state` (per tile: the
   millisecond switch, drags, the pending seek, the last audible level), `view` (the data between instance and canvas, and
   `VideoBarInput::from_event`, which decodes the events of the canvas).
-- Instance: `instance_video_bar.rs` (`video_bar_targets` on every tick of a host, `video_bar_input` for what the user did,
+- Instance: `instance_video_bar.rs` (`video_bar_targets` whenever a host updates its bars: a pointer event, a player event, its tick (`instance_tick.rs`: every 50 ms only while the bar of a playing video shows, else at the next deadline), `video_bar_input` for what the user did,
   `video_wheel`, `video_right_click`); the state lives in `VideoTile::bar`.
 - Drawn by the canvas (since 0.5.8, branch `video-in-slint` M2): `MultiviewCanvas.video-bars` holds one `MultiviewVideoBar`
   (`ui/multiview_video_bar.slint`) per bar, over its video and above every tile; its events go to the window's `VideoBarBus` global
@@ -94,8 +94,8 @@ volume bar after a wheel step; the script's own jumps of a loop do not.
 
 Code: the grid item's own touch area handles a video like a picture (the video is a texture of the item's canvas). Every
 Multiview of the grid is placed in grid content coordinates, so Slint scrolls and clips the items with their videos and a scroll
-step re-places nothing (0.5.12). `ui/multiview/grid_bars.rs` is the grid's tick (started by `BridgeTabGrid::sync_tab_grid_ui`,
-stops itself when the grid goes): it asks every Multiview in the grid for its small bars (`instance_grid_bar.rs`:
+step re-places nothing (0.5.12). `ui/multiview/grid_bars.rs` is the grid's tick (started by `BridgeTabGrid::sync_tab_grid_ui`, runs only while a video of the grid plays or a
+bar fades, stops when the grid goes, `grid_bars::active_changed`): it asks every Multiview in the grid for its small bars (`instance_grid_bar.rs`:
 `grid_video_bar_targets`, reveal mode `Hover`, `placement::place_mini`, fixed 22 px, only inside the visible part of the grid),
 gets the pointer from the main window's pointer events (`grid_bars::on_pointer`, moved into the content by `to_content`) and fills
 the time badges (`TimeBadgeModel` per Multiview, `grid_time_badges`; a Slint badge of the grid item, hidden where a small bar

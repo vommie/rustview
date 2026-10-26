@@ -334,7 +334,7 @@ impl FileRenameDialogController {
 
                 // If in TabGrid mode (mode 2), also update all TabGrid masonry tiles
                 if window.get_active_view_mode() == 2 {
-                    BridgeTabGrid::sync_tab_grid_ui(window, &ctx.tab_manager, &ctx.library, &ctx.settings, &ctx.state);
+                    BridgeTabGrid::sync_tab_grid_ui(window, &ctx.tab_manager, &ctx.settings, &ctx.state);
                 }
 
                 StatusBarBridge::update_metrics(window, &ctx.state);

@@ -12,8 +12,8 @@ use super::instance::MultiviewInstance;
 use super::model::TileKind;
 use super::prefs;
 use super::teardown::teardown_videos;
-use super::tile::{StaleProbe, TileSeed, TileState, VideoTile};
-use rustview_core::settings::schema::{MULTIVIEW_MAX_TILES, MULTIVIEW_STALE_PROBE_TICKS};
+use super::tile::{TileSeed, TileState, VideoTile};
+use rustview_core::settings::schema::MULTIVIEW_MAX_TILES;
 use std::collections::HashMap;
 
 /// What a newcomer takes over from the tile whose slot it fills.
@@ -22,7 +22,6 @@ struct Inherited {
     /// Present when the player of the leaving tile is recycled.
     video: Option<VideoTile>,
     audio: Option<TileAudio>,
-    stale: Option<StaleProbe>,
 }
 
 /// What a leaving tile passes on to the newcomer in its slot: its player (if recycled) and, when media are only replaced
@@ -32,13 +31,8 @@ fn take_over(leaving: &mut TileState, recycle: bool, keep_width: bool) -> Inheri
         pin: leaving.pin.filter(|_| keep_width),
         video: None,
         audio: None,
-        stale: None,
     };
     if recycle && let Some(video) = leaving.video.take() {
-        inherited.stale = video.player.video_display_params().map(|params| StaleProbe {
-            params,
-            ticks_left: MULTIVIEW_STALE_PROBE_TICKS,
-        });
         inherited.audio = leaving.audio;
         inherited.video = Some(video);
     }
@@ -106,7 +100,6 @@ impl MultiviewInstance {
                         if let Some(video) = passed.video {
                             tile.video = Some(video);
                             tile.audio = passed.audio;
-                            tile.stale_probe = passed.stale;
                             recycled += 1;
                         }
                     }

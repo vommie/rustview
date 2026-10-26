@@ -20,7 +20,7 @@ impl BridgeViewerTabs {
         Self::sync_video_embedding(ctx.window, ctx.tab_manager, ctx.fullscreen, ctx.settings);
         ctx.fullscreen.sync_tab(ctx.tab_manager);
         if ctx.window.get_active_view_mode() == 2 {
-            BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
+            BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.settings, ctx.state);
         }
     }
 

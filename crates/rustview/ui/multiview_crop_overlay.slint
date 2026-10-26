@@ -189,13 +189,17 @@ export component MultiviewCropOverlay inherits Rectangle {
     property <bool> within-x: touch.mouse-x >= root.crop-x && touch.mouse-x <= root.right;
     property <bool> within-y: touch.mouse-y >= root.crop-y && touch.mouse-y <= root.bottom;
     property <bool> inside: root.within-x && root.within-y;
+    // The crop is the whole picture (a fresh tool): it cannot move, a drag inside it draws a new one.
+    property <bool> whole: Math.abs(root.crop-x - root.pic-x) < 1px && Math.abs(root.crop-y - root.pic-y) < 1px
+        && Math.abs(root.crop-width - root.pic-width) < 1px && Math.abs(root.crop-height - root.pic-height) < 1px;
+    property <bool> movable: root.inside && !root.whole;
     // 0 = outside, 1 = inside, 2 = NW/SE corner, 3 = NE/SW corner, 4 = left/right edge, 5 = top/bottom edge
-    property <int> zone: root.small && root.inside ? 1
+    property <int> zone: root.small && root.movable ? 1
         : ((root.near-left && root.near-top) || (root.near-right && root.near-bottom)) ? 2
         : ((root.near-right && root.near-top) || (root.near-left && root.near-bottom)) ? 3
         : (root.within-y && (root.near-left || root.near-right)) ? 4
         : (root.within-x && (root.near-top || root.near-bottom)) ? 5
-        : root.inside ? 1 : 0;
+        : root.movable ? 1 : 0;
 
     property <bool> left-down: false;
     property <bool> middle-down: false;
