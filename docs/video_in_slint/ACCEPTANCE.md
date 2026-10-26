@@ -220,9 +220,9 @@ also offered as a German questionnaire with a tick and a note field per item.
   smoothly, the blue hover frame shows. — *Test:* Alt+2 with several video tabs.
 - [ ] **N2** The video under the pointer gets a small bar (play/pause, progress; a click on it controls the video instead
   of opening the tab); every other video shows a time badge "0:03 / 0:08" bottom right, hidden while the small bar shows. —
-  *Test:* hover, play one in the grid.
+  *Test:* hover, play one in the grid. *Checked in M6 (0.5.12): the small bar appears on hover from the main window's pointer events (no X server poll), a click on its play button played the video in the grid without opening the tab, the other videos showed the time badge and the pause badge.*
 - [ ] **N3** Scrolling the grid moves and clips the videos exactly with their items (no picture outside the grid, nothing
-  lags behind). — *Test:* many tabs, scroll fast.
+  lags behind). — *Test:* many tabs, scroll fast. *Checked in M6 (0.5.12): 11 tabs, scrolled down and up with the wheel: the videos moved and were clipped with their items under the toolbar; the small bar stayed on the item under the resting pointer. Scrolling no longer re-places any Multiview.*
 - [ ] **N4** Grid keys: arrows move the mark, Enter opens, Del/Ctrl+W close, F11 opens the fullscreen. — *Test:* each.
 - [ ] **N5** A tab that is shown in the fullscreen shows "Playing in fullscreen" on its video tiles in the grid, and the tab
   view of that tab shows the away panel; both go only after the fullscreen closed and the tab shows its videos again. —
@@ -231,7 +231,7 @@ also offered as a German questionnaire with a tick and a note field per item.
 ## O. Handover between windows
 
 - [ ] **O1** Tab → fullscreen → back: position, pause state, volume, zoom and A-B stay; no visible gap or black frame. —
-  *Test:* play a tab to 0:30, F11, Esc. *Checked in M1: tab → fullscreen → tab: position and pause kept, a new render context in each window (`[VideoSurface: Render]` epochs 1, 3, 5); the gap of 1-3 frames is covered in M6.*
+  *Test:* play a tab to 0:30, F11, Esc. *Checked in M1: tab → fullscreen → tab: position and pause kept, a new render context in each window (`[VideoSurface: Render]` epochs 1, 3, 5); the gap of 1-3 frames is covered in M6.* *Checked in M6 (0.5.12) with a screen recording at 30 fps (video tab -> F11 -> Esc): no black frame of the video in either direction; the window that receives the video shows its last picture until mpv has a frame there (logs `[VideoSurface: Still]`). Going into the fullscreen the main window shows the "Shown in fullscreen" placeholder for ~3 frames while the fullscreen window maps (intended, N5). Not checked: volume, zoom and A-B across the move.*
 - [ ] **O2** Fullscreen → background tab (Ctrl + double click or "Send to tab"): the videos run on in the tab. — *Test:*
   both ways.
 - [ ] **O3** Merging tabs (Ctrl+click two tabs > Merge, or Merge With Left/Right) keeps every video running with its

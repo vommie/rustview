@@ -62,6 +62,10 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   zooming never shows the picture in the wrong place for a moment, and the minimap of a zoomed video plays along with it (before it
   showed a still that was renewed every 2 s). The volume bar lies on the part of the video that shows. Subtitles
   now grow with a zoomed video like the picture itself.
+- **A video moves between the fullscreen and its tab without a black picture** (branch video-in-slint, sixth step): while it
+  changes windows, the new window shows the video's last picture until the video runs there. In the tab grid the videos scroll
+  with their items without any lag, and the small control bar of the video under the mouse follows the mouse directly (before it
+  was polled from the X server 20 times a second).
 - **The save bubble and the menu of saved A-B repeats open right above their button**: the caret points at the button that opened
   them (also on a narrow video and with the pill style), the bubble touches the bar (no gap any more), and opening or closing them
   no longer makes the whole bar flicker. A menu that is wider than its video may use the room next to it. A click anywhere else in

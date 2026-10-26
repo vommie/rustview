@@ -193,6 +193,17 @@ arrives). The control bar lies at the bottom of the clip (the place, a lone vide
 | `src/ui/multiview/session_convert.rs` (`adopt`, `park_below_main_window`), `src/viewer/multiview/instance_host.rs` `park` (`.reparent(...)`), `src/viewer/manager.rs` `get_viewport_rect`/`set_main_viewport_info` (where parked windows go), `session.rs` `finish_close` (`park_below`) | moves the running video windows below the main window BEFORE the fullscreen window is hidden (hiding destroys children) | **M1** minimal: re-create the render context in the other window; **M6** the last frame as a still meanwhile; delete the X reparenting (decision 2: the fullscreen stays a separate window, so the handover stays) |
 | `ui/smooth_scroll_view.slint` doc | see §2 | text **M6** |
 
+**Done in M6 (0.5.12):** the tab grid places every Multiview in grid content coordinates (`canvas_rect` without scroll, `GridHost`
+without xid and visible rectangle), so a scroll step re-places nothing (`sync_video_subwindows` and the cached-rect recompute of
+`handle_scrolled` are gone; it only tells `grid_bars` that the content moved). The small bars take the pointer from the main window's
+pointer filter (`grid_bars::on_pointer`, forwarded by `tab_host`) and move it and the visible part into the content (`to_content`);
+`PointerProbe` (`x11/pointer.rs`) is deleted, the grid tick stays for the time badges and the bars' fade. `HostSurface` lost
+`parent_xid` and `clip`, `park` its xid and rectangle, the tab manager its parked-viewport cache. Handover: the render thread reads the
+newest picture back before it leaves a window (`keep_still`, `read_still`, `VideoTarget::read_into`), `VideoSurface::attach` waits for
+it (at most 150 ms) and the new window shows it until mpv reports a video frame in the new render context (`Bound::has_frame`; mpv's
+first renders after the track is selected again only clear to black). `AwayBadge`/`AwayPanel` stay (decision 2). Not changed: the
+tab grid still builds every item's model on a sync (CLEANUP #8, the double placement is gone with `sync_video_subwindows`).
+
 ## 8. Window system and docs (M7)
 
 | File / function | What it does today | Milestone |
