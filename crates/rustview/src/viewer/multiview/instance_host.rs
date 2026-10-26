@@ -7,14 +7,13 @@
 use super::container::{Container, Projection, gutter_floor, lone_medium_fills_host};
 use super::instance::MultiviewInstance;
 use super::instance_layout::layout_params;
-use super::instance_video_zoom::note_placement;
 use super::layout::{GutterKind, LayoutParams, Rect};
 use super::route::HostMode;
 use super::video_placement::VideoPlacement;
 use super::view::{GutterView, HostedView, TileView, VideoFrameView};
 use crate::viewer::video_surface::HostWindowId;
-use rustview_core::settings::schema::{MULTIVIEW_GUTTER_LOGICAL_PX, MULTIVIEW_MIN_VIDEO_WINDOW_PX};
-use rustview_core::util::cast::{FloatToInt, SaturatingAs};
+use rustview_core::settings::schema::MULTIVIEW_GUTTER_LOGICAL_PX;
+use rustview_core::util::cast::FloatToInt;
 use std::time::Instant;
 
 /// The rectangle a host gives to a Multiview, in physical pixels of the Slint window `window` (whose canvas draws the videos).
@@ -225,7 +224,7 @@ impl MultiviewInstance {
     /// Re-places everything after the layout or the projection changed.
     pub(super) fn reproject(&mut self) {
         self.sync_zoom_frames();
-        self.size_surfaces();
+        self.size_video_textures();
         self.prune_feedback();
         self.bump();
     }
@@ -249,32 +248,6 @@ impl MultiviewInstance {
                     "[Multiview: Host] Video draws in the window of the new host"
                 );
             }
-        }
-    }
-
-    /// Gives every video surface the size of the frame its video is drawn into (the room of the tile in the fullscreen and the
-    /// tab view, else the medium's place); a frame that would be too small draws nothing.
-    fn size_surfaces(&mut self) {
-        let projection = self.host.projection;
-        let placements: Vec<Option<VideoPlacement>> = (0..self.tiles.len()).map(|i| self.video_placement(i)).collect();
-        for ((tile, placed), placement) in self.tiles.iter_mut().zip(&self.layout.tiles).zip(placements) {
-            let Some(video) = tile.video.as_mut() else {
-                continue;
-            };
-            let placement = placement.unwrap_or_else(|| {
-                let r = projection.rect(placed.content);
-                VideoPlacement::new(r, r)
-            });
-            let frame = placement.frame;
-            if placement.window.w < MULTIVIEW_MIN_VIDEO_WINDOW_PX || placement.window.h < MULTIVIEW_MIN_VIDEO_WINDOW_PX
-            {
-                video.surface.set_size(0, 0);
-                continue;
-            }
-            video
-                .surface
-                .set_size(frame.w.saturating_as::<u32>(), frame.h.saturating_as::<u32>());
-            note_placement(video, placement);
         }
     }
 
@@ -392,12 +365,14 @@ impl MultiviewInstance {
     fn video_frame_view(&self, index: usize, rect: Rect) -> Option<VideoFrameView> {
         let video = self.tiles.get(index)?.video.as_ref()?;
         let row = video.surface.row_in(self.host.surface.window)?;
-        let placement = video.placement.unwrap_or_else(|| VideoPlacement::new(rect, rect));
+        let placement = self
+            .video_placement(index)
+            .unwrap_or_else(|| VideoPlacement::plain(rect, None));
         let relative = |r: Rect| Rect::new(r.x - rect.x, r.y - rect.y, r.w, r.h);
         Some(VideoFrameView {
             row,
             frame: relative(placement.frame),
-            clip: relative(placement.window),
+            clip: relative(placement.clip),
         })
     }
 

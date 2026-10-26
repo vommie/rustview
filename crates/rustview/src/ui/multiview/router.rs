@@ -40,7 +40,6 @@ fn route_event(handle: &MultiviewHandle, weak: &WeakInstance, event: PlayerEvent
             PlayerEvent::ImageDecoded { tile, result, source } => guard.on_image_loaded(tile, result, source),
             PlayerEvent::EditPreview { tile, revision, result } => guard.on_edit_preview(tile, revision, result),
             PlayerEvent::ZoomSource { tile, result } => guard.on_zoom_source(tile, result),
-            PlayerEvent::VideoStill { tile, result } => guard.on_video_still(tile, result),
             PlayerEvent::ZoomRendered { tile, done } => guard.on_zoom_rendered(tile, done),
             PlayerEvent::MuteChanged { tile, muted } => guard.on_player_mute_changed(tile, muted),
             PlayerEvent::AbRepeat { tile, change } => guard.on_ab_repeat_changed(tile, change),

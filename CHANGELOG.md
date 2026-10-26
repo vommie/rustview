@@ -57,6 +57,11 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   a picture; mpv draws nothing over the picture any more. In the Tab-Grid the time badge of a video ("0:03 / 0:08") is drawn by
   RustView too, and the pause badge of a single video moved to the bottom left corner, so the two no longer cover each other.
   Messages of mpv scripts no longer get the dark box the time badge used to give them.
+- **A zoomed video is moved and scaled by RustView like a picture** (branch video-in-slint, fifth step): mpv always renders the whole
+  video, and RustView draws it where the zoom puts it. Dragging a zoomed video follows the pointer at once instead of a frame later,
+  zooming never shows the picture in the wrong place for a moment, and the minimap of a zoomed video plays along with it (before it
+  showed a still that was renewed every 2 s). The volume bar lies on the part of the video that shows. Subtitles
+  now grow with a zoomed video like the picture itself.
 - **The save bubble and the menu of saved A-B repeats open right above their button**: the caret points at the button that opened
   them (also on a narrow video and with the pill style), the bubble touches the bar (no gap any more), and opening or closing them
   no longer makes the whole bar flicker. A menu that is wider than its video may use the room next to it. A click anywhere else in

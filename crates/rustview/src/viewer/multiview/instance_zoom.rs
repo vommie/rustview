@@ -13,7 +13,7 @@ use super::layout::Rect;
 use super::media_actions::BarClick;
 use super::model::TileKind;
 use super::route::HostMode;
-use super::view::{MinimapView, ZoomBubbleView, ZoomContentView, ZoomPictureView};
+use super::view::{MinimapPicture, MinimapView, ZoomBubbleView, ZoomContentView, ZoomPictureView};
 use crate::viewer::HighResImageLoader;
 use crate::viewer::edit::tile_edit::crop_display;
 use crate::viewer::zoom::geometry::{Area, IRect};
@@ -441,7 +441,7 @@ impl MultiviewInstance {
                 self.run_zoom_request(key, &path, crop, request);
             }
         }
-        self.sync_video_zoom(now);
+        self.size_video_textures();
         if changed {
             self.bump();
         }
@@ -524,7 +524,8 @@ impl MultiviewInstance {
         let display_size = tile.pixels.as_ref().map(|p| (p.width(), p.height()));
         let area = self.zoom_area_in_tile(index).unwrap_or_default();
         if tile.kind == TileKind::Video {
-            // mpv draws the video; the canvas only needs the room (it takes the pointer there) and where the picture is.
+            // The video's texture is placed by `video_placement`; here the canvas only needs the room (it takes the pointer there)
+            // and where the picture is.
             let picture = zoom
                 .is_active()
                 .then(|| zoom.image_rect())
@@ -598,7 +599,10 @@ impl MultiviewInstance {
             prefs.minimap_corner,
             self.host.surface.dpi,
         )?;
-        let thumb = zoom.thumb()?.clone();
+        let picture = match tile.video.as_ref() {
+            Some(video) => MinimapPicture::Video(video.surface.row_in(self.host.surface.window)?),
+            None => MinimapPicture::Thumb(zoom.thumb()?.clone()),
+        };
         let viewport = zoom.viewport_norm()?;
         Some(MinimapView {
             visible,
@@ -609,7 +613,7 @@ impl MultiviewInstance {
                 layout.rect.w,
                 layout.rect.h,
             ),
-            thumb,
+            picture,
             viewport: (viewport.x, viewport.y, viewport.w, viewport.h),
             bubble: if pinned { self.bubble_for(index) } else { None },
         })

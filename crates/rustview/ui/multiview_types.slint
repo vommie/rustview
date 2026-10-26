@@ -30,8 +30,8 @@ export struct MultiviewTileView {
     height: length,
     kind: int, // 0 = image, 1 = video, 2 = unavailable
     image: image,
-    // A video: the row of the window's `video-frames` with its newest picture (-1: none yet), the frame mpv draws into (the size
-    // of the texture) and the part of it that shows, relative to the tile.
+    // A video: the row of the window's `video-frames` with its newest picture (-1: none yet), where the whole picture (the
+    // texture) is drawn and the part of it that shows (the room while zoomed), relative to the tile.
     video-row: int,
     video-frame-x: length,
     video-frame-y: length,
@@ -66,10 +66,12 @@ export struct MultiviewTileView {
     zoom-pixelated: bool,
     // Dragging the picture moves something.
     pannable: bool,
-    // The minimap of a zoomed image: its place in the tile, the thumbnail and the visible part (shares of the image).
+    // The minimap of a zoomed medium: its place in the tile, the thumbnail of a picture or the row of `video-frames` whose texture
+    // it shows in small (-1: a picture), and the visible part (shares of the medium).
     mm-available: bool,
     mm-visible: bool,
     mm-image: image,
+    mm-video-row: int,
     mm-x: length,
     mm-y: length,
     mm-width: length,

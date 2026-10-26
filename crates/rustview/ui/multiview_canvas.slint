@@ -141,8 +141,8 @@ export component MultiviewCanvas inherits Rectangle {
             image-fit: contain;
         }
 
-        // A video: its texture is the frame mpv draws into (the room of the tile; mpv letterboxes into it), clipped to the part
-        // that shows (the medium's place, or the whole room while zoomed).
+        // A video: its texture holds the whole picture; it is drawn where the picture belongs (the medium's place, or where the zoom
+        // puts it) and clipped to what shows (the medium's place, or the room while zoomed).
         if tile.kind == 1 && tile.video-row >= 0 : Rectangle {
             x: tile.video-clip-x;
             y: tile.video-clip-y;
@@ -438,7 +438,7 @@ export component MultiviewCanvas inherits Rectangle {
             }
         }
 
-        // The minimap of a zoomed image: the whole image in small, the visible part framed. Dragging the frame moves the picture.
+        // The minimap of a zoomed medium: the whole picture in small, the visible part framed. Dragging the frame moves the picture.
         if tile.mm-available && root.interactive : Rectangle {
             x: tile.mm-x;
             y: tile.mm-y;
@@ -455,8 +455,16 @@ export component MultiviewCanvas inherits Rectangle {
             drop-shadow-offset-y: 2px;
             clip: true;
 
-            Image {
+            if tile.mm-video-row < 0 : Image {
                 source: tile.mm-image;
+                width: 100%;
+                height: 100%;
+                image-fit: fill;
+            }
+
+            // A video's minimap is its own texture in small: it plays along.
+            if tile.mm-video-row >= 0 : Image {
+                source: root.video-frames[tile.mm-video-row];
                 width: 100%;
                 height: 100%;
                 image-fit: fill;

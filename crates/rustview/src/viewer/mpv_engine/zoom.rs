@@ -1,9 +1,8 @@
-//! The zoom of a video, drawn by mpv itself: the Multiview's zoom model (`viewer::zoom`, the same as for pictures) decides where
-//! the picture goes and `set_view` hands that to mpv (`video-zoom`, a power of two, and `video-pan-*`). `zoom_video_by` is the
-//! fallback for a video whose size is not known yet.
+//! mpv's own zoom of a video, only the fallback for a video whose size is not known yet: once it is, the Multiview's zoom model
+//! (`viewer::zoom`, the same as for pictures) places and scales the video's texture in the canvas (`video_placement`) and mpv
+//! always renders the whole picture.
 
 use super::MpvPlayer;
-use crate::viewer::zoom::mpv_view::MpvView;
 
 impl MpvPlayer {
     /// Multiplies the size of the picture by `factor` (above 1 zooms in).
@@ -14,28 +13,6 @@ impl MpvPlayer {
         let delta = factor.log2();
         if let Err(e) = self.mpv.command("add", &["video-zoom", &format!("{delta:.4}")]) {
             tracing::warn!(error = ?e, "[MpvPlayer: Zoom] Could not zoom the video");
-        }
-    }
-
-    /// Shows the picture as `view` says (`viewer::zoom::mpv_view`).
-    pub fn set_view(&self, view: &MpvView) {
-        for (property, value) in [
-            ("video-zoom", view.zoom),
-            ("video-pan-x", view.pan_x),
-            ("video-pan-y", view.pan_y),
-        ] {
-            if let Err(e) = self.mpv.set_property(property, value) {
-                tracing::debug!(property, error = ?e, "[MpvPlayer: Zoom] mpv did not take the view");
-            }
-        }
-    }
-
-    /// Whether subtitles may sit in the black borders of the window (`sub-use-margins`): only while the whole window shows. A
-    /// window that is larger than its visible part (a video at 100 % in the room of its tile) would put them where they are
-    /// clipped away.
-    pub fn set_subtitle_margins(&self, on: bool) {
-        if let Err(e) = self.mpv.set_property("sub-use-margins", on) {
-            tracing::debug!(error = ?e, "[MpvPlayer: Zoom] mpv did not take the subtitle margins");
         }
     }
 

@@ -63,14 +63,14 @@ impl MultiviewInstance {
     }
 
     /// The volume bar tile `index` shows at `now` (relative to the tile, whose rectangle is the medium's place): centered in the
-    /// lower part of the picture, which is letterboxed in the part of the frame that shows (a zoomed video fills it).
+    /// lower part of the visible picture (mpv may letterbox a plain video by a pixel or two; a zoomed one is the picture itself).
     pub(super) fn volume_bar_view(&self, index: usize, now: Instant) -> Option<VolumeBarTileView> {
         let tile = self.tiles.get(index)?;
         if !self.volume_feedback_shown() || tile.kind != TileKind::Video {
             return None;
         }
         let view = self.volume_feedback.view(tile.key, now)?;
-        let (window, content) = (self.video_placement(index)?.window, self.host_content(index)?);
+        let (window, content) = (self.video_placement(index)?.visible()?, self.host_content(index)?);
         let size = (window.w.saturating_as::<u32>(), window.h.saturating_as::<u32>());
         let aspect = if tile.zoom.as_ref().is_some_and(ZoomState::is_active) {
             0.0

@@ -65,10 +65,9 @@ pub struct VolumeBarTileView {
 pub struct VideoFrameView {
     /// The row of the window's `video-frames` that holds the video's newest texture.
     pub row: usize,
-    /// The frame mpv draws into (the size of the texture), relative to the tile: the room of the tile in the fullscreen and the
-    /// tab view (mpv letterboxes into it), else the tile.
+    /// Where the whole picture (the texture) is drawn, relative to the tile: the tile, or where the zoom puts a zoomed video.
     pub frame: Rect,
-    /// The part of the frame that shows (the medium's place, or the whole room while the video is zoomed), relative to the tile.
+    /// What of it shows (the medium's place, or the room of the tile while the video is zoomed), relative to the tile.
     pub clip: Rect,
 }
 
@@ -128,8 +127,16 @@ pub enum ZoomContentView {
     Preview { clip: Rect },
 }
 
-/// The minimap of a tile: its place (physical pixels relative to the tile), the thumbnail of the whole image and the part
-/// that is visible (shares of the image: x, y, width, height).
+/// What a minimap shows of the whole medium.
+pub enum MinimapPicture {
+    /// A thumbnail of a picture.
+    Thumb(SharedPixelBuffer<Rgb8Pixel>),
+    /// The video's own texture, the row of the window's `video-frames` (mpv renders the whole picture into it).
+    Video(usize),
+}
+
+/// The minimap of a tile: its place (physical pixels relative to the tile), the whole medium in small and the part that is
+/// visible (shares of the medium: x, y, width, height).
 pub struct MinimapView {
     /// Whether it is shown now (it fades in and out, so it is described while it is not).
     pub visible: bool,
@@ -137,7 +144,7 @@ pub struct MinimapView {
     pub area: Rect,
     /// Relative to the tile (physical pixels).
     pub rect: Rect,
-    pub thumb: SharedPixelBuffer<Rgb8Pixel>,
+    pub picture: MinimapPicture,
     pub viewport: (f64, f64, f64, f64),
     /// The zoom slider bubble above the minimap, while the user has it open.
     pub bubble: Option<ZoomBubbleView>,

@@ -1,4 +1,4 @@
-//! Zooming an image or a video inside a Multiview tile: the model, the resampling of pictures, mpv's view of videos and the state.
+//! Zooming an image or a video inside a Multiview tile: the model, the resampling of pictures and the state (a video's texture is placed by `multiview::video_placement`).
 //!
 //! The pure parts (`geometry`, `scale`, `render`, `prefs`, `state`) know nothing about Slint windows or X11, so they are unit
 //! tested; the Multiview instance and the plain image tab own a `ZoomState` per image and carry out what it asks for
@@ -6,7 +6,6 @@
 
 pub mod geometry;
 pub mod minimap;
-pub mod mpv_view;
 pub mod prefs;
 pub mod render;
 pub mod scale;

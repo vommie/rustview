@@ -97,12 +97,8 @@ impl MultiviewInstance {
             return;
         };
         tile::reload_video(video, key, &path);
-        // The zoom belonged to the file before (mpv resets its view on a new file); the new one gets its own once probed.
-        let tile = &mut self.tiles[index];
-        tile.zoom = None;
-        if let Some(video) = tile.video.as_mut() {
-            video.zoom_view = None;
-        }
+        // The zoom belonged to the file before; the new one gets its own once probed.
+        self.tiles[index].zoom = None;
         tracing::info!(
             media_id,
             index,

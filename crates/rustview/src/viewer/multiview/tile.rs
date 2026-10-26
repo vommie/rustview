@@ -11,13 +11,11 @@ use super::instance::WeakInstance;
 use super::media_actions::MediaActionId;
 use super::model::{AspectSource, TileKind};
 use super::video_bar::state::VideoBarState;
-use super::video_placement::VideoPlacement;
 use crate::ui::button_feedback::ButtonFeedback;
 use crate::viewer::MpvPlayer;
 use crate::viewer::edit::save_badge::SaveBadge;
 use crate::viewer::edit::tile_edit::{EditSource, TileEdit};
 use crate::viewer::video_surface::{HostWindowId, VideoSurface};
-use crate::viewer::zoom::mpv_view::MpvView;
 use crate::viewer::zoom::state::ZoomState;
 use parking_lot::RwLock;
 use rustview_core::library::models::MediaId;
@@ -26,7 +24,6 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Instant;
 
 /// The Multiview that the events of a player go to. The callbacks are installed once when the player is created and read this at
 /// every call, so a tile that moves to another Multiview (a merge of tabs) takes its running player along and only points the
@@ -48,13 +45,8 @@ pub struct VideoTile {
     pub owner: EventOwner,
     /// The control bar of the video.
     pub bar: VideoBarState,
-    /// The view mpv was given last (`None`: never, i.e. the plain fitted video).
-    pub zoom_view: Option<MpvView>,
-    /// Where the video was placed last: mpv's frame (the size of the textures) and the part of it that shows (host pixels).
-    pub placement: Option<VideoPlacement>,
-    /// A still for the minimap is being taken, and when the last one was asked for.
-    pub still_pending: bool,
-    pub still_at: Option<Instant>,
+    /// The size its textures were given last (`video_placement::VideoPlacement::texture_size`; 0 = draws nothing).
+    pub texture: (u32, u32),
 }
 
 /// What is known about a medium before its tile exists (from the in-memory library state, never from the drive).
@@ -244,10 +236,7 @@ pub fn create_video(
         current_tile,
         owner,
         bar: VideoBarState::default(),
-        zoom_view: None,
-        placement: None,
-        still_pending: false,
-        still_at: None,
+        texture: (0, 0),
     })
 }
 

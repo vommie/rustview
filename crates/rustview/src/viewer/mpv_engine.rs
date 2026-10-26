@@ -13,7 +13,6 @@ mod events;
 mod messages;
 mod playback;
 mod render;
-mod still;
 pub use controls::SeekPrecision;
 pub use playback::PlaybackNumbers;
 pub use render::{MpvRenderContext, NativeDisplay, RenderCore};

@@ -8,7 +8,7 @@ use crate::viewer::multiview::layout::Rect;
 use crate::viewer::multiview::media_actions::ButtonLook;
 use crate::viewer::multiview::model::TileKind;
 use crate::viewer::multiview::view::{
-    GutterView, HostedView, MediaActionView, Navigation, PrimaryActionView, TileView, ZoomContentView,
+    GutterView, HostedView, MediaActionView, MinimapPicture, Navigation, PrimaryActionView, TileView, ZoomContentView,
 };
 use rustview_core::util::cast::{Az, FloatToInt, SaturatingAs};
 use slint::{Model, VecModel};
@@ -66,9 +66,9 @@ impl ImageCache {
     }
 
     fn thumb_for(&mut self, tile: &TileView) -> slint::Image {
-        match tile.minimap.as_ref() {
-            Some(minimap) => cached_image(&mut self.thumbs, tile.key, &minimap.thumb),
-            None => slint::Image::default(),
+        match tile.minimap.as_ref().map(|m| &m.picture) {
+            Some(MinimapPicture::Thumb(thumb)) => cached_image(&mut self.thumbs, tile.key, thumb),
+            Some(MinimapPicture::Video(_)) | None => slint::Image::default(),
         }
     }
 
@@ -161,6 +161,10 @@ fn tile_view(tile: &TileView, dpi: f32, images: &mut ImageCache) -> MultiviewTil
         mm_available: minimap.is_some(),
         mm_visible: minimap.is_some_and(|m| m.visible),
         mm_image,
+        mm_video_row: match minimap.map(|m| &m.picture) {
+            Some(MinimapPicture::Video(row)) => (*row).saturating_as::<i32>(),
+            _ => -1,
+        },
         mm_x: logical(mm_rect.x, dpi),
         mm_y: logical(mm_rect.y, dpi),
         mm_width: logical(mm_rect.w, dpi),
