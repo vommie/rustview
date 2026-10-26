@@ -21,20 +21,21 @@ pub struct TimeBadgeTarget {
 }
 
 impl MultiviewInstance {
-    /// The small bars of this tab grid item for the `pointer` (coordinates of the main window); none while the Multiview is
-    /// not in the grid, a dialog or menu is open, or the bar would leave the visible part of the grid.
+    /// The small bars of this tab grid item for the `pointer`; none while the Multiview is not in the grid, a dialog or menu is
+    /// open, or the bar would leave `visible`, the part of the grid on screen. Both are in grid content coordinates (physical
+    /// pixels, like the host rectangle), so scrolling changes them and never the Multiview.
     pub fn grid_video_bar_targets(
         &mut self,
         pointer: Option<(i32, i32)>,
+        visible: Rect,
         prefs: &VideoBarPrefs,
         now: Instant,
     ) -> Vec<VideoBarTarget> {
         self.pointer = pointer;
         let allowed = self.host.surface.mode == HostMode::TabGrid && !self.host.modal_locked && !self.host.menu_open;
         let scale = self.host.surface.dpi.max(0.5);
-        let clip = self.host.surface.clip;
         self.collect_bar_targets(allowed, prefs, (RevealMode::Hover, true), now, |rect| {
-            placement::place_mini(rect, scale).filter(|place| clip.is_none_or(|clip| clip.contains_rect(place.area)))
+            placement::place_mini(rect, scale).filter(|place| visible.contains_rect(place.area))
         })
     }
 

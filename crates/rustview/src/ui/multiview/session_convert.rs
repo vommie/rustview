@@ -7,12 +7,9 @@
 use super::handle;
 use super::session::{Session, finish_close, take_session};
 use crate::ui::status_bar::StatusBarBridge;
-use crate::viewer::multiview::layout::Rect;
+use crate::viewer::TabId;
 use crate::viewer::multiview::route::OriginKind;
 use crate::viewer::video_surface::MAIN_WINDOW;
-use crate::viewer::{TabId, get_slint_window_xid};
-use rustview_core::util::cast::SaturatingAs;
-use slint::ComponentHandle;
 
 pub(super) fn convert_to_tab() {
     let session = match take_session() {
@@ -49,19 +46,12 @@ fn adopt(session: &Session) -> Result<TabId, String> {
 /// Lets the videos of the session's instance draw into the main window (paused), so the fullscreen window can go away without
 /// taking their render contexts along.
 pub(super) fn park_in_main_window(session: &Session) -> Result<(), String> {
-    let tab_manager = session.handle.tab_manager().ok_or("no tab manager is bound")?;
-    let main_window = session
+    session
         .handle
         .main_window()
         .and_then(|weak| weak.upgrade())
         .ok_or("the main window is gone")?;
-    let main_xid = get_slint_window_xid(main_window.window()).unwrap_or(0);
-    let (x, y, width, height) = tab_manager.get_viewport_rect();
-    session.instance.lock().park(
-        MAIN_WINDOW,
-        main_xid,
-        Rect::new(x, y, width.saturating_as::<i32>(), height.saturating_as::<i32>()),
-    );
+    session.instance.lock().park(MAIN_WINDOW);
     Ok(())
 }
 

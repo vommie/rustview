@@ -27,7 +27,6 @@ impl Session {
         let scale = win.window().scale_factor().max(0.5);
         Some(HostSurface::fullscreen(
             FULLSCREEN_WINDOW,
-            self.fs_xid,
             size.width.max(1).saturating_as::<i32>(),
             size.height.max(1).saturating_as::<i32>(),
             scale,

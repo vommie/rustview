@@ -23,7 +23,6 @@ pub struct ViewerTabManager {
     active_tab_id: RwLock<Option<TabId>>,
     tab_counter: AtomicU64,
     library: Arc<Library>,
-    cached_viewport_rect: RwLock<(i32, i32, u32, u32)>,
     /// A context menu of the main window is open (no bars meanwhile).
     menu_open: AtomicBool,
     /// Multiviews that no tab owns (the fullscreen one that follows the Browse selection) but whose media may be renamed,
@@ -47,7 +46,6 @@ impl ViewerTabManager {
             active_tab_id: RwLock::new(None),
             tab_counter: AtomicU64::new(1),
             library,
-            cached_viewport_rect: RwLock::new((0, 64, 800, 600)),
             menu_open: AtomicBool::new(false),
             observed_instances: Mutex::new(Vec::new()),
             tab_ui_gate: TabUiGate::default(),
@@ -95,19 +93,6 @@ impl ViewerTabManager {
         if let Some(hook) = hook {
             hook();
         }
-    }
-
-    // =========================================================================
-    // Viewport & Window Handle Configuration
-    // =========================================================================
-
-    /// Stores the latest geometry of the viewer area (where a tab that moves back from the fullscreen parks its windows).
-    pub fn set_main_viewport_info(&self, x: i32, y: i32, w: u32, h: u32) {
-        *self.cached_viewport_rect.write() = (x, y, w, h);
-    }
-
-    pub fn get_viewport_rect(&self) -> (i32, i32, u32, u32) {
-        *self.cached_viewport_rect.read()
     }
 
     // =========================================================================

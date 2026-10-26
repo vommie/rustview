@@ -4,7 +4,7 @@ use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::tabs::BridgeViewerTabs;
 use crate::ui::tabs::grid::canvas::canvas_rect;
-use crate::ui::tabs::grid::{MasonryRect, ResponsiveBreakpoints, TabGridMasonryEngine, TabGridTile};
+use crate::ui::tabs::grid::{ResponsiveBreakpoints, TabGridMasonryEngine, TabGridTile};
 use crate::ui::tabs::icon::tab_icon;
 use crate::ui::{MainWindow, TabGridItemModel};
 use crate::viewer::multiview::model::TileKind;
@@ -22,7 +22,7 @@ use std::time::Instant;
 pub struct BridgeTabGrid;
 
 impl BridgeTabGrid {
-    /// Synchronizes open tabs into the Slint `TabGridView` Masonry layout, and positions live video subwindows on tiles.
+    /// Synchronizes open tabs into the Slint `TabGridView` Masonry layout and places every tab's Multiview on its tile.
     pub fn sync_tab_grid_ui(
         window: &MainWindow,
         tab_manager: &Arc<ViewerTabManager>,
@@ -96,8 +96,8 @@ impl BridgeTabGrid {
             st.cached_tab_grid_total_h = total_h;
         }
 
-        // 3. Assemble the Slint models: every tab is a Multiview, drawn as a miniature of its arrangement
-        let scroll_y = window.get_tab_grid_scroll_y();
+        // 3. Assemble the Slint models: every tab is a Multiview, drawn as a miniature of its arrangement and placed in grid
+        //    content coordinates (Slint scrolls and clips the items, videos included)
         let grid_host = GridHost::new(window);
         let selection = state.read().tab_selection.clone();
         let mark = state.read().tab_grid_mark;
@@ -113,8 +113,7 @@ impl BridgeTabGrid {
                 let has_unsaved = s.multiview.instance.lock().has_unsaved_edits();
                 let instance_id = s.multiview.instance.lock().id();
                 let (width, height) = s.display_size();
-                let multiview_item: GridItemView =
-                    grid_host.place(&s.multiview.instance, canvas_rect(r, p_h, p_v, scroll_y));
+                let multiview_item: GridItemView = grid_host.place(&s.multiview.instance, canvas_rect(r, p_h, p_v));
 
                 TabGridItemModel {
                     id: s.id.wrapping_as::<i32>(),
@@ -151,9 +150,6 @@ impl BridgeTabGrid {
         crate::ui::multiview::grid_bars::ensure_running(window, tab_manager);
         window.set_tab_grid_content_height(total_h);
 
-        // 4. Place the Multiviews (their video windows included) on their tiles
-        Self::sync_video_subwindows(window, tab_manager, &rects, scroll_y, p_h, p_v);
-
         tracing::info!(
             total_tabs,
             viewport_width = viewport_w,
@@ -163,36 +159,6 @@ impl BridgeTabGrid {
             elapsed_us = t0.elapsed().as_micros(),
             "[TabGrid: Sync] Masonry Tab Grid layout computed and synchronized across full viewport width"
         );
-    }
-
-    /// Places the Multiview of every tab on its Masonry tile (the video windows of its tiles follow, clamped to the viewport and
-    /// cut out where menus and tooltips are), and hides the Multiviews of tabs that have no tile.
-    pub fn sync_video_subwindows(
-        window: &MainWindow,
-        tab_manager: &Arc<ViewerTabManager>,
-        rects: &[MasonryRect],
-        scroll_y: f32,
-        padding_h: f32,
-        padding_v: f32,
-    ) {
-        if window.get_active_view_mode() != 2 {
-            tab_manager.deactivate_all_tabs();
-            return;
-        }
-
-        let grid_host = GridHost::new(window);
-
-        for (idx, session) in tab_manager.list_tabs().iter().enumerate() {
-            match rects.get(idx) {
-                Some(r) => {
-                    grid_host.place(
-                        &session.multiview.instance,
-                        canvas_rect(r, padding_h, padding_v, scroll_y),
-                    );
-                }
-                None => session.multiview.instance.lock().deactivate(),
-            }
-        }
     }
 
     /// Handles Left-Click on a `TabGrid` item: switches to Tab Viewer view (mode 1) and foregrounds the tab (Requirement 5: seamless playback continuation).
@@ -252,74 +218,13 @@ impl BridgeTabGrid {
         Self::sync_tab_grid_ui(window, tab_manager, library, settings, state);
     }
 
-    /// Handles real-time scrolling in the `TabGridView` to keep video subwindows positioned and clamped in lockstep with UI tiles.
-    pub fn handle_scrolled(
-        window: &MainWindow,
-        tab_manager: &Arc<ViewerTabManager>,
-        settings: &Arc<SettingsManager>,
-        state: &Arc<RwLock<UiState>>,
-    ) {
+    /// The grid scrolled: Slint moves and clips the items (videos included); only the small bars follow the content under the
+    /// resting pointer.
+    pub fn handle_scrolled(window: &MainWindow, tab_manager: &Arc<ViewerTabManager>) {
         if window.get_active_view_mode() != 2 {
             tab_manager.deactivate_all_tabs();
             return;
         }
-
-        let app_settings = settings.get();
-        let (p_h, p_v) = (
-            app_settings.appearance.grid_item_padding_horizontal.az::<f32>(),
-            app_settings.appearance.grid_item_padding_vertical.az::<f32>(),
-        );
-
-        let cached_rects = state.read().cached_tab_grid_rects.clone();
-        let scroll_y = window.get_tab_grid_scroll_y();
-
-        if cached_rects.is_empty() {
-            let sessions = tab_manager.list_tabs();
-            if sessions.is_empty() {
-                tab_manager.deactivate_all_tabs();
-                return;
-            }
-
-            let is_auto_cols = state.read().tab_grid_auto_columns;
-            let manual_cols = state.read().tab_grid_columns;
-            let win_size = window.window().size();
-            let scale = window.window().scale_factor();
-
-            // In Tab-Grid mode (mode 2), both sidebars are hidden -> full viewport width is available
-            let viewport_w = (win_size.width.az::<f32>() / scale).max(100.0);
-
-            let effective_cols = if is_auto_cols {
-                ResponsiveBreakpoints::compute_auto_columns(viewport_w)
-            } else {
-                manual_cols
-            };
-
-            let aspect_ratios: Vec<f32> = sessions.iter().map(TabGridTile::aspect_of).collect();
-
-            let (spacing, padding) = (
-                app_settings.appearance.grid_spacing.az::<f32>(),
-                app_settings.appearance.grid_padding.az::<f32>(),
-            );
-
-            let (rects, total_h) = TabGridMasonryEngine::compute_layout(
-                &aspect_ratios,
-                viewport_w,
-                effective_cols,
-                padding,
-                spacing,
-                p_v,
-                TAB_GRID_ITEM_HEADER_LOGICAL_PX,
-            );
-
-            {
-                let mut st = state.write();
-                st.cached_tab_grid_rects.clone_from(&rects);
-                st.cached_tab_grid_total_h = total_h;
-            }
-
-            Self::sync_video_subwindows(window, tab_manager, &rects, scroll_y, p_h, p_v);
-        } else {
-            Self::sync_video_subwindows(window, tab_manager, &cached_rects, scroll_y, p_h, p_v);
-        }
+        crate::ui::multiview::grid_bars::on_scrolled();
     }
 }

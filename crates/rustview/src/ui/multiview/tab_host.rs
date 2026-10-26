@@ -121,7 +121,11 @@ pub fn bind(window: &MainWindow, handle: MultiviewHandle) {
         bus.set_gutters(ModelRc::from(h.models.gutters.clone()));
     });
     super::tab_video_bar::bind(window);
-    super::pointer_events::install(window.window(), on_pointer);
+    // The main window has one pointer filter: the tab view and the tab grid's small bars both follow it.
+    super::pointer_events::install(window.window(), |pointer| {
+        on_pointer(pointer);
+        super::grid_bars::on_pointer(pointer);
+    });
     action_bar::bind(
         HostMode::TabView,
         window,
@@ -414,7 +418,7 @@ pub fn sync(window: &MainWindow, instance: &SharedInstance) {
     let scale = window.window().scale_factor();
     let area = window.invoke_multiview_viewport();
     let rect = views::physical_rect(area.x, area.y, area.width, area.height, scale);
-    let surface = HostSurface::tab_view(MAIN_WINDOW, main_xid, rect, scale);
+    let surface = HostSurface::tab_view(MAIN_WINDOW, rect, scale);
     instance.lock().set_host(&surface);
     with_host(|h| {
         h.window = Some(window.as_weak());

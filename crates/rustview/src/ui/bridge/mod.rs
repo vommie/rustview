@@ -287,9 +287,6 @@ impl UiBridge {
         window.set_tabs(ModelRc::new(VecModel::from(vec![])));
         window.set_viewer_show_tab_rating_badge(app_settings.viewer.tabs.show_rating_badge);
 
-        let initial_win_sz = window.window().size();
-        tab_manager.set_main_viewport_info(0, 64, initial_win_sz.width.max(800), initial_win_sz.height.max(600));
-
         window.set_is_virtual_folder(false);
         window.set_is_virtual_folder_btn_enabled(false);
         window.set_virtual_folder_count(0);
@@ -419,12 +416,9 @@ impl UiBridge {
         let thumb = bridge.thumbnails.clone();
         let set = bridge.settings.clone();
         let st = bridge.state.clone();
-        let tm_post = bridge.tab_manager.clone();
 
         Timer::single_shot(std::time::Duration::from_millis(50), move || {
             if let Some(win) = w_weak.upgrade() {
-                let sz = win.window().size();
-                tm_post.set_main_viewport_info(0, 64, sz.width.max(800), sz.height.max(600));
                 BridgeFolders::sync_root(&win, &lib, &thumb, &set, &st);
                 BridgeMedia::update_virtual_folder_button_state(&win, &lib, &st);
                 StatusBarBridge::update_metrics(&win, &st);

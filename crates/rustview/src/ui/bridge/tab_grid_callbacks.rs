@@ -173,12 +173,12 @@ impl UiBridge {
             }
         });
 
-        let win_scroll = self.window.clone_strong();
+        let win_scroll = self.window.as_weak();
         let tm_scroll = self.tab_manager.clone();
-        let set_scroll = self.settings.clone();
-        let st_scroll = self.state.clone();
         self.window.on_tab_grid_scrolled(move |_dx, _dy| {
-            BridgeTabGrid::handle_scrolled(&win_scroll, &tm_scroll, &set_scroll, &st_scroll);
+            if let Some(window) = win_scroll.upgrade() {
+                BridgeTabGrid::handle_scrolled(&window, &tm_scroll);
+            }
         });
     }
 }

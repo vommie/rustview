@@ -302,7 +302,7 @@ mod tests {
         tab.multiview
             .instance
             .lock()
-            .set_host(&HostSurface::fullscreen(0, 0, 1920, 1080, 1.0));
+            .set_host(&HostSurface::fullscreen(0, 1920, 1080, 1.0));
         assert_eq!(
             fx.manager.merge_tabs(&[ta, tb], true),
             Err(MergeError::ShownInFullscreen)

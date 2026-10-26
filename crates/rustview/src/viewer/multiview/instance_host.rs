@@ -17,56 +17,45 @@ use rustview_core::util::cast::FloatToInt;
 use std::time::Instant;
 
 /// The rectangle a host gives to a Multiview, in physical pixels of the Slint window `window` (whose canvas draws the videos).
+/// A tab-grid item's rectangle is in grid content coordinates (the window at scroll position 0): Slint scrolls and clips it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct HostSurface {
     pub mode: HostMode,
     /// The window that draws the videos (`video_surface::hosts`; 0 = none).
     pub window: HostWindowId,
-    /// The X11 window of the host (0 on Wayland): only the hint window is placed relative to it (it goes in M3 of
-    /// `docs/video_in_slint/HANDOFF.md`).
-    pub parent_xid: u64,
     pub rect: Rect,
     /// Scale factor of the host window.
     pub dpi: f32,
-    /// The visible part of the tab grid (window pixels): the small bar windows of the grid stay inside it (they go in M6 of
-    /// `docs/video_in_slint/HANDOFF.md`). `None` outside the grid.
-    pub clip: Option<Rect>,
 }
 
 impl HostSurface {
     /// A frameless fullscreen window of `width` x `height` physical pixels.
-    pub fn fullscreen(window: HostWindowId, parent_xid: u64, width: i32, height: i32, dpi: f32) -> Self {
+    pub fn fullscreen(window: HostWindowId, width: i32, height: i32, dpi: f32) -> Self {
         Self {
             mode: HostMode::Fullscreen,
             window,
-            parent_xid,
             rect: Rect::new(0, 0, width.max(1), height.max(1)),
             dpi,
-            clip: None,
         }
     }
 
     /// The media area of the active viewer tab inside the main window.
-    pub fn tab_view(window: HostWindowId, parent_xid: u64, rect: Rect, dpi: f32) -> Self {
+    pub fn tab_view(window: HostWindowId, rect: Rect, dpi: f32) -> Self {
         Self {
             mode: HostMode::TabView,
             window,
-            parent_xid,
             rect,
             dpi,
-            clip: None,
         }
     }
 
-    /// The canvas of a tab-grid item (Slint clips and scrolls the videos with the grid); `clip` is the visible part of the grid.
-    pub fn tab_grid(window: HostWindowId, parent_xid: u64, rect: Rect, dpi: f32, clip: Rect) -> Self {
+    /// The canvas of a tab-grid item, in grid content coordinates.
+    pub fn tab_grid(window: HostWindowId, rect: Rect, dpi: f32) -> Self {
         Self {
             mode: HostMode::TabGrid,
             window,
-            parent_xid,
             rect,
             dpi,
-            clip: Some(clip),
         }
     }
 
@@ -75,12 +64,7 @@ impl HostSurface {
         reason = "the DPI is copied from the window, never computed; any difference means a re-layout"
     )]
     fn same_geometry(&self, other: &Self) -> bool {
-        self.mode == other.mode
-            && self.window == other.window
-            && self.parent_xid == other.parent_xid
-            && self.rect == other.rect
-            && self.dpi == other.dpi
-            && self.clip == other.clip
+        self.mode == other.mode && self.window == other.window && self.rect == other.rect && self.dpi == other.dpi
     }
 }
 
@@ -101,10 +85,8 @@ impl HostState {
             surface: HostSurface {
                 mode: HostMode::Hidden,
                 window: 0,
-                parent_xid: 0,
                 rect: container.rect(),
                 dpi: container.dpi,
-                clip: None,
             },
             projection: Projection::identity(container),
             flags_mode: None,
@@ -306,7 +288,7 @@ impl MultiviewInstance {
 
     /// Lets every video draw into `window` (the main window), paused, so the Multiview can live on as a background tab after its
     /// fullscreen window is gone. The host becomes `Hidden`; the next `set_host` places and resumes everything.
-    pub fn park(&mut self, window: HostWindowId, parent_xid: u64, rect: Rect) {
+    pub fn park(&mut self, window: HostWindowId) {
         self.clear_hover();
         for tile in &mut self.tiles {
             let Some(video) = tile.video.as_mut() else {
@@ -316,14 +298,8 @@ impl MultiviewInstance {
             video.player.set_view_active(false);
             video.player.set_tab_grid_mode(false);
         }
-        self.host.surface = HostSurface {
-            mode: HostMode::Hidden,
-            window,
-            parent_xid,
-            rect,
-            dpi: self.host.surface.dpi,
-            clip: None,
-        };
+        self.host.surface.mode = HostMode::Hidden;
+        self.host.surface.window = window;
         self.host.flags_mode = None;
         self.bump();
         tracing::info!(

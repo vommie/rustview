@@ -1,16 +1,21 @@
-//! The video tiles of the tab grid (UI thread only): while the grid is shown, a tick looks where the pointer is, shows the
-//! small control bar of the video under it (`video_bar`: a model per Multiview, drawn by the canvas of its grid item) and keeps
-//! the time badges of every other video up to date (`time_badges`, another model per Multiview). The tick runs only while the grid is shown and stops itself when it is not.
+//! The video tiles of the tab grid (UI thread only): the small control bar of the video under the pointer (`video_bar`: a model
+//! per Multiview, drawn by the canvas of its grid item) and the time badges of every other video (`time_badges`, another model per
+//! Multiview). The pointer comes from the main window's own events (`pointer_events`, forwarded by the tab host), a scroll of the
+//! grid moves it over the content; a tick keeps the badges' times and the bars' fade going while the grid is shown and stops
+//! itself when it is not.
 
 use super::time_badges::TimeBadgeModel;
 use super::video_bar::VideoBarModel;
+use crate::ui::tabs::grid::canvas::visible_grid;
 use crate::ui::{MainWindow, MultiviewTimeBadgeView, MultiviewVideoBarView};
+use crate::viewer::ViewerTabManager;
 use crate::viewer::multiview::instance::SharedInstance;
+use crate::viewer::multiview::layout::Rect;
 use crate::viewer::multiview::route::HostMode;
 use crate::viewer::multiview::video_bar::prefs::{self, BarStyle, VideoBarPrefs};
 use crate::viewer::multiview::video_bar::view::VideoBarInput;
-use crate::viewer::{PointerProbe, ViewerTabManager, get_slint_window_xid};
 use rustview_core::settings::schema::{MULTIVIEW_TICK_MS, MULTIVIEW_VIDEO_BAR_MINI_HEIGHT_LOGICAL_PX};
+use rustview_core::util::cast::FloatToInt;
 use slint::{ComponentHandle, ModelRc, Timer, TimerMode};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -20,9 +25,14 @@ use std::time::{Duration, Instant};
 struct GridBars {
     window: slint::Weak<MainWindow>,
     tabs: Weak<ViewerTabManager>,
-    probe: Option<PointerProbe>,
-    main_xid: u64,
     timer: Timer,
+    /// Brings the bars in line with the pointer once per turn of the event loop, however many movements arrived in it.
+    pointer_sync: Timer,
+}
+
+thread_local! {
+    /// The pointer over the main window (physical window pixels), from its pointer events; `None` outside it.
+    static POINTER: std::cell::Cell<Option<(i32, i32)>> = const { std::cell::Cell::new(None) };
 }
 
 thread_local! {
@@ -45,23 +55,14 @@ pub fn badges_for(instance_id: u64) -> ModelRc<MultiviewTimeBadgeView> {
 
 /// The grid is shown (or was synced): the tick runs from now on until the grid goes.
 pub fn ensure_running(window: &MainWindow, tabs: &Arc<ViewerTabManager>) {
-    let Some(main_xid) = get_slint_window_xid(window.window()) else {
-        return;
-    };
     GRID.with(|cell| {
         let mut grid = cell.borrow_mut();
         let state = grid.get_or_insert_with(|| GridBars {
             window: window.as_weak(),
             tabs: Arc::downgrade(tabs),
-            probe: PointerProbe::new()
-                .map_err(
-                    |e| tracing::warn!(error = %e, "[Multiview: GridBars] No pointer probe; no small bars in the grid"),
-                )
-                .ok(),
-            main_xid,
             timer: Timer::default(),
+            pointer_sync: Timer::default(),
         });
-        state.main_xid = main_xid;
         if !state.timer.running() {
             state
                 .timer
@@ -89,14 +90,31 @@ fn grid_instances() -> Vec<SharedInstance> {
         .collect()
 }
 
+/// The pointer moved over the main window or left it: the small bars follow on this turn of the event loop (only while the grid
+/// is shown).
+pub fn on_pointer(pointer: Option<(i32, i32)>) {
+    POINTER.set(pointer);
+    request_update();
+}
+
+/// The grid scrolled: the content moved under the resting pointer.
+pub fn on_scrolled() {
+    request_update();
+}
+
+fn request_update() {
+    GRID.with(|cell| {
+        if let Some(grid) = cell.borrow().as_ref()
+            && grid.timer.running()
+            && !grid.pointer_sync.running()
+        {
+            grid.pointer_sync.start(TimerMode::SingleShot, Duration::ZERO, tick);
+        }
+    });
+}
+
 fn tick() {
-    let Some((window, pointer)) = GRID.with(|cell| {
-        let grid = cell.borrow();
-        let grid = grid.as_ref()?;
-        let window = grid.window.upgrade()?;
-        let pointer = grid.probe.as_ref().and_then(|p| p.position_in(grid.main_xid));
-        Some((window, pointer))
-    }) else {
+    let Some(window) = GRID.with(|cell| cell.borrow().as_ref().and_then(|grid| grid.window.upgrade())) else {
         stop();
         return;
     };
@@ -105,18 +123,38 @@ fn tick() {
         return;
     }
     // While a dialog locks the main window no bar shows (the badges stay).
-    let pointer = pointer.filter(|_| !window.get_is_modal_locked());
-    update(pointer);
+    let pointer = POINTER.get().filter(|_| !window.get_is_modal_locked());
+    update(&window, pointer);
 }
 
-/// Shows the small bars for `pointer` and syncs the badges of every video in the grid.
-fn update(pointer: Option<(i32, i32)>) {
+/// The visible part of the grid and `pointer` in grid content coordinates (physical pixels; the Multiviews of the grid are placed
+/// at scroll position 0).
+fn content_view(window: &MainWindow, pointer: Option<(i32, i32)>) -> (Rect, Option<(i32, i32)>) {
+    let scale = window.window().scale_factor();
+    let size = window.window().size();
+    // `tab-grid-scroll-y` is the viewport's offset: 0 at the top, negative further down.
+    let offset = (window.get_tab_grid_scroll_y() * scale).round().to_int::<i32>();
+    to_content(visible_grid(size.width, size.height, scale), offset, pointer)
+}
+
+/// `visible` (window pixels) and `pointer` moved into the content of a grid scrolled by `offset`. A pointer outside the visible
+/// part (over a toolbar or the status bar) is over no item, even where an item lies scrolled below it.
+fn to_content(visible: Rect, offset: i32, pointer: Option<(i32, i32)>) -> (Rect, Option<(i32, i32)>) {
+    let pointer = pointer
+        .filter(|&(x, y)| visible.contains(x, y))
+        .map(|(x, y)| (x, y - offset));
+    (Rect::new(visible.x, visible.y - offset, visible.w, visible.h), pointer)
+}
+
+/// Shows the small bars for `pointer` (window coordinates) and syncs the badges of every video in the grid.
+fn update(window: &MainWindow, pointer: Option<(i32, i32)>) {
+    let (visible, pointer) = content_view(window, pointer);
     let prefs = mini_prefs();
     let now = Instant::now();
     let mut shown = Vec::new();
     for instance in grid_instances() {
         let mut guard = instance.lock();
-        let targets = guard.grid_video_bar_targets(pointer, &prefs, now);
+        let targets = guard.grid_video_bar_targets(pointer, visible, &prefs, now);
         let bar_keys: Vec<_> = targets.iter().map(|t| t.key).collect();
         let badges = guard.grid_time_badges(&bar_keys);
         let (id, dpi) = (guard.id(), guard.host_dpi());
@@ -167,14 +205,7 @@ pub(super) fn on_input(key: i32, input: VideoBarInput) {
         .find(|instance| instance.lock().id() == instance_id)
         .is_some_and(|instance| instance.lock().video_bar_input(tile, input, &prefs));
     if changed {
-        let pointer = GRID.with(|cell| {
-            let grid = cell.borrow();
-            let grid = grid.as_ref()?;
-            Some(grid.probe.as_ref().and_then(|p| p.position_in(grid.main_xid)))
-        });
-        if let Some(pointer) = pointer {
-            update(pointer);
-        }
+        tick();
     }
 }
 
@@ -183,6 +214,7 @@ fn stop() {
     GRID.with(|cell| {
         if let Some(grid) = cell.borrow().as_ref() {
             grid.timer.stop();
+            grid.pointer_sync.stop();
         }
     });
     for instance in grid_instances() {
@@ -199,4 +231,24 @@ fn stop() {
         }
     });
     tracing::debug!("[Multiview: GridBars] Stopped");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_scrolled_grid_moves_pointer_and_visible_part_into_the_content() {
+        let visible = Rect::new(0, 80, 1600, 700);
+        let (content, pointer) = to_content(visible, -300, Some((400, 200)));
+        assert_eq!(content, Rect::new(0, 380, 1600, 700));
+        assert_eq!(pointer, Some((400, 500)));
+    }
+
+    #[test]
+    fn a_pointer_over_the_toolbar_is_over_no_item() {
+        let visible = Rect::new(0, 80, 1600, 700);
+        assert_eq!(to_content(visible, -300, Some((400, 40))).1, None);
+        assert_eq!(to_content(visible, 0, None).1, None);
+    }
 }

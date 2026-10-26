@@ -247,7 +247,7 @@ mod tests {
         let second = b.lock().release_tiles();
         moved.extend(second.tiles);
         target.lock().adopt_tiles(moved, second.container);
-        let surface = HostSurface::tab_view(0, 0, Rect::new(0, 0, 1280, 720), 1.0);
+        let surface = HostSurface::tab_view(0, Rect::new(0, 0, 1280, 720), 1.0);
         assert!(target.lock().set_host(&surface));
         let mv = target.lock();
         assert_eq!(mv.layout.tiles.len(), 2);

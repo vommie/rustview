@@ -1,5 +1,5 @@
-//! Where the media canvas of a tab-grid item is in the window, so the Multiview tiles sit exactly where the Slint item leaves room
-//! for them.
+//! Where the media canvas of a tab-grid item is in the grid content, so the Multiview tiles sit exactly where the Slint item leaves
+//! room for them.
 
 use super::geometry::MasonryRect;
 use crate::viewer::multiview::layout::Rect;
@@ -18,12 +18,12 @@ pub struct LogicalRect {
     pub height: f32,
 }
 
-/// The media canvas of the grid item `item` (grid coordinates) in window coordinates: below the toolbars, the header of the
-/// item and its padding, shifted by the scroll offset.
-pub fn canvas_rect(item: &MasonryRect, padding_h: f32, padding_v: f32, scroll_y: f32) -> LogicalRect {
+/// The media canvas of the grid item `item` (grid coordinates) in grid content coordinates (the window at scroll position 0):
+/// below the toolbars, the header of the item and its padding.
+pub fn canvas_rect(item: &MasonryRect, padding_h: f32, padding_v: f32) -> LogicalRect {
     LogicalRect {
         x: item.x + padding_h,
-        y: TAB_GRID_CONTENT_TOP_LOGICAL_PX + item.y + TAB_GRID_ITEM_HEADER_LOGICAL_PX + padding_v + scroll_y,
+        y: TAB_GRID_CONTENT_TOP_LOGICAL_PX + item.y + TAB_GRID_ITEM_HEADER_LOGICAL_PX + padding_v,
         width: (item.width - padding_h * 2.0).max(TAB_GRID_MIN_CANVAS_LOGICAL_PX),
         height: (item.height - TAB_GRID_ITEM_HEADER_LOGICAL_PX - padding_v * 2.0).max(TAB_GRID_MIN_CANVAS_LOGICAL_PX),
     }
