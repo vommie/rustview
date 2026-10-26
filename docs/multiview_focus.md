@@ -96,18 +96,15 @@ the sound and mutes the other videos the policy controls; focusing an image chan
   `host_room`, the same rectangle the media bar sits on and a zoomed medium may fill), not the medium.** Before, they sat in the corners of the
   medium (of the visible part of a zoomed picture), and the marks of a zoomed video landed in wrong places: mpv placed them by the size of the
   medium while the video window had grown into the whole room. Now one rectangle decides for every kind, size and zoom: the canvas draws the
-  marks for every tile (above the picture, below the crop overlay; `MultiviewFocusCorners`), and where a video's native window covers a corner,
-  mpv draws the part of that mark that lies inside its window (`focus_overlay`: the marks are made in host coordinates, cut to the window the
-  video has now (`video_window_rect`: the medium's place, or the room while zoomed) and moved into it; one `overlay-add` bitmap per corner, ids
-  in `mpv_engine/overlay.rs`, a corner outside the window has none). An unzoomed letterboxed video therefore shows the canvas's marks in the free
-  space around it, a video that fills its view or is zoomed shows mpv's. Re-sent whenever the view or the window changes (reproject and every
-  tick, a comparison when nothing changed); works on Wayland and over a paused video. Not drawn in the tab-grid miniature.
+  marks for every tile (above the picture, below the crop overlay; `MultiviewFocusCorners`), over a video exactly as over a picture (since
+  0.5.10 a video is a texture of the canvas, `docs/rendering.md`; before, mpv drew the part of a mark that lay inside the video's native window
+  with `overlay-add`). Works on Wayland and over a paused video. Not drawn in the tab-grid miniature.
 - **Hidden with the cursor:** while the resting mouse cursor is hidden (setting or primary bar button) and "Hide the selection marks too" is on, area and
   corners are hidden as well (at once, no fade) and come back with the cursor. A key that acts on the focused tile (also one refused with a reason) shows
   them for about one second. The focus itself stays.
 - **Hint:** a circle like the rating/save feedback (dark surface, `Theme.primary` ring, Tabler `hand-click` icon) with one line below it, centered in the
-  view; held 750 ms, faded 250 ms like `media_feedback`; a new hint restarts it. It must be visible over a video, so it is a small override-redirect
-  window of its own like the bars (blended by the compositor; drawn in the canvas where that is not possible, e.g. Wayland). One single-shot timer, no polling.
+  view; held 750 ms, faded 250 ms like `media_feedback`; a new hint restarts it. It is an element of the host's canvas (`MultiviewHint`, since 0.5.9),
+  above media and bars, so it shows over a video like over a picture. One single-shot timer, no polling.
 
 ## Settings (all additive with `#[serde(default)]`, no migration)
 - Settings > Multiview, new section "Selected Medium": "Brighten its area" (Off / Weak / Medium / Strong, default Medium), "Corner marks"

@@ -51,12 +51,13 @@ Pure evaluation: the checks are made from collected facts (`DependencyFacts`, `H
 collecting the facts is the only part that looks at the system. A check has an id, a group, a status (OK, info, warning,
 problem), a title, a detail line and an optional fix (packages for `pacman`, or commands such as `sysctl`).
 `rustview check` prints the same checks in the terminal (exit status 1 when a problem was found); it knows everything except
-what only the running window can tell (OpenGL renderer, mpv's GPU context of a running video).
+what only the running window can tell (the OpenGL renderer and the GL context the videos are drawn with).
 
 ## Tools
-- **Video self-test:** plays `av://lavfi:testsrc2` for three seconds in a small mpv window of its own, placed over the
-  settings window, with the same video options as a real player (GPU contexts limited to X11, `gpu-sw`). It reports the time
-  to the first frame, the GPU context and video output mpv chose, the decoding and the dropped frames. No file is read.
+- **Video self-test:** plays `av://lavfi:testsrc2` for three seconds the way videos are drawn (the user's mpv configuration,
+  `vo=libmpv`, mpv's OpenGL render API on a render thread whose GL context shares textures with the main window) into a texture
+  of its own that is not shown. It reports the time to the first frame, the GL context it rendered with, the decoding, the
+  dropped frames and whether the picture has content. No file is read (since 0.5.7; before, a small mpv window of its own).
 - **Reset window:** the main window gets its default size, centered on its monitor, not maximized.
 - **Reset layout (held):** sidebar widths, the inspector, the panel tabs of the left sidebar, the column widths of the table,
   grid or table and the tab grid columns go back to their defaults. Sort order and filters stay.

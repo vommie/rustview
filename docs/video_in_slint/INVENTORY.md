@@ -213,6 +213,15 @@ tab grid still builds every item's model on a sync (CLEANUP #8, the double place
 | `docs/rendering.md`, `docs/video_controls.md`, `docs/mpv_ab_repeat.md` (OSD/`osd-border-style` remark), `docs/multiview_focus.md` (mpv marks), CLAUDE.md (Multiview chapter, VM graphics note on `gpu-sw`, the black-video quirk) | describe the native-window design | **M7** rewrite |
 | `src/viewer/x11/error_handler.rs` | see §1 | **M7** decide |
 
+**Done in M7 (0.5.13):** the docs (`docs/rendering.md` rewritten, `docs/video_controls.md`, `docs/multiview_focus.md`,
+`docs/mpv_ab_repeat.md`, `docs/hotkeys.md`, `docs/debug_page.md`, README "Platform", CLAUDE.md: the VM graphics note, the testing
+quirk, "Platform", the Multiview, shutdown, feedback and dialog chapters) describe videos as textures of the canvas. The window-system
+texts (`window_system.rs` doc and log line, Settings > Debug's "Native Wayland" row) no longer say that videos are missing on native
+Wayland. The switch of the default itself waits for the joint test with the user (decision 3, `WAYLAND.md`); on the way the Multiview
+fullscreen was made to open on native Wayland at all (`ui/multiview/fullscreen_mode.rs`; it waited for an X11 window id). `error_handler.rs`
+**stays**: libmpv may still install its process-killing Xlib handler when a hardware decoder's interop used Xlib (VAAPI over GLX/X11
+EGL), and the VM has no VAAPI to prove that it never does; the call after a teardown costs nothing.
+
 ## 9. X11 code that stays (not a video workaround)
 
 | File | Why it stays |
@@ -226,7 +235,7 @@ tab grid still builds every item's model on a sync (CLEANUP #8, the double place
 | `src/viewer/multiview/instance_hover.rs` `probe_aspects` | corrects aspect ratios from mpv's `video-params` (needed with any output) |
 | `src/viewer/mpv_engine/ab_repeat.rs` `headless` (`self_test::user_config_dir`, `input-vo-keyboard`) | headless mpv for "Check again"; no window involved |
 
-## 10. False positives of the marker search
+## 10. False positives of the marker search (and the result at the end of M7)
 
 | File | Hit | Why it is not a workaround |
 |---|---|---|
@@ -236,6 +245,18 @@ tab grid still builds every item's model on a sync (CLEANUP #8, the double place
 | `src/ui/image_edit/save_flow.rs` | `fn park(waiting)` | parks a save continuation, unrelated |
 | `src/viewer/mpv_engine/ab_repeat.rs` | `self_test`, `input-vo-keyboard` | headless probe, stays (§9) |
 | `src/system/diagnostics/graphics.rs` | `current-gpu-context` | listed in §1 (M1) |
+
+**Result at the end of M7 (0.5.13): 18 files** (from 92), each kept on purpose:
+
+| File | Hit | Why it stays |
+|---|---|---|
+| `src/ui/image_edit/save_flow.rs` | `fn park` | parks a save continuation, unrelated |
+| `src/ui/multiview/commands.rs` | `hint::show` | sets the canvas hint (`MultiviewHint`), no window |
+| `src/ui/multiview/session_convert.rs`, `src/viewer/multiview/instance_host.rs` | `.park(` / `fn park` | hands a Multiview from the fullscreen back to the main window (decision 2: the fullscreen stays a separate window); no X reparenting any more |
+| `src/ui/settings_dialog/debug_page/{actions,mod,views}.rs`, `src/viewer/mpv_engine.rs`, `src/viewer/mpv_engine/ab_repeat.rs` | `self_test`, `input-vo-keyboard` | the render-API self-test of Settings > Debug; the headless mpv of `ab_repeat` (§9) |
+| `src/viewer/mod.rs`, `src/viewer/x11/mod.rs`, `src/viewer/x11/error_handler.rs`, `src/viewer/multiview/teardown.rs` | `install_nonfatal_error_handler` | decided in M7: stays (§8) |
+| `src/viewer/x11/ghost.rs` | `override_redirect` | the drag ghost window (§9) |
+| `ui/fullscreen_away.slint`, `ui/main.slint`, `ui/tab_grid_item.slint`, `ui/tab_grid_view.slint` | `AwayBadge`, `AwayPanel`, `fullscreen-tab-id`, `away-tab-id` | stand-ins while a tab's videos are in the fullscreen window (decision 2, §7) |
 
 Numbers for the record (`wc -l` of the whole files): bar, video bar and hint windows with their X side ~3 400 lines, subwindow +
 cutouts + GPU contexts ~870, mpv-drawn overlays ~950, zoom placement and stills ~520, plus the parts spread over hosts and

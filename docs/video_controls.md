@@ -1,9 +1,9 @@
 # The video control bar
 
-Every video of a Multiview (fullscreen and tab view, not the tab grid) has a control bar of its own at its bottom. RustView takes
-the pointer over videos for it: mpv's on-screen controller (OSC) is off and the video windows let the pointer through to the host
-window (`X11VideoSubwindow::set_input_passthrough`, applied by `MultiviewInstance::apply_pointer_passthrough` on every tick in the
-fullscreen and the tab view). The tab grid still leaves the pointer to mpv (its bindings report clicks and the wheel).
+Every video of a Multiview (fullscreen and tab view; the tab grid has a small one) has a control bar of its own at its bottom.
+Since `video-in-slint` (0.5.7-0.5.13, `docs/rendering.md`) a video is a texture drawn by the canvas like a picture, so the pointer
+over a video is simply the window's: mpv's on-screen controller (OSC) is off, mpv takes neither keys nor the mouse, and the bar is
+an element of the canvas.
 
 ## Decisions (questionnaire round 4, 2026-10-24, `~/claude/feedback/2026-10-24-rustview-video-bar`)
 
@@ -29,16 +29,16 @@ fullscreen and the tab view). The tab grid still leaves the pointer to mpv (its 
 - Volume: mute is a state of its own, as in mpv. The slider sets the level and never touches mute (a muted video stays muted while
   its level goes up; the slider shows the level dimmed). The speaker shows "muted" when the video is muted or at level 0. A click
   unmutes a muted video, mutes an audible one, and brings a silent one back to its last audible level.
-- From round 3: the mouse wheel over a video changes the volume (5 % per notch; Ctrl + wheel zooms the video with mpv), a right
+- From round 3: the mouse wheel over a video changes the volume (5 % per notch; Ctrl + wheel zooms the video), a right
   click plays or pauses, a click selects the tile, double and middle click work as over pictures (through the canvas). Video
   zoom, panning, the minimap and the zoom slider like pictures: built in 0.4.12 (see below).
 - Volume feedback (0.5.2): when the wheel or a video player key (Louder/Quieter) changes the volume, a flat, semi-transparent volume bar
   (a speaker icon of the bar's height left of a filled bar, the level like the slider: 100 % and more = full, dimmed while muted) shows
   centered in the lower part of the video's picture, at most half its width, and holds and fades like the feedback pulse; a new change
   restarts it. The control bar's slider shows none. The mute key shows the centered speaker icon (crossed out when muted) like the rating
-  icon; the mute buttons show none. Pure: `viewer/multiview/volume_feedback.rs` (inputs, pulses, geometry); drawn by mpv
-  (`volume_overlay.rs`, overlay id `VOLUME_BAR_OVERLAY_ID`); `instance_volume_feedback.rs`; the host arms its feedback timer after
-  `take_feedback_request`.
+  icon; the mute buttons show none. Pure: `viewer/multiview/volume_feedback.rs` (inputs, pulses, geometry); drawn by the canvas
+  from `TileView::volume` (`volume-*` of `MultiviewTileView`, since 0.5.10); `instance_volume_feedback.rs`; the host arms its
+  feedback timer after `take_feedback_request`.
 
 ## Code
 
@@ -92,13 +92,14 @@ volume bar after a wheel step; the script's own jumps of a loop do not.
 - New hotkey area "Tab-Grid": the arrow keys move a mark from item to item (it looks like the hover frame), Enter opens the
   marked item, Del or Ctrl+W closes its tab, F11 opens it in the fullscreen.
 
-Code: the video windows let the pointer through in every visible host mode (`apply_pointer_passthrough`), so the grid item's
-own touch area handles the video like a picture. `ui/multiview/grid_bars.rs` is the grid's tick (started by
-`BridgeTabGrid::sync_tab_grid_ui`, stops itself when the grid goes): it asks every Multiview in the grid for its small bars
-(`instance_grid_bar.rs`: `grid_video_bar_targets`, reveal mode `Hover`, `placement::place_mini`, fixed 22 px, only inside the
-visible part of the grid) and keeps the time badges (`sync_time_badges`: mpv's `osd-overlay` with ASS and
-`osd-border-style=background-box`, `MpvPlayer::set_osd_text`; hidden where a small bar shows, removed when the Multiview leaves
-the grid). The small bars use the window pool of `ui/multiview/video_bar` with owner `TabGrid` and the `mini` layout. Keys:
+Code: the grid item's own touch area handles a video like a picture (the video is a texture of the item's canvas). Every
+Multiview of the grid is placed in grid content coordinates, so Slint scrolls and clips the items with their videos and a scroll
+step re-places nothing (0.5.12). `ui/multiview/grid_bars.rs` is the grid's tick (started by `BridgeTabGrid::sync_tab_grid_ui`,
+stops itself when the grid goes): it asks every Multiview in the grid for its small bars (`instance_grid_bar.rs`:
+`grid_video_bar_targets`, reveal mode `Hover`, `placement::place_mini`, fixed 22 px, only inside the visible part of the grid),
+gets the pointer from the main window's pointer events (`grid_bars::on_pointer`, moved into the content by `to_content`) and fills
+the time badges (`TimeBadgeModel` per Multiview, `grid_time_badges`; a Slint badge of the grid item, hidden where a small bar
+shows). The small bars are rows of a `VideoBarModel` per Multiview with the `mini` layout, drawn by the item's canvas. Keys:
 `Area::Grid` in the keymap, `main_window::dispatch` (view mode 2) -> `tab-grid-key` -> `ui/tabs/grid_keys.rs`; the mark is
 `UiState::tab_grid_mark` / `TabGridItemModel::is_marked`, moved by the pure `ui/tabs/grid/mark.rs` (`neighbor` in the masonry
 layout) and scrolled into view with `tab-grid-reveal`. mpv's grid bindings (clicks and the wheel reported through property
@@ -106,9 +107,9 @@ toggles) are gone.
 
 ## Video zoom (round 3, built in 0.4.12)
 
-Videos zoom exactly like pictures: Ctrl + wheel toward the pointer, the zoom keys, dragging the picture, the minimap (with a
-still of the video, refreshed every 2 s while it shows over a playing video; drag, middle click = reset, right click = the slider
-bubble), the zoom slider of the media bar, and a zoomed video grows into the free room of its tile (its native window grows). The
-zoom model is the pictures' (`ZoomState`, without the picture work); mpv draws the result (`video-zoom`, `video-pan-*`). The same
-mpv properties would work with the render API (`docs/rendering_audit.md` on the branch `render-api`; the decision to keep the native
-windows is in `docs/rendering.md`), only the window growth would become a larger texture.
+Videos zoom exactly like pictures: Ctrl + wheel toward the pointer, the zoom keys, dragging the picture, the minimap (the video's
+own texture in small, so it plays along; drag, middle click = reset, right click = the slider bubble), the zoom slider of the media
+bar, and a zoomed video grows into the free room of its tile. The zoom model is the pictures' (`ZoomState::new_video`, without the
+picture work). Since 0.5.11 mpv always renders the whole, fitted picture into the video's texture and the canvas places and scales
+it where the zoom model puts the picture, clipped to the room (`video_placement.rs`, `instance_video_zoom.rs`), so zooming and
+panning never wait for mpv.

@@ -222,8 +222,8 @@ JSON reading of its own.
 - The user's `mpv.conf` beats the options `MpvPlayer::new` sets before `mpv_initialize`: with `osc=yes` in it, RustView's players
   run with `osc=true` (seen in the test; RustView sets `osc=no`). The OSC stays invisible because mpv never sees the pointer,
   but it runs. Fixed separately: `MpvPlayer::new` switches it off again after the config was read (unloads the script).
-- `MpvPlayer::set_osd_text` sets `osd-border-style=background-box` for the tab grid's time badge, which then also boxes the
-  script's OSD texts in that player.
+- Until 0.5.9 `MpvPlayer::set_osd_text` set `osd-border-style=background-box` for the tab grid's time badge, which then also
+  boxed the script's OSD texts in that player. Since 0.5.10 the badge is a Slint element and RustView leaves mpv's OSD style alone.
 
 ## Test tools (outside the repository)
 

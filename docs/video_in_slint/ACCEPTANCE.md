@@ -7,6 +7,17 @@ top (section R). Each item says what should happen and how to try it. Milestones
 self-check ("checked in Mx"); the user's acceptance at the end goes through all of them. Before the acceptance the list is
 also offered as a German questionnaire with a tick and a note field per item.
 
+## Self-check of M7 (2026-10-26, before the acceptance)
+
+The boxes stay unticked: ticking is the user's acceptance. What the milestones checked is noted at each item ("Checked in Mx").
+M7 went through what M6 left (O1 volume/zoom/A-B across a move, O2, O3, N4, N5) and P1-P3, A6, I5, K2, Q2 in the VM (X11 session,
+skia on VirGL, compositor on; real screen captures, the Slint MCP build and the real mouse for hovering), and R2 as far as the VM
+allows (a nested KWin Wayland session). Found and fixed on the way: the fullscreen did not open on native Wayland; on X11 the reused
+fullscreen window was sometimes only maximized (now confirmed and asked for again). Found and logged (not regressions of this branch):
+no error tile for a video mpv cannot open (P3, CLEANUP #16); 5 % of a core while a tab with a paused video is shown (Q2, CLEANUP #2).
+Not run by Claude: the items that need the user's eye or settings round trips (C2-C7, D1-D7, E2, E5, G3-G5, H2, I3, J2, K1, K3-K6,
+L1-L3, M1, M4 drag/middle/right click, P4, Q1, R3) and the joint Wayland test (R2, `WAYLAND.md`).
+
 ## Before you start
 
 - Media: any videos work. In the test environment: `Videos/Clips` (14 short clips: 720p, 1080p, portrait, square, 2.39:1,
@@ -32,7 +43,7 @@ also offered as a German questionnaire with a tick and a note field per item.
 - [ ] **A5** A tab that is not shown pauses its videos and plays on when it comes back, unless you paused it yourself. —
   *Test:* play a video tab, switch to another tab, come back; then pause it, switch, come back: still paused.
 - [ ] **A6** No video stays black or frozen while others play (also 4 videos at once, also 4K). — *Test:* four clips in the
-  fullscreen; `Videos/4K`. *Checked in M1: the four videos of `Multiview-Tests` play together in the fullscreen (four render contexts); 4K in the AMD measurement.*
+  fullscreen; `Videos/4K`. *Checked in M1: the four videos of `Multiview-Tests` play together in the fullscreen (four render contexts); 4K in the AMD measurement.* *Checked in M7: the four videos of `Multiview-Tests` in the fullscreen, all playing in step (same time code).*
 - [ ] **A7** Opening a video shows its first picture quickly, without a flash of another color. — *Test:* open several
   clips one after another.
 
@@ -163,7 +174,7 @@ also offered as a German questionnaire with a tick and a note field per item.
   (circle with hand icon, one line) shows centered over the view, also over a video; it holds and fades like the rating
   icon. Other refusals name their reason ("Nothing to save", ...). — *Test:* open 2 videos, press Ctrl+3 without clicking. *Checked in M3: the hint over a video in the fullscreen (two videos and a picture, Ctrl+3 without a selection), drawn by the canvas.*
 - [ ] **I5** Tab view panels follow the selected medium (Inspector, Tag & Rate); without one they say "Select a medium in
-  the view". — *Test:* a merged tab of two videos.
+  the view". — *Test:* a merged tab of two videos. *Checked in M7: a merged tab of two videos without a selection: the Tag & Rate panel says "Select a medium in the view".*
 
 ## J. Feedback over a video
 
@@ -184,7 +195,7 @@ also offered as a German questionnaire with a tick and a note field per item.
   Shift+Left/Right long jump, Comma/Period frame steps, Ctrl+Up/Down volume, [ / ] speed. — *Test:* two videos, select
   the right one, keep the pointer over the left one, press each key.
 - [ ] **K2** A key pressed with the pointer over a video reaches RustView (never mpv's own keys: no screenshots, no audio
-  delay, no quit). — *Test:* Ctrl+S, s, Ctrl+Plus, Ctrl+C over a video.
+  delay, no quit). — *Test:* Ctrl+S, s, Ctrl+Plus, Ctrl+C over a video. *Checked in M7: `s` (mpv's screenshot key) over a playing video wrote no file; Ctrl+S showed RustView's hint "Nothing to save".*
 - [ ] **K3** DEL opens the delete dialog for the selected medium (also in the tab view); F2 renames it. — *Test:* each.
 - [ ] **K4** Esc: closes a crop tool first, then the fullscreen (a pinned one refuses); in the tab view it never opens the
   fullscreen. — *Test:* Esc over a video in a tab.
@@ -223,26 +234,26 @@ also offered as a German questionnaire with a tick and a note field per item.
   *Test:* hover, play one in the grid. *Checked in M6 (0.5.12): the small bar appears on hover from the main window's pointer events (no X server poll), a click on its play button played the video in the grid without opening the tab, the other videos showed the time badge and the pause badge.*
 - [ ] **N3** Scrolling the grid moves and clips the videos exactly with their items (no picture outside the grid, nothing
   lags behind). — *Test:* many tabs, scroll fast. *Checked in M6 (0.5.12): 11 tabs, scrolled down and up with the wheel: the videos moved and were clipped with their items under the toolbar; the small bar stayed on the item under the resting pointer. Scrolling no longer re-places any Multiview.*
-- [ ] **N4** Grid keys: arrows move the mark, Enter opens, Del/Ctrl+W close, F11 opens the fullscreen. — *Test:* each.
+- [ ] **N4** Grid keys: arrows move the mark, Enter opens, Del/Ctrl+W close, F11 opens the fullscreen. — *Test:* each. *Checked in M7 (X11): Left moved the mark to the other item, F11 opened the marked tab in the fullscreen.*
 - [ ] **N5** A tab that is shown in the fullscreen shows "Playing in fullscreen" on its video tiles in the grid, and the tab
   view of that tab shows the away panel; both go only after the fullscreen closed and the tab shows its videos again. —
-  *Test:* F11 on a video tab, Alt+2 in the main window (second monitor or after Alt+Tab), close the fullscreen.
+  *Test:* F11 on a video tab, Alt+2 in the main window (second monitor or after Alt+Tab), close the fullscreen. *Checked in M7 (one monitor; the main window looked at through the MCP while the fullscreen was open): the grid item of the tab in the fullscreen showed "Playing in fullscreen", the other tab its video; after closing the fullscreen the item showed its video again.*
 
 ## O. Handover between windows
 
 - [ ] **O1** Tab → fullscreen → back: position, pause state, volume, zoom and A-B stay; no visible gap or black frame. —
-  *Test:* play a tab to 0:30, F11, Esc. *Checked in M1: tab → fullscreen → tab: position and pause kept, a new render context in each window (`[VideoSurface: Render]` epochs 1, 3, 5); the gap of 1-3 frames is covered in M6.* *Checked in M6 (0.5.12) with a screen recording at 30 fps (video tab -> F11 -> Esc): no black frame of the video in either direction; the window that receives the video shows its last picture until mpv has a frame there (logs `[VideoSurface: Still]`). Going into the fullscreen the main window shows the "Shown in fullscreen" placeholder for ~3 frames while the fullscreen window maps (intended, N5). Not checked: volume, zoom and A-B across the move.*
+  *Test:* play a tab to 0:30, F11, Esc. *Checked in M1: tab → fullscreen → tab: position and pause kept, a new render context in each window (`[VideoSurface: Render]` epochs 1, 3, 5); the gap of 1-3 frames is covered in M6.* *Checked in M6 (0.5.12) with a screen recording at 30 fps (video tab -> F11 -> Esc): no black frame of the video in either direction; the window that receives the video shows its last picture until mpv has a frame there (logs `[VideoSurface: Still]`). Going into the fullscreen the main window shows the "Shown in fullscreen" placeholder for ~3 frames while the fullscreen window maps (intended, N5). Not checked: volume, zoom and A-B across the move.* *Checked in M7: a tab of `long_90s_640x360.mp4` with the volume at 90 %, A 0:06 / B 0:09 looping and zoomed twice; F11: the same volume, A-B and zoom in the fullscreen; Esc: the same in the tab again (real screen captures).*
 - [ ] **O2** Fullscreen → background tab (Ctrl + double click or "Send to tab"): the videos run on in the tab. — *Test:*
-  both ways.
+  both ways. *Checked in M7: Browse fullscreen, Ctrl + double click with the real mouse: a background tab "long_300s_320x180.mp4"; shown, its video played on.*
 - [ ] **O3** Merging tabs (Ctrl+click two tabs > Merge, or Merge With Left/Right) keeps every video running with its
-  position and choices; Duplicate shares the same file in a second player. — *Test:* merge two playing video tabs.
+  position and choices; Duplicate shares the same file in a second player. — *Test:* merge two playing video tabs. *Checked in M7: two video tabs (one with an A-B loop 0:06-0:09) Ctrl+clicked and merged: one Multiview tab, both videos kept playing, the loop kept looping.*
 
 ## P. Robustness
 
 - [ ] **P1** Closing a tab with playing videos, closing the fullscreen, quitting RustView (window close, Ctrl+C in the
-  terminal) never hangs or crashes. — *Test:* each with 4 videos playing.
-- [ ] **P2** Settings > Debug: the video self-test passes and the page names the way videos are drawn. — *Test:* run it. *Checked in M1: the self-test renders 90 frames through the render API (GLX), first after 28 ms, picture has content.*
-- [ ] **P3** A corrupt video shows its error tile, the others go on. — *Test:* `Corrupt/` with a good video.
+  terminal) never hangs or crashes. — *Test:* each with 4 videos playing. *Checked in M7: Ctrl+W on a tab of two playing videos; SIGTERM with four videos playing in the fullscreen and two more tabs: clean exit after 0.7 s (`[Shutdown: Done] elapsed_ms=310`).*
+- [ ] **P2** Settings > Debug: the video self-test passes and the page names the way videos are drawn. — *Test:* run it. *Checked in M1: the self-test renders 90 frames through the render API (GLX), first after 28 ms, picture has content.* *Checked in M7 (skia): first frame after 21 ms, "mpv's render API, EGL".*
+- [ ] **P3** A corrupt video shows its error tile, the others go on. — *Test:* `Corrupt/` with a good video. *M7: `Corrupt/truncated.mp4` opens as an empty black tab, no error tile; mpv reports the failure only asynchronously (`loadfile` succeeds, the file fails later), and RustView shows an error tile only when the player cannot be created. The same on `claude` before this branch (not a regression); CLEANUP #16.*
 - [ ] **P4** *(no compositor)* Everything above still works with KWin compositing off. — *Test:* Alt+Shift+F12, repeat a
   few items of C, D, E.
 
@@ -250,7 +261,7 @@ also offered as a German questionnaire with a tick and a note field per item.
 
 - [ ] **Q1** Four 1080p videos play smoothly in the fullscreen while you move the mouse and open menus. — *Test:* look.
 - [ ] **Q2** RustView idles quietly with videos paused (no busy CPU in the system monitor). — *Test:* pause all, look at
-  the CPU for 10 s.
+  the CPU for 10 s. *M7: Browse view 0.6 % of one core; a tab with a paused video 5 % (the Multiview's 50 ms tick on the UI thread; CLEANUP #2).*
 
 ## R. What the branch adds
 
@@ -259,6 +270,6 @@ also offered as a German questionnaire with a tick and a note field per item.
 - [ ] **R2** Native Wayland is the default (decision 2026-10-26, tested together): in a Plasma Wayland session RustView runs
   without XWayland and everything above works; what native Wayland still lacks (dragging files to other programs, dialogs that
   belong to their window, pointer lock of the minimap) is solved or accepted by you. — *Test:* log into Plasma (Wayland),
-  repeat A, C, D, G, then switch to X11/XWayland (`RUSTVIEW_WINDOW_SYSTEM`) and repeat a few.
+  repeat A, C, D, G, then switch to X11/XWayland (`RUSTVIEW_WINDOW_SYSTEM`) and repeat a few. *M7: prepared, not switched (needs the joint test). In a nested KWin Wayland session in the VM (`RUSTVIEW_WINDOW_SYSTEM=wayland`, EGL on virgl): a video tab, the tab bar's context menu over the playing video, the fullscreen (opened only after a fix: it waited for an X11 window id), the mute icon, back to the tab, the tab grid with its time badge, the rename dialog. The list of what native Wayland lacks: `WAYLAND.md`.*
 - [ ] **R3** The UI looks right under the renderer chosen after the AMD measurement (skia unless something spoke against it):
   text, rounded corners, icons, thumbnails. — *Test:* look through Browse, Settings, a dialog and the Multiview.

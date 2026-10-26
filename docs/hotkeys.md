@@ -98,4 +98,4 @@ unzoomed. No slider or minimap for videos, and a video stays inside its tile.
   Nothing else. It appears only while the pointer is over it, across the whole width (like mpv's OSC), flat and compact;
   the look is chosen in round 4 (`~/claude/feedback/2026-10-24-rustview-video-bar`, built: `docs/video_controls.md`).
 - Mouse wheel over a video: volume. Right click: play/pause. Videos get the minimap and the zoom slider like pictures, and a
-  zoomed video may grow beyond its tile into the free room (its native window grows).
+  zoomed video may grow beyond its tile into the free room (the canvas draws its texture there, since 0.5.11).
