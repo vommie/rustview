@@ -46,6 +46,12 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 - **The control bar of videos is drawn by RustView's own window** (branch video-in-slint, second step), together with its A-B group:
   it no longer floats over the video in a window of its own. It fades in and out also without a compositing manager, and nothing of
   it can stay behind over another application. The small bar of a video in the Tab-Grid is drawn the same way.
+- **The action bars of the Multiview are drawn by RustView's own window** (branch video-in-slint, third step): the media bar of each
+  medium, the primary bar, the "Open With" and Save drop-downs, the zoom slider below the bar and the hint ("Select a medium first")
+  no longer float in windows of their own. Nothing of them can stay over another application, they look the same with and without a
+  compositing manager, tooltips and menus of the window lie over them, and a drop-down closes on a click anywhere else in the view
+  (that click does nothing else). RustView no longer asks the X server where the pointer is every 50 ms: the bars follow the pointer
+  events of their window, so they also appear with native Wayland.
 - **The save bubble and the menu of saved A-B repeats open right above their button**: the caret points at the button that opened
   them (also on a narrow video and with the pill style), the bubble touches the bar (no gap any more), and opening or closing them
   no longer makes the whole bar flicker. A menu that is wider than its video may use the room next to it. A click anywhere else in

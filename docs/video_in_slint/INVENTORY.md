@@ -109,6 +109,17 @@ probe of `grid_bars` stays for M6. The popups are elements of the canvas, not `P
 
 ## 4. Media bar, primary bar, menus, zoom bubble, hint: windows of their own (M3)
 
+**Done in M3 (0.5.9):** every row of this section. The bars are `MultiviewActionBar` (`ui/multiview_action_bar.slint`) drawn by the
+canvas from one `ActionBarModel` per host (`ui/multiview/action_bar/`, events through the `ActionBarBus` global), the drop-downs and the
+zoom slider are elements of the canvas below their bar (a backdrop closes a drop-down), the hint is `MultiviewHint` in the canvas
+(`ui/multiview/hint.rs` only sets its text and ends its hold). Deleted: `bar_overlay` (+ `overlay.rs`), `bar_hosting`, `bar_menu`,
+`ui/multiview_bar_window.slint`, `ui/multiview_hint_window.slint` (now `multiview_hint.slint`, a component), the override-redirect hook
+in `main.rs`, `HintAnchor`, `near_bar_corner`/`xrectangle`/`rounded_region` and the overlay window constants, `viewer/x11/rectangle.rs`,
+the `state-changed` callback of `GlobalTooltipLayer`, the shutdown rows of both windows. `overlay_server.rs` became `pointer_warp.rs`
+(`PointerWarp`: only what `pointer_lock` needs). The fullscreen and the tab view get the pointer from their window's events
+(`ui/multiview/pointer_events.rs`, winit `CursorMoved`/`CursorLeft`); `PointerProbe` is left for the tab grid (M6). The bar sizes come
+from `MULTIVIEW_BAR_*` constants that Slint gets through `MultiviewBarMetrics` (`bar_placement::bar_size_logical`).
+
 | File / function | What it does today | Milestone |
 |---|---|---|
 | `src/main.rs` `main`: `with_winit_window_attributes_hook(bar_overlay::window_attributes_hook)` | the only place that makes Slint windows override-redirect | **M3** delete (and with it the reason the hook exists); keep the `BackendSelector` for decision 1 |

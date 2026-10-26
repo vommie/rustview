@@ -114,23 +114,23 @@ also offered as a German questionnaire with a tick and a note field per item.
 ## E. The media bar (top right of each medium)
 
 - [ ] **E1** It appears when the pointer comes near the top right corner of a medium's view, at the height of the primary
-  bar, whatever the video's size or zoom; every tile has its own. — *Test:* 3 videos, move to each corner.
+  bar, whatever the video's size or zoom; every tile has its own. — *Test:* 3 videos, move to each corner. *Checked in M3: the media bar of an image and of a video appear at the top right of their view in the fullscreen (three media) and in the tab view, drawn in the window.*
 - [ ] **E2** Buttons: Mute, Sticky, Open as tab / in a background tab (Browse fullscreen), Remove, Duplicate, Zoom, Open
   With, Delete (and the edit buttons on pictures). Disabled buttons say why in the tooltip (e.g. Duplicate when the view is
   full). — *Test:* hover and click each on a video.
 - [ ] **E3** "Open With" opens a speech-bubble drop-down below its button (caret under the button, button stays highlighted);
-  it closes on a click outside, a second click on the button and on choosing an entry. — *Test:* each.
+  it closes on a click outside, a second click on the button and on choosing an entry. — *Test:* each. *Checked in M3: "Open With" in the fullscreen and in the tab view (the bubble stays inside the view, caret at the button, button highlighted), closed by a click elsewhere and by a second click on the button; the Save drop-down of the split button after a crop.*
 - [ ] **E4** The zoom button opens the zoom slider bubble; several sliders (one per tile) can be open at once. — *Test:* open
-  two.
+  two. *Checked in M3: the zoom slider of an image stayed open while "Open With" was open on a video next to it.*
 - [ ] **E5** A bar follows its medium when media come and go or the layout switches between a row and a 2x2 grid. — *Test:*
   Remove a tile while another's slider is open.
-- [ ] **E6** Tooltips of the bar buttons follow the tooltip settings (on/off, delay). — *Test:* switch tooltips off.
+- [ ] **E6** Tooltips of the bar buttons follow the tooltip settings (on/off, delay). — *Test:* switch tooltips off. *M3: the bars are in the host window, so its tooltip settings apply (the fullscreen window follows a change while it is open).*
 
 ## F. The primary bar (top left of the view)
 
 - [ ] **F1** Buttons: Send to tab, Close, Mute All, Play/Pause All, Reset Layout, hide the resting cursor, Pin. — *Test:*
-  each in the fullscreen with 2+ videos.
-- [ ] **F2** A refused close of a pinned fullscreen makes the Pin button blink. — *Test:* Pin, then Esc.
+  each in the fullscreen with 2+ videos. *Checked in M3: the primary bar appears top left in the fullscreen, drawn in the window; its tooltip shows.*
+- [ ] **F2** A refused close of a pinned fullscreen makes the Pin button blink. — *Test:* Pin, then Esc. *Checked in M3: Pin, then Esc: the bar showed itself with the pin button and went away afterwards.*
 
 ## G. Menus, tooltips and dialogs over a video
 
@@ -147,7 +147,7 @@ also offered as a German questionnaire with a tick and a note field per item.
 ## H. Switching to another application
 
 - [ ] **H1** Nothing of RustView floats over another application: no bar, menu, slider, hint or label. — *Test:* open a
-  menu or zoom slider over a video, Alt+Tab to another program, look.
+  menu or zoom slider over a video, Alt+Tab to another program, look. *M3: by construction (bars, menus, sliders and the hint are part of the RustView window).*
 - [ ] **H2** Coming back shows what was open as before (an open slider comes back). — *Test:* Alt+Tab back.
 
 ## I. The selected medium (focus marks)
@@ -161,7 +161,7 @@ also offered as a German questionnaire with a tick and a note field per item.
   selected medium shows them for about a second. — *Test:* let the cursor hide, press Space.
 - [ ] **I4** With 2+ media and none selected, a key that needs a medium does nothing and the hint "Select a medium first"
   (circle with hand icon, one line) shows centered over the view, also over a video; it holds and fades like the rating
-  icon. Other refusals name their reason ("Nothing to save", ...). — *Test:* open 2 videos, press Ctrl+3 without clicking.
+  icon. Other refusals name their reason ("Nothing to save", ...). — *Test:* open 2 videos, press Ctrl+3 without clicking. *Checked in M3: the hint over a video in the fullscreen (two videos and a picture, Ctrl+3 without a selection), drawn by the canvas.*
 - [ ] **I5** Tab view panels follow the selected medium (Inspector, Tag & Rate); without one they say "Select a medium in
   the view". — *Test:* a merged tab of two videos.
 
@@ -255,7 +255,7 @@ also offered as a German questionnaire with a tick and a note field per item.
 ## R. What the branch adds
 
 - [ ] **R1** No extra windows over videos: bars, menus, sliders and the hint are part of the RustView window (KDE's task
-  switcher and `xwininfo -tree` show no extra windows). — *Test:* open a bar and a menu, Alt+Tab list.
+  switcher and `xwininfo -tree` show no extra windows). — *Test:* open a bar and a menu, Alt+Tab list. *Checked in M3: with a media bar and the hint showing in the fullscreen, `xwininfo -root -tree` lists two RustView windows (main window and fullscreen).*
 - [ ] **R2** Native Wayland is the default (decision 2026-10-26, tested together): in a Plasma Wayland session RustView runs
   without XWayland and everything above works; what native Wayland still lacks (dragging files to other programs, dialogs that
   belong to their window, pointer lock of the minimap) is solved or accepted by you. — *Test:* log into Plasma (Wayland),
