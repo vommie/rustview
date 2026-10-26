@@ -1,5 +1,5 @@
 import { IconId } from "icons.slint";
-import { MultiviewTileView, MultiviewGutterView, MultiviewScreenView } from "multiview_types.slint";
+import { MultiviewTileView, MultiviewGutterView, MultiviewScreenView, MultiviewTimeBadgeView } from "multiview_types.slint";
 import { MultiviewVideoBarView } from "multiview_video_bar.slint";
 
 export struct MediaItemView {
@@ -176,6 +176,8 @@ export struct TabGridItemModel {
     mv_screen: MultiviewScreenView,
     // The small control bar of the video under the pointer (`grid_bars`).
     mv_video_bars: [MultiviewVideoBarView],
+    // The time badges of the other videos (`grid_bars`).
+    mv_time_badges: [MultiviewTimeBadgeView],
     is_loading: bool,
     error_message: string,
     orig_width: int,

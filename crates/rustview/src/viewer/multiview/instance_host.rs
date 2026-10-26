@@ -296,9 +296,6 @@ impl MultiviewInstance {
             video.player.set_view_active(active);
         }
         self.apply_video_background();
-        if mode != HostMode::TabGrid {
-            self.sync_time_badges(&[]);
-        }
         if active {
             self.apply_audio();
         }

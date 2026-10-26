@@ -1,17 +1,24 @@
 //! The video tiles of a Multiview in a tab grid item: the small control bar of the video under the pointer (play/pause and
-//! the progress bar) and the time badge of every other video (position and length, drawn by mpv over the picture).
+//! the progress bar) and the time badge of every other video (position and length, drawn by the canvas of the grid item).
 
 use super::follow::TileKey;
 use super::instance::MultiviewInstance;
+use super::layout::Rect;
 use super::route::HostMode;
 use super::video_bar::placement;
 use super::video_bar::prefs::{RevealMode, VideoBarPrefs};
 use super::video_bar::time_text;
 use super::video_bar::view::VideoBarTarget;
-use crate::viewer::mpv_engine::OsdText;
-use rustview_core::settings::schema::{MULTIVIEW_TIME_BADGE_FONT_LOGICAL_PX, MULTIVIEW_TIME_BADGE_MARGIN_LOGICAL_PX};
-use rustview_core::util::cast::FloatToInt;
 use std::time::Instant;
+
+/// The time badge of a video in the tab grid: the tile it belongs to, the medium's place (physical pixels relative to the
+/// host rectangle; the badge sits in its bottom right corner) and "0:03 / 0:08".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TimeBadgeTarget {
+    pub key: TileKey,
+    pub rect: Rect,
+    pub text: String,
+}
 
 impl MultiviewInstance {
     /// The small bars of this tab grid item for the `pointer` (coordinates of the main window); none while the Multiview is
@@ -31,34 +38,28 @@ impl MultiviewInstance {
         })
     }
 
-    /// Shows the time badge of every video while the Multiview is in the tab grid, except where a small bar shows
-    /// (`bar_keys`), and takes them away everywhere else. mpv is told only what changed.
-    pub fn sync_time_badges(&mut self, bar_keys: &[TileKey]) {
-        let grid = self.host.surface.mode == HostMode::TabGrid;
-        let dpi = self.host.surface.dpi.max(0.5);
-        let px = |logical: f32| (logical * dpi).round().to_int::<i32>();
-        for index in 0..self.tiles.len() {
-            let rect = self.host_content(index);
-            let tile = &mut self.tiles[index];
-            let (key, broken) = (tile.key, tile.error.is_some());
-            let Some(video) = tile.video.as_mut() else {
-                continue;
-            };
-            let wanted = rect
-                .filter(|_| grid && !broken && !bar_keys.contains(&key))
-                .and_then(|rect| {
-                    let playback = video.player.playback();
-                    time_text::badge(playback.position, playback.duration).map(|text| OsdText {
-                        text,
-                        area: (rect.w, rect.h),
-                        size: px(MULTIVIEW_TIME_BADGE_FONT_LOGICAL_PX),
-                        margin: px(MULTIVIEW_TIME_BADGE_MARGIN_LOGICAL_PX),
-                    })
-                });
-            if video.time_badge != wanted {
-                video.player.set_osd_text(wanted.as_ref());
-                video.time_badge = wanted;
-            }
+    /// The time badges of the videos while the Multiview is in the tab grid, except where a small bar shows (`bar_keys`) or the
+    /// video is broken; none anywhere else.
+    pub fn grid_time_badges(&self, bar_keys: &[TileKey]) -> Vec<TimeBadgeTarget> {
+        if self.host.surface.mode != HostMode::TabGrid {
+            return Vec::new();
         }
+        let (origin_x, origin_y) = (self.host.surface.rect.x, self.host.surface.rect.y);
+        (0..self.tiles.len())
+            .filter_map(|index| {
+                let tile = &self.tiles[index];
+                if tile.error.is_some() || bar_keys.contains(&tile.key) {
+                    return None;
+                }
+                let playback = tile.video.as_ref()?.player.playback();
+                let text = time_text::badge(playback.position, playback.duration)?;
+                let rect = self.host_content(index)?;
+                Some(TimeBadgeTarget {
+                    key: tile.key,
+                    rect: Rect::new(rect.x - origin_x, rect.y - origin_y, rect.w, rect.h),
+                    text,
+                })
+            })
+            .collect()
     }
 }

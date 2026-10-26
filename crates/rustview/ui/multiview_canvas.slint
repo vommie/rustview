@@ -1,6 +1,6 @@
 import { Theme } from "styles.slint";
 import { AppIcon, IconId, IconLookup, IconSize } from "icons.slint";
-import { MultiviewTileView, MultiviewGutterView, MultiviewScreenView } from "multiview_types.slint";
+import { MultiviewTileView, MultiviewGutterView, MultiviewScreenView, MultiviewTimeBadgeView } from "multiview_types.slint";
 import { MultiviewGutter } from "multiview_gutter.slint";
 import { MultiviewBarMenu } from "multiview_bar_menu.slint";
 import { MultiviewZoomSlider } from "multiview_zoom_slider.slint";
@@ -23,6 +23,8 @@ export component MultiviewCanvas inherits Rectangle {
     in property <[image]> video-frames;
     // The control bars of the videos that show one (Rust adds and removes them; a bar with an open popup comes last).
     in property <[MultiviewVideoBarView]> video-bars;
+    // The time badges of the videos of a tab grid item (Rust adds and removes them).
+    in property <[MultiviewTimeBadgeView]> time-badges;
     // The media bars of the tiles and the primary bar (Rust adds and removes them; a bar with an open bubble comes last).
     in property <[MultiviewActionBarView]> action-bars;
     in property <int> background-mode: 0; // 0 = Dark Theme (#11111b), 1 = Deep Black (#000000), 2 = Checkerboard
@@ -587,6 +589,32 @@ export component MultiviewCanvas inherits Rectangle {
         }
         swap => {
             root.gutter-swap(index);
+        }
+    }
+
+    // The time badges of the videos in the tab grid: position and length on a dark box in the bottom right corner of the video.
+    for badge in root.time-badges : Rectangle {
+        x: badge.x;
+        y: badge.y;
+        width: badge.width;
+        height: badge.height;
+        clip: true;
+
+        Rectangle {
+            x: parent.width - self.width - badge.margin;
+            y: parent.height - self.height - badge.margin;
+            width: label.preferred-width + 2 * self.pad;
+            height: label.preferred-height + 2 * self.pad;
+            background: #000000c0;
+            property <length> pad: Math.max(1px, Math.round(badge.font-size / 4 / 1px) * 1px);
+
+            label := Text {
+                x: parent.pad;
+                y: parent.pad;
+                text: badge.text;
+                font-size: badge.font-size;
+                color: #ffffff;
+            }
         }
     }
 

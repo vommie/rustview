@@ -211,6 +211,11 @@ impl MultiviewInstance {
         self.host.surface.mode
     }
 
+    /// Physical pixels per logical pixel of the host.
+    pub fn host_dpi(&self) -> f32 {
+        self.host.surface.dpi
+    }
+
     pub fn has_video(&self) -> bool {
         self.tiles.iter().any(|t| t.video.is_some())
     }

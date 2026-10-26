@@ -26,6 +26,7 @@ mod session_keys;
 mod session_video_bar;
 pub mod tab_host;
 mod tab_video_bar;
+mod time_badges;
 pub mod video_bar;
 pub mod video_host;
 mod views;

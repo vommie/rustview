@@ -1,9 +1,10 @@
 //! The video tiles of the tab grid (UI thread only): while the grid is shown, a tick looks where the pointer is, shows the
 //! small control bar of the video under it (`video_bar`: a model per Multiview, drawn by the canvas of its grid item) and keeps
-//! the time badges of every other video up to date. The tick runs only while the grid is shown and stops itself when it is not.
+//! the time badges of every other video up to date (`time_badges`, another model per Multiview). The tick runs only while the grid is shown and stops itself when it is not.
 
+use super::time_badges::TimeBadgeModel;
 use super::video_bar::VideoBarModel;
-use crate::ui::{MainWindow, MultiviewVideoBarView};
+use crate::ui::{MainWindow, MultiviewTimeBadgeView, MultiviewVideoBarView};
 use crate::viewer::multiview::instance::SharedInstance;
 use crate::viewer::multiview::route::HostMode;
 use crate::viewer::multiview::video_bar::prefs::{self, BarStyle, VideoBarPrefs};
@@ -28,11 +29,18 @@ thread_local! {
     static GRID: RefCell<Option<GridBars>> = const { RefCell::new(None) };
     /// The small bars of every Multiview of the grid, by instance id (its grid item draws them).
     static BARS: RefCell<HashMap<u64, VideoBarModel>> = RefCell::new(HashMap::new());
+    /// The time badges of every Multiview of the grid, by instance id.
+    static BADGES: RefCell<HashMap<u64, TimeBadgeModel>> = RefCell::new(HashMap::new());
 }
 
 /// The bars of the Multiview `instance_id` for its grid item (the same model for as long as the Multiview exists).
 pub fn model_for(instance_id: u64) -> ModelRc<MultiviewVideoBarView> {
     BARS.with(|bars| bars.borrow_mut().entry(instance_id).or_default().model())
+}
+
+/// The time badges of the Multiview `instance_id` for its grid item (the same model for as long as the Multiview exists).
+pub fn badges_for(instance_id: u64) -> ModelRc<MultiviewTimeBadgeView> {
+    BADGES.with(|badges| badges.borrow_mut().entry(instance_id).or_default().model())
 }
 
 /// The grid is shown (or was synced): the tick runs from now on until the grid goes.
@@ -110,10 +118,11 @@ fn update(pointer: Option<(i32, i32)>) {
         let mut guard = instance.lock();
         let targets = guard.grid_video_bar_targets(pointer, &prefs, now);
         let bar_keys: Vec<_> = targets.iter().map(|t| t.key).collect();
-        guard.sync_time_badges(&bar_keys);
-        let id = guard.id();
+        let badges = guard.grid_time_badges(&bar_keys);
+        let (id, dpi) = (guard.id(), guard.host_dpi());
         drop(guard);
         shown.push(id);
+        BADGES.with(|models| models.borrow_mut().entry(id).or_default().sync(&badges, dpi));
         BARS.with(|bars| {
             let mut bars = bars.borrow_mut();
             let model = bars.entry(id).or_default();
@@ -124,7 +133,15 @@ fn update(pointer: Option<(i32, i32)>) {
             }
         });
     }
-    // A Multiview that left the grid (or closed) keeps no bar.
+    // A Multiview that left the grid (or closed) keeps no bar and no badge.
+    BADGES.with(|models| {
+        models.borrow_mut().retain(|id, model| {
+            if !shown.contains(id) {
+                model.clear();
+            }
+            shown.contains(id)
+        });
+    });
     BARS.with(|bars| {
         bars.borrow_mut().retain(|id, model| {
             if !shown.contains(id) {
@@ -161,7 +178,7 @@ pub(super) fn on_input(key: i32, input: VideoBarInput) {
     }
 }
 
-/// The grid went: its small bars hide; the badges go with the next change of each Multiview's host.
+/// The grid went: its small bars and badges hide.
 fn stop() {
     GRID.with(|cell| {
         if let Some(grid) = cell.borrow().as_ref() {
@@ -173,6 +190,11 @@ fn stop() {
     }
     BARS.with(|bars| {
         for model in bars.borrow_mut().values_mut() {
+            model.clear();
+        }
+    });
+    BADGES.with(|models| {
+        for model in models.borrow_mut().values_mut() {
             model.clear();
         }
     });

@@ -16,7 +16,6 @@ use crate::ui::button_feedback::ButtonFeedback;
 use crate::viewer::MpvPlayer;
 use crate::viewer::edit::save_badge::SaveBadge;
 use crate::viewer::edit::tile_edit::{EditSource, TileEdit};
-use crate::viewer::mpv_engine::OsdText;
 use crate::viewer::video_surface::{HostWindowId, VideoSurface};
 use crate::viewer::zoom::mpv_view::MpvView;
 use crate::viewer::zoom::state::ZoomState;
@@ -49,8 +48,6 @@ pub struct VideoTile {
     pub owner: EventOwner,
     /// The control bar of the video.
     pub bar: VideoBarState,
-    /// The time badge mpv draws over the picture in the tab grid right now, if any.
-    pub time_badge: Option<OsdText>,
     /// The view mpv was given last (`None`: never, i.e. the plain fitted video).
     pub zoom_view: Option<MpvView>,
     /// Where the video was placed last: mpv's frame (the size of the textures) and the part of it that shows (host pixels).
@@ -247,7 +244,6 @@ pub fn create_video(
         current_tile,
         owner,
         bar: VideoBarState::default(),
-        time_badge: None,
         zoom_view: None,
         placement: None,
         still_pending: false,

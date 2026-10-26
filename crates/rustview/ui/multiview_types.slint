@@ -133,6 +133,19 @@ export struct MultiviewTileView {
     focus-thickness: length,
 }
 
+/// The time badge of a video in a tab grid item ("0:03 / 0:08"), drawn by the canvas in the bottom right corner of the medium's
+/// place (`x`, `y`, `width`, `height`, relative to the canvas), `margin` away from its edges.
+export struct MultiviewTimeBadgeView {
+    key: int,
+    x: length,
+    y: length,
+    width: length,
+    height: length,
+    text: string,
+    font-size: length,
+    margin: length,
+}
+
 /// A draggable separator between two tiles (or the two rows of a 2x2 grid) with a swap button in the middle.
 export struct MultiviewGutterView {
     x: length,
