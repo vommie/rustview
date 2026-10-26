@@ -79,8 +79,6 @@ pub(super) struct Session {
     pub(super) bar_click: Rc<dyn Fn(i32, i32)>,
     /// What a click on a button of the primary bar window does.
     pub(super) primary_click: Rc<dyn Fn(i32, i32)>,
-    /// What a click, drag or wheel on a control bar of a video does.
-    pub(super) video_bar_input: super::video_bar::InputHandler,
     /// The mouse cursor is hidden over the window right now.
     pub(super) cursor_hidden: bool,
     pub(super) images: ImageCache,
@@ -207,6 +205,7 @@ fn create_window() -> Result<MultiviewFullscreenWindow, slint::PlatformError> {
     crate::ui::dialog_parent::register_parent(&win, crate::ui::dialog_parent::Role::Fullscreen);
     super::video_host::register(&win, FULLSCREEN_WINDOW, MultiviewFullscreenWindow::set_video_frames);
     super::video_host::install_notifier(&win, FULLSCREEN_WINDOW);
+    super::session_video_bar::bind(&win);
     win.on_request_close(|| {
         close_by_user();
     });
@@ -316,6 +315,7 @@ fn prepare_window(
     win.set_gutters(ModelRc::from(models.gutters.clone()));
     win.set_navigation(0);
     let appearance = &settings.get().appearance;
+    super::session_video_bar::apply_settings(win, appearance);
     bar_overlay::set_tooltip_settings(
         appearance.enable_tooltips,
         appearance.tooltip_delay_ms.saturating_as::<i32>(),
@@ -584,7 +584,6 @@ impl Session {
             models: ViewModels::default(),
             bar_click: Rc::new(|tile, action| run(|s| s.on_action(tile, action))),
             primary_click: Rc::new(|_, action| run(|s| s.on_primary_action(action))),
-            video_bar_input: Rc::new(|key, input| with_session(|s| s.on_video_bar_input(key, input))),
             cursor_hidden: false,
             images: ImageCache::default(),
             shown_revision: None,
@@ -688,7 +687,7 @@ impl Session {
         self.feedback_timer.stop();
         self.instance.lock().clear_feedback();
         bar_overlay::hide(BarOwner::Fullscreen);
-        super::video_bar::hide(BarOwner::Fullscreen);
+        super::session_video_bar::clear();
         if let Some(win) = self.window.upgrade() {
             cursor::release(win.window(), Some(&self.instance), &mut self.cursor_hidden);
             win.set_is_ready(false);

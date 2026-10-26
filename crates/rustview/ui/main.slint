@@ -53,7 +53,7 @@ export { DialogFit } from "dialog_body.slint";
 export { MultiviewFullscreenWindow } from "multiview_fullscreen_window.slint";
 export { MultiviewBarWindow } from "multiview_bar_window.slint";
 export { MultiviewHintWindow } from "multiview_hint_window.slint";
-export { MultiviewVideoBarWindow, VideoBarSpanView } from "multiview_video_bar_window.slint";
+export { AbMenuRowView, AbStripSegmentView, MultiviewVideoBarView, VideoBarBus, VideoBarEvent, VideoBarSpanView } from "multiview_video_bar.slint";
 export { MultiviewTileView, MultiviewGutterView, MultiviewScreenView, MultiviewBarButtonView } from "multiview_types.slint";
 export { MultiviewTabBus } from "multiview_tab_bus.slint";
 export { FeedbackKind, ButtonFeedback } from "button_feedback_types.slint";
@@ -579,6 +579,11 @@ export component MainWindow inherits Window {
         media-toolbar.focus-search();
     }
 
+    /// The keys go to the window's own handling again (a text field of a video's control bar that had them went away).
+    public function focus-keys() {
+        main-window-focus.focus();
+    }
+
     /// The rows one page of the Browse view moves (the page keys).
     pure public function media-page-rows() -> int {
         return root.is-table-view ? table-view.get-page-rows() : grid-view.get-page-rows();
@@ -999,6 +1004,7 @@ export component MainWindow inherits Window {
                         tiles: MultiviewTabBus.tiles;
                         gutters: MultiviewTabBus.gutters;
                         video-frames: root.video-frames;
+                        video-bars: MultiviewTabBus.video-bars;
                         screen: MultiviewTabBus.screen;
                         background-mode: root.viewer-background-mode;
                         outer-color: #000000;

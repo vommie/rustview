@@ -1,0 +1,763 @@
+import { Theme } from "styles.slint";
+import { AppIcon, IconId } from "icons.slint";
+import { AbColors, AbGroup, AbLoadMenu, AbMenuRowView, AbSaveBubble, AbStripSegmentView } from "multiview_video_bar_ab.slint";
+
+export { AbMenuRowView, AbStripSegmentView }
+
+/// A stretch of the progress bar (`viewer::multiview::video_bar::progress`): shares of the bar's width and its kind.
+export struct VideoBarSpanView {
+    from: float,
+    to: float,
+    kind: int, // 0 = played
+}
+
+/// A button of the bar: an icon in a square as high as the bar.
+component BarIconButton inherits Rectangle {
+    in property <IconId> icon;
+    in property <length> size;
+    in property <length> icon-size;
+    callback clicked();
+
+    width: root.size;
+
+    AppIcon {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        icon: root.icon;
+        size: root.icon-size;
+        color: touch.has-hover ? #ffffff : Theme.text;
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+/// A time of the bar: as wide as its template (the widest text the video can need), so nothing moves while it plays.
+/// A click switches the milliseconds of both times.
+component BarTime inherits Rectangle {
+    in property <string> text;
+    in property <string> template;
+    in property <length> font-size;
+    in property <color> text-color;
+    in property <TextHorizontalAlignment> alignment;
+    callback clicked();
+
+    width: measure.preferred-width;
+
+    measure := Text {
+        text: root.template;
+        font-size: root.font-size;
+        visible: false;
+    }
+
+    Text {
+        width: 100%;
+        height: 100%;
+        text: root.text;
+        font-size: root.font-size;
+        color: touch.has-hover ? #ffffff : root.text-color;
+        vertical-alignment: center;
+        horizontal-alignment: root.alignment;
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+/// What a control bar shows (`ui::multiview::video_bar`, made from `viewer::multiview::video_bar::view`). The rectangle is the bar
+/// with the room above it (the time bubble, the A-B group), in logical pixels relative to the canvas.
+export struct MultiviewVideoBarView {
+    key: int, // the tile (`TileKey`), carried back by every event
+    x: length,
+    y: length,
+    width: length,
+    height: length,
+    pill: bool,
+    // The small bar of a tab grid item: play/pause and the progress bar only.
+    mini: bool,
+    bar-opacity: float,
+    bar-height: length,
+    bubble-height: length,
+    fade: bool,
+    // The bar is wanted: it fades in; false: it fades out (Rust drops it when the fade is over).
+    revealed: bool,
+    playing: bool,
+    current-text: string,
+    current-template: string,
+    remaining-text: string,
+    remaining-template: string,
+    spans: [VideoBarSpanView],
+    volume-share: float,
+    volume-icon: int, // 0 = muted (or silent), 1 = low, 2 = high
+    muted: bool,
+    // The pointer over the progress bar: the bubble shows the time there.
+    hover-shown: bool,
+    hover-share: float,
+    hover-text: string,
+    // The A-B repeat group of the mpv script ab_repeat.lua (`video_bar::ab_view`); all of it only while `ab-shown`. The room above
+    // the bar comes from Rust (`placement::AbRoom`): the strip, one row for the flags and one for the label of the repeat under the
+    // pointer.
+    ab-shown: bool,
+    ab-strip-height: length,
+    ab-strip-flank: length,
+    ab-row-height: length,
+    ab-popup-height: length,
+    ab-a-look: int,
+    ab-b-look: int,
+    ab-loop-look: int,
+    ab-a-tip: string,
+    ab-b-tip: string,
+    ab-loop-tip: string,
+    ab-save-enabled: bool,
+    ab-save-tip: string,
+    ab-load-count: int,
+    ab-load-tip: string,
+    ab-strip: [AbStripSegmentView],
+    ab-span-shown: bool,
+    ab-span-from: float,
+    ab-span-to: float,
+    ab-span-looping: bool,
+    ab-dim: bool,
+    ab-a-flag-shown: bool,
+    ab-a-flag-share: float,
+    ab-a-flag-text: string,
+    ab-a-flag-auto: bool,
+    ab-b-flag-shown: bool,
+    ab-b-flag-share: float,
+    ab-b-flag-text: string,
+    ab-b-flag-auto: bool,
+    ab-flags-draggable: bool,
+    ab-strip-clickable: bool,
+    ab-label-shown: bool,
+    ab-label-share: float,
+    ab-label-text: string,
+    // 0 = no popup, 1 = the save bubble, 2 = the load menu. The texts the user types are the start values of their fields (a
+    // field is made when its popup or rename opens; what is typed is reported and comes back here).
+    ab-popup: int,
+    ab-save-text: string,
+    ab-save-placeholder: string,
+    ab-save-hint: string,
+    ab-menu-rows: [AbMenuRowView],
+    ab-menu-query: string,
+    ab-menu-page: int,
+    ab-menu-pages: int,
+    ab-menu-scroll: bool,
+    ab-menu-visible-rows: int,
+    ab-menu-status: string,
+    ab-menu-renaming: int,
+    ab-menu-rename-text: string,
+}
+
+/// What the user did on a bar (`VideoBarInput::from_event` decodes it): `kind` says what, the other fields carry its values.
+///  0 play/pause, 1 milliseconds, 2 speaker, 3 seek (share, phase), 4 hover (index 1 = inside, share), 5 volume (share, phase),
+///  6 wheel (delta), 10 A-B button (index: 0 = A, 1 = B, 2 = AB clicked, 3 = AB held, 4 = Save, 5 = Load), 11 save text,
+///  12 save commit (text), 13 close the popup, 14 menu query (text), 15 menu page (index = -1 or 1), 16 pick, 17 delete, 18 delete
+///  all, 19 rename (index), 20 rename text, 21 rename commit (text), 22 rename cancel, 23 strip hover (index 1 = inside, share),
+///  24 strip click (share), 25 flag (index 0 = A, 1 = B; share, phase). Phases: 0 = press, 1 = drag, 2 = release.
+export struct VideoBarEvent {
+    kind: int,
+    share: float,
+    phase: int,
+    index: int,
+    text: string,
+    delta: length,
+}
+
+/// The events of every control bar of a window go here (the canvas is drawn in the main and the fullscreen window, each has its
+/// own instance of this global; Rust finds the tile by its key).
+export global VideoBarBus {
+    callback event(int /* tile key */, VideoBarEvent);
+}
+
+/// The control bar of a video, drawn by the canvas over the bottom of its video (`MultiviewCanvas.video-bars`). The rectangle holds
+/// the room above the bar (the time bubble, the A-B group); only the bar and the parts of the A-B group take the pointer. The
+/// Save bubble and the Load menu open above their button, inside the window: a click anywhere else on the canvas closes them.
+/// Everything grows with `bar-height` (Settings > Multiview > Player).
+export component MultiviewVideoBar inherits Rectangle {
+    in property <MultiviewVideoBarView> bar;
+    // The size of the canvas: an open popup may use all of it and the backdrop that closes it covers it.
+    in property <length> canvas-width;
+    in property <length> canvas-height;
+
+    function send(kind: int, share: float, phase: int, index: int, text: string) {
+        VideoBarBus.event(root.bar.key, { kind: kind, share: share, phase: phase, index: index, text: text });
+    }
+    function play-pause() { root.send(0, 0, 0, 0, ""); }
+    function toggle-ms() { root.send(1, 0, 0, 0, ""); }
+    function speaker() { root.send(2, 0, 0, 0, ""); }
+    function seek(share: float, phase: int) { root.send(3, share, phase, 0, ""); }
+    function hover(inside: bool, share: float) { root.send(4, share, 0, inside ? 1 : 0, ""); }
+    function volume(share: float, phase: int) { root.send(5, share, phase, 0, ""); }
+    function wheel(delta: length) {
+        VideoBarBus.event(root.bar.key, { kind: 6, delta: delta });
+    }
+    function ab-button(code: int) { root.send(10, 0, 0, code, ""); }
+    function ab-save-edited(text: string) { root.send(11, 0, 0, 0, text); }
+    function ab-save-commit(text: string) { root.send(12, 0, 0, 0, text); }
+    function ab-close-popup() { root.send(13, 0, 0, 0, ""); }
+    function ab-menu-query-edited(text: string) { root.send(14, 0, 0, 0, text); }
+    function ab-menu-page-step(delta: int) { root.send(15, 0, 0, delta, ""); }
+    function ab-menu-pick(index: int) { root.send(16, 0, 0, index, ""); }
+    function ab-menu-delete(index: int) { root.send(17, 0, 0, index, ""); }
+    function ab-menu-delete-all() { root.send(18, 0, 0, 0, ""); }
+    function ab-menu-rename(index: int) { root.send(19, 0, 0, index, ""); }
+    function ab-menu-rename-edited(text: string) { root.send(20, 0, 0, 0, text); }
+    function ab-menu-rename-commit(text: string) { root.send(21, 0, 0, 0, text); }
+    function ab-menu-rename-cancel() { root.send(22, 0, 0, 0, ""); }
+    function ab-strip-hover(inside: bool, share: float) { root.send(23, share, 0, inside ? 1 : 0, ""); }
+    function ab-strip-click(share: float) { root.send(24, share, 0, 0, ""); }
+    function ab-flag(point: int, share: float, phase: int) { root.send(25, share, phase, point, ""); }
+
+    // One "point" of the default bar (30 px high): every size below is a multiple of it.
+    property <length> pt: root.bar.bar-height / 30;
+    property <length> icon-size: Math.round(root.bar.bar-height * 0.6 / 1px) * 1px;
+    property <length> font-size: Math.round(root.bar.bar-height * 0.4 / 1px) * 1px;
+    property <length> pad: Math.round((root.bar.pill ? 14 : 8) * root.pt / 1px) * 1px;
+    property <length> gap: Math.round(8 * root.pt / 1px) * 1px;
+    property <color> panel: Theme.fullscreen-background;
+    property <color> bar-fill: root.panel.with-alpha(root.bar.bar-opacity);
+
+    // The A-B group: its buttons and where its parts are (relative to this element).
+    property <length> ab-button-size: Math.round(root.bar.bar-height * 0.86 / 1px) * 1px;
+    property <length> ab-icon-size: Math.round(root.bar.bar-height * 0.56 / 1px) * 1px;
+    property <length> ab-group-width: root.bar.ab-shown && !root.bar.mini ? 5 * root.ab-button-size + 2 * Math.round(3 * root.pt / 1px) * 1px : 0px;
+    property <length> bar-top: root.height - root.bar.bar-height;
+    property <length> ab-strip-top: root.bar-top - root.bar.ab-strip-height;
+    // The strip only shows while it has something to show: saved repeats, the current A-B or one of its points.
+    property <bool> ab-strip-shown: root.bar.ab-shown && (root.bar.ab-strip.length > 0 || root.bar.ab-span-shown || root.bar.ab-a-flag-shown || root.bar.ab-b-flag-shown);
+    property <length> ab-flag-row-y: root.ab-strip-top - root.bar.ab-row-height;
+    property <length> ab-label-row-y: root.ab-flag-row-y - root.bar.ab-row-height;
+    property <length> track-x: progress.absolute-position.x - root.absolute-position.x;
+    property <length> track-w: progress.width;
+    property <length> ab-font: Math.max(9px, Math.round(root.bar.bar-height * 0.34 / 1px) * 1px);
+    // The open popup: as wide as it wants within the canvas, centered over its button (the caret points at the button's center)
+    // and moved sideways only where the canvas ends; its caret touches the top of the bar, so nothing lies between the two.
+    property <length> ab-popup-width: Math.min(Math.round((root.bar.ab-popup == 1 ? 290 : 520) * root.pt / 1px) * 1px, root.canvas-width - 8px);
+    property <length> ab-opener-x: ab-group.absolute-position.x - root.absolute-position.x
+        + (root.bar.ab-popup == 1 ? ab-group.save-center : ab-group.load-center);
+    property <length> ab-popup-x: Math.round(Math.clamp(root.ab-opener-x - root.ab-popup-width / 2, 4px - root.x,
+        Math.max(4px - root.x, root.canvas-width - root.x - root.ab-popup-width - 4px)) / 1px) * 1px;
+    property <length> ab-popup-y: Math.max(4px - root.y, root.bar-top - root.bar.ab-popup-height);
+    // The progress block inside the bar (the flags' stems end at its bottom).
+    property <length> block-bottom: root.bar-top + (root.bar.bar-height + (root.bar.bar-height - 2 * Math.round(6 * root.pt / 1px) * 1px)) / 2;
+    property <length> ab-lane: Math.max(3px, Math.round(root.bar.ab-strip-height * 0.42 / 1px) * 1px);
+    property <length> ab-lane-y: root.ab-strip-top + Math.round((root.bar.ab-strip-height - root.ab-lane) / 2 / 1px) * 1px + 1px;
+    // The flag labels: centered over their stems, or pushed apart (the left one to the left, the right one to the right) when
+    // they would touch; never outside the window.
+    property <length> ab-label-pad: Math.round(4 * root.pt / 1px) * 1px;
+    property <length> ab-label-height: root.bar.ab-row-height - 2px;
+    property <length> ab-a-x: root.track-x + root.bar.ab-a-flag-share * root.track-w;
+    property <length> ab-b-x: root.track-x + root.bar.ab-b-flag-share * root.track-w;
+    property <length> ab-a-w: a-flag-text.preferred-width + 2 * root.ab-label-pad;
+    property <length> ab-b-w: b-flag-text.preferred-width + 2 * root.ab-label-pad;
+    property <bool> ab-a-first: root.ab-a-x <= root.ab-b-x;
+    property <length> ab-l-x: root.ab-a-first ? root.ab-a-x : root.ab-b-x;
+    property <length> ab-l-w: root.ab-a-first ? root.ab-a-w : root.ab-b-w;
+    property <length> ab-r-x: root.ab-a-first ? root.ab-b-x : root.ab-a-x;
+    property <length> ab-r-w: root.ab-a-first ? root.ab-b-w : root.ab-a-w;
+    property <length> ab-label-gap: Math.round(4 * root.pt / 1px) * 1px;
+    property <bool> ab-crowded: root.bar.ab-a-flag-shown && root.bar.ab-b-flag-shown
+        && root.ab-l-x + root.ab-l-w / 2 + root.ab-label-gap > root.ab-r-x - root.ab-r-w / 2;
+    property <length> ab-l-left: root.ab-crowded
+        ? Math.min(root.ab-l-x - root.ab-l-w + 3px, (root.ab-l-x + root.ab-r-x) / 2 - root.ab-label-gap / 2 - root.ab-l-w)
+        : root.ab-l-x - root.ab-l-w / 2;
+    property <length> ab-r-left: root.ab-crowded
+        ? Math.max(root.ab-r-x - 3px, (root.ab-l-x + root.ab-r-x) / 2 + root.ab-label-gap / 2)
+        : root.ab-r-x - root.ab-r-w / 2;
+    property <length> ab-a-left: Math.round(Math.clamp(root.ab-a-first ? root.ab-l-left : root.ab-r-left, 0px, Math.max(0px, root.width - root.ab-a-w)) / 1px) * 1px;
+    property <length> ab-b-left: Math.round(Math.clamp(root.ab-a-first ? root.ab-r-left : root.ab-l-left, 0px, Math.max(0px, root.width - root.ab-b-w)) / 1px) * 1px;
+    property <color> ab-a-color: root.bar.ab-a-look == 1 ? Theme.accent : Theme.primary;
+    property <color> ab-b-color: root.bar.ab-b-look == 1 ? Theme.accent : Theme.primary;
+
+    // While a popup is open a press anywhere else on the canvas closes it (and does nothing else), like a menu. The bar itself and
+    // the popup lie above it; the canvas draws the bar with the open popup last, so no other bar covers it.
+    if root.bar.ab-popup > 0 : TouchArea {
+        x: -root.x;
+        y: -root.y;
+        width: root.canvas-width;
+        height: root.canvas-height;
+
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down {
+                root.ab-close-popup();
+            }
+        }
+    }
+
+    content := Rectangle {
+        opacity: root.bar.revealed ? 1 : 0;
+        animate opacity { duration: root.bar.fade ? 150ms : 0ms; }
+
+        bar-panel := Rectangle {
+            x: 0px;
+            y: root.height - root.bar.bar-height;
+            width: root.width;
+            height: root.bar.bar-height;
+            border-radius: root.bar.pill ? root.bar.bar-height / 2 : 0px;
+            background: root.bar-fill;
+
+            TouchArea {
+                scroll-event(event) => {
+                    root.wheel(event.delta-y);
+                    return accept;
+                }
+            }
+
+            HorizontalLayout {
+                padding-left: root.pad;
+                padding-right: root.bar.mini ? Math.max(0px, root.pad - root.gap) : root.pad;
+                spacing: root.gap;
+
+                BarIconButton {
+                    icon: root.bar.playing ? IconId.video-bar-pause : IconId.video-bar-play;
+                    size: root.bar.bar-height;
+                    icon-size: root.icon-size;
+                    clicked => { root.play-pause(); }
+                }
+
+                if !root.bar.mini : BarTime {
+                    text: root.bar.current-text;
+                    template: root.bar.current-template;
+                    font-size: root.font-size;
+                    text-color: Theme.text;
+                    alignment: right;
+                    clicked => { root.toggle-ms(); }
+                }
+
+                progress := Rectangle {
+                    horizontal-stretch: 1;
+                    property <length> block: root.bar.bar-height - 2 * Math.round(6 * root.pt / 1px) * 1px;
+
+                    track := Rectangle {
+                        y: (parent.height - self.height) / 2;
+                        height: progress.block;
+                        border-radius: Math.round(2 * root.pt / 1px) * 1px;
+                        clip: true;
+                        background: Colors.white.with-alpha(0.18);
+
+                        for span in root.bar.spans : Rectangle {
+                            x: span.from * parent.width;
+                            width: (span.to - span.from) * parent.width;
+                            height: 100%;
+                            background: span.kind == 0 ? Theme.primary : Theme.text-muted;
+                        }
+
+                        if root.bar.ab-shown && root.bar.ab-dim : Rectangle {
+                            x: 0;
+                            width: root.bar.ab-span-from * parent.width;
+                            height: 100%;
+                            background: #000000.with-alpha(0.45);
+                        }
+
+                        if root.bar.ab-shown && root.bar.ab-dim : Rectangle {
+                            x: root.bar.ab-span-to * parent.width;
+                            width: (1 - root.bar.ab-span-to) * parent.width;
+                            height: 100%;
+                            background: #000000.with-alpha(0.45);
+                        }
+
+                        if root.bar.hover-shown : Rectangle {
+                            x: Math.round(root.bar.hover-share * parent.width / 1px) * 1px - self.width / 2;
+                            width: Math.max(1px, Math.round(2 * root.pt / 1px) * 1px);
+                            height: 100%;
+                            background: Colors.white.with-alpha(0.7);
+                        }
+                    }
+
+                    seek-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        property <float> share: Math.clamp(self.mouse-x / Math.max(1px, self.width), 0, 1);
+
+                        pointer-event(event) => {
+                            if event.button == PointerEventButton.left {
+                                if event.kind == PointerEventKind.down {
+                                    root.seek(self.share, 0);
+                                } else if event.kind == PointerEventKind.up {
+                                    root.seek(self.share, 2);
+                                }
+                            }
+                        }
+                        changed mouse-x => {
+                            if self.pressed {
+                                root.seek(self.share, 1);
+                            }
+                            if self.has-hover || self.pressed {
+                                root.hover(true, self.share);
+                            }
+                        }
+                        changed has-hover => {
+                            root.hover(self.has-hover || self.pressed, self.share);
+                        }
+                        changed pressed => {
+                            root.hover(self.has-hover || self.pressed, self.share);
+                        }
+                    }
+                }
+
+                // The remaining time and the A-B group: always there (the group's id has to be reachable for its popups), empty
+                // and without width in the small bar of the tab grid (the right padding makes up for the layout's spacing).
+                HorizontalLayout {
+                    spacing: root.ab-group-width > 0 ? root.gap : 0px;
+
+                    if !root.bar.mini : BarTime {
+                        text: root.bar.remaining-text;
+                        template: root.bar.remaining-template;
+                        font-size: root.font-size;
+                        text-color: Theme.text-muted;
+                        alignment: left;
+                        clicked => { root.toggle-ms(); }
+                    }
+
+                    VerticalLayout {
+                        alignment: center;
+
+                        ab-group := AbGroup {
+                            width: root.ab-group-width;
+                            height: root.ab-group-width > 0 ? root.ab-button-size + 2 * Math.round(2 * root.pt / 1px) * 1px : 0px;
+                            visible: root.ab-group-width > 0;
+                            pt: root.pt;
+                            button-size: root.ab-button-size;
+                            icon-size: root.ab-icon-size;
+                            a-look: root.bar.ab-a-look;
+                            b-look: root.bar.ab-b-look;
+                            loop-look: root.bar.ab-loop-look;
+                            save-enabled: root.bar.ab-save-enabled;
+                            save-open: root.bar.ab-popup == 1;
+                            load-count: root.bar.ab-load-count;
+                            load-open: root.bar.ab-popup == 2;
+                            a-tip: root.bar.ab-a-tip;
+                            b-tip: root.bar.ab-b-tip;
+                            loop-tip: root.bar.ab-loop-tip;
+                            save-tip: root.bar.ab-save-tip;
+                            load-tip: root.bar.ab-load-tip;
+                            button(code) => { root.ab-button(code); }
+                        }
+                    }
+                }
+
+                if !root.bar.mini : BarIconButton {
+                    icon: root.bar.volume-icon == 0 ? IconId.volume-off : (root.bar.volume-icon == 1 ? IconId.volume-low : IconId.volume-on);
+                    size: root.bar.bar-height;
+                    icon-size: root.icon-size;
+                    clicked => { root.speaker(); }
+                }
+
+                if !root.bar.mini : slider := Rectangle {
+                    width: 3 * root.bar.bar-height;
+                    property <length> knob: Math.round(12 * root.pt / 1px) * 1px;
+                    property <length> inner-width: self.width - self.knob;
+                    property <bool> active: volume-touch.has-hover || volume-touch.pressed;
+                    property <color> fill: root.bar.muted ? Theme.text-muted.with-alpha(0.5) : Theme.primary;
+
+                    Rectangle {
+                        x: slider.knob / 2;
+                        y: (parent.height - self.height) / 2;
+                        width: slider.inner-width;
+                        height: Math.max(2px, Math.round(4 * root.pt / 1px) * 1px);
+                        border-radius: self.height / 2;
+                        background: Colors.white.with-alpha(0.22);
+
+                        Rectangle {
+                            x: 0px;
+                            width: root.bar.volume-share * parent.width;
+                            height: 100%;
+                            border-radius: parent.border-radius;
+                            background: slider.fill;
+                        }
+                    }
+
+                    if slider.active : Rectangle {
+                        x: root.bar.volume-share * slider.inner-width;
+                        y: (parent.height - self.height) / 2;
+                        width: slider.knob;
+                        height: slider.knob;
+                        border-radius: self.width / 2;
+                        background: root.bar.muted ? Theme.text-muted : #ffffff;
+                    }
+
+                    volume-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        property <float> share: Math.clamp((self.mouse-x - slider.knob / 2) / Math.max(1px, slider.inner-width), 0, 1);
+
+                        pointer-event(event) => {
+                            if event.button == PointerEventButton.left {
+                                if event.kind == PointerEventKind.down {
+                                    root.volume(self.share, 0);
+                                } else if event.kind == PointerEventKind.up {
+                                    root.volume(self.share, 2);
+                                }
+                            }
+                        }
+                        changed mouse-x => {
+                            if self.pressed {
+                                root.volume(self.share, 1);
+                            }
+                        }
+                        scroll-event(event) => {
+                            root.wheel(event.delta-y);
+                            return accept;
+                        }
+                    }
+                }
+            }
+        }
+
+
+        // ---- The A-B repeat group above the progress bar (only while `ab-shown`).
+
+        // The strip of saved repeats: a tab that grows out of the bar over the progress bar, its flanks curving into the bar. It
+        // ends exactly on the bar: an overlap would show as a darker seam where the two translucent fills lie on each other.
+        Path {
+            visible: root.ab-strip-shown;
+            property <float> h: root.bar.ab-strip-height / 1px;
+            property <float> f: root.bar.ab-strip-flank / 1px;
+            property <float> c: root.bar.ab-strip-height / 2 / 1px;
+            property <float> w: (root.track-w + 2 * root.bar.ab-strip-flank) / 1px;
+            x: root.track-x - root.bar.ab-strip-flank;
+            y: root.ab-strip-top;
+            width: Math.max(1px, root.track-w + 2 * root.bar.ab-strip-flank);
+            height: root.bar.ab-strip-height;
+            viewbox-width: Math.max(1, self.w);
+            viewbox-height: self.h;
+            // From the bottom left: the concave flank up to the top corner, the corner, the top, the other corner and flank.
+            commands: "M 0 " + self.h + " Q " + self.f + " " + self.h + " " + self.f + " " + self.c
+                + " Q " + self.f + " 0 " + (self.f + self.c) + " 0"
+                + " L " + (self.w - self.f - self.c) + " 0 Q " + (self.w - self.f) + " 0 " + (self.w - self.f) + " " + self.c
+                + " Q " + (self.w - self.f) + " " + self.h + " " + self.w + " " + self.h + " Z";
+            fill: root.bar-fill;
+        }
+
+        // Saved repeats: one thin row, every repeat slightly translucent, so overlapping ones show as stronger color.
+        for segment in root.bar.ab-strip : Rectangle {
+            visible: root.bar.ab-shown;
+            x: root.track-x + segment.from * root.track-w;
+            y: root.ab-lane-y;
+            width: Math.max(2px, (segment.to - segment.from) * root.track-w);
+            height: root.ab-lane;
+            border-radius: root.ab-lane / 2;
+            background: AbColors.of(segment.color).with-alpha(0.55);
+        }
+
+        // The current A-B: yellow while it loops, blue while it does not.
+        Rectangle {
+            visible: root.bar.ab-shown && root.bar.ab-span-shown;
+            x: root.track-x + root.bar.ab-span-from * root.track-w;
+            y: root.ab-lane-y;
+            width: Math.max(2px, (root.bar.ab-span-to - root.bar.ab-span-from) * root.track-w);
+            height: root.ab-lane;
+            border-radius: root.ab-lane / 2;
+            background: root.bar.ab-span-looping ? Theme.accent : Theme.primary.with-alpha(0.8);
+        }
+
+        strip-touch := TouchArea {
+            visible: root.ab-strip-shown;
+            x: root.track-x;
+            y: root.ab-strip-top;
+            width: root.track-w;
+            height: root.bar.ab-strip-height;
+            mouse-cursor: root.bar.ab-label-shown && root.bar.ab-strip-clickable ? pointer : default;
+            property <float> share: Math.clamp(self.mouse-x / Math.max(1px, self.width), 0, 1);
+            changed mouse-x => {
+                if self.has-hover {
+                    root.ab-strip-hover(true, self.share);
+                }
+            }
+            changed has-hover => { root.ab-strip-hover(self.has-hover, self.share); }
+            clicked => { root.ab-strip-click(self.share); }
+        }
+
+        // The stems of the flags, from the label row down to the bottom of the progress block (dashed: set by the script).
+        for i in (root.bar.ab-shown && root.bar.ab-a-flag-shown ? Math.ceil((root.block-bottom - root.ab-flag-row-y - root.ab-label-height) / 4px) : 0) : Rectangle {
+            x: Math.round(root.ab-a-x / 1px) * 1px - 1px;
+            y: root.ab-flag-row-y + root.ab-label-height + i * 4px;
+            width: 2px;
+            height: root.bar.ab-a-flag-auto ? 2px : 4px;
+            background: root.ab-a-color;
+        }
+
+        for i in (root.bar.ab-shown && root.bar.ab-b-flag-shown ? Math.ceil((root.block-bottom - root.ab-flag-row-y - root.ab-label-height) / 4px) : 0) : Rectangle {
+            x: Math.round(root.ab-b-x / 1px) * 1px - 1px;
+            y: root.ab-flag-row-y + root.ab-label-height + i * 4px;
+            width: 2px;
+            height: root.bar.ab-b-flag-auto ? 2px : 4px;
+            background: root.ab-b-color;
+        }
+
+        a-flag := Rectangle {
+            visible: root.bar.ab-shown && root.bar.ab-a-flag-shown;
+            x: root.ab-a-left;
+            y: root.ab-flag-row-y;
+            width: root.ab-a-w;
+            height: root.ab-label-height;
+            border-radius: Math.round(3 * root.pt / 1px) * 1px;
+            background: root.bar.ab-a-flag-auto ? root.bar-fill : root.ab-a-color;
+            border-width: root.bar.ab-a-flag-auto ? 1px : 0px;
+            border-color: root.ab-a-color;
+
+            a-flag-text := Text {
+                text: root.bar.ab-a-flag-text;
+                font-size: root.ab-font;
+                font-weight: 700;
+                color: root.bar.ab-a-flag-auto ? root.ab-a-color : Theme.fullscreen-background;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            TouchArea {
+                enabled: root.bar.ab-flags-draggable;
+                mouse-cursor: root.bar.ab-flags-draggable ? ew-resize : default;
+                property <float> share: Math.clamp((self.absolute-position.x - root.absolute-position.x + self.mouse-x - root.track-x) / Math.max(1px, root.track-w), 0, 1);
+                pointer-event(event) => {
+                    if event.button == PointerEventButton.left {
+                        if event.kind == PointerEventKind.down {
+                            root.ab-flag(0, self.share, 0);
+                        } else if event.kind == PointerEventKind.up {
+                            root.ab-flag(0, self.share, 2);
+                        }
+                    }
+                }
+                changed mouse-x => {
+                    if self.pressed {
+                        root.ab-flag(0, self.share, 1);
+                    }
+                }
+            }
+        }
+
+        b-flag := Rectangle {
+            visible: root.bar.ab-shown && root.bar.ab-b-flag-shown;
+            x: root.ab-b-left;
+            y: root.ab-flag-row-y;
+            width: root.ab-b-w;
+            height: root.ab-label-height;
+            border-radius: Math.round(3 * root.pt / 1px) * 1px;
+            background: root.bar.ab-b-flag-auto ? root.bar-fill : root.ab-b-color;
+            border-width: root.bar.ab-b-flag-auto ? 1px : 0px;
+            border-color: root.ab-b-color;
+
+            b-flag-text := Text {
+                text: root.bar.ab-b-flag-text;
+                font-size: root.ab-font;
+                font-weight: 700;
+                color: root.bar.ab-b-flag-auto ? root.ab-b-color : Theme.fullscreen-background;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            TouchArea {
+                enabled: root.bar.ab-flags-draggable;
+                mouse-cursor: root.bar.ab-flags-draggable ? ew-resize : default;
+                property <float> share: Math.clamp((self.absolute-position.x - root.absolute-position.x + self.mouse-x - root.track-x) / Math.max(1px, root.track-w), 0, 1);
+                pointer-event(event) => {
+                    if event.button == PointerEventButton.left {
+                        if event.kind == PointerEventKind.down {
+                            root.ab-flag(1, self.share, 0);
+                        } else if event.kind == PointerEventKind.up {
+                            root.ab-flag(1, self.share, 2);
+                        }
+                    }
+                }
+                changed mouse-x => {
+                    if self.pressed {
+                        root.ab-flag(1, self.share, 1);
+                    }
+                }
+            }
+        }
+
+        // The saved repeat under the pointer: its name (and times), small, following the pointer.
+        hover-label := Rectangle {
+            visible: root.bar.ab-shown && root.bar.ab-label-shown;
+            property <length> pointer-x: root.track-x + root.bar.ab-label-share * root.track-w;
+            width: label-text.preferred-width + 2 * root.ab-label-pad;
+            height: root.ab-label-height;
+            x: Math.round(Math.clamp(self.pointer-x - self.width / 2, 0px, Math.max(0px, root.width - self.width)) / 1px) * 1px;
+            y: root.ab-label-row-y;
+            border-radius: self.height / 2;
+            background: #11111b.with-alpha(0.88);
+
+            label-text := Text {
+                text: root.bar.ab-label-text;
+                font-size: root.ab-font;
+                color: Theme.text;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        // The time under the pointer, above the progress bar (and above a drag on it).
+        bubble := Rectangle {
+            property <length> pointer-x: progress.x + root.bar.hover-share * progress.width;
+            visible: root.bar.hover-shown;
+            width: bubble-text.preferred-width + 2 * Math.round(6 * root.pt / 1px) * 1px;
+            height: root.bar.bubble-height - Math.round(4 * root.pt / 1px) * 1px;
+            x: Math.round(Math.clamp(self.pointer-x - self.width / 2, 0px, Math.max(0px, root.width - self.width)) / 1px) * 1px;
+            y: (root.ab-strip-shown ? root.ab-strip-top : root.bar-top) - root.bar.bubble-height;
+            border-radius: Math.round(4 * root.pt / 1px) * 1px;
+            background: root.panel.with-alpha(Math.max(root.bar.bar-opacity, 0.85));
+
+            bubble-text := Text {
+                text: root.bar.hover-text;
+                font-size: root.font-size;
+                color: #ffffff;
+                vertical-alignment: center;
+                horizontal-alignment: center;
+            }
+        }
+    }
+
+    // ---- The popups of Save and Load: above the bar and above everything else of the canvas, their caret touching the top of the
+    // bar over the center of their button. They are no part of the fading content: an open popup keeps its bar shown anyway.
+
+    if root.bar.ab-popup == 1 : AbSaveBubble {
+        x: root.ab-popup-x;
+        y: root.ab-popup-y;
+        width: root.ab-popup-width;
+        height: root.bar.ab-popup-height;
+        pt: root.pt;
+        font-size: root.ab-font + 1px;
+        placeholder: root.bar.ab-save-placeholder;
+        hint: root.bar.ab-save-hint;
+        caret-center: root.ab-opener-x - root.ab-popup-x;
+        text: root.bar.ab-save-text;
+        edited(text) => { root.ab-save-edited(text); }
+        commit(text) => { root.ab-save-commit(text); }
+        cancel => { root.ab-close-popup(); }
+        init => { self.focus-input(); }
+    }
+
+    if root.bar.ab-popup == 2 : AbLoadMenu {
+        x: root.ab-popup-x;
+        y: root.ab-popup-y;
+        width: root.ab-popup-width;
+        height: root.bar.ab-popup-height;
+        pt: root.pt;
+        font-size: root.ab-font + 1px;
+        icon-size: Math.round(14 * root.pt / 1px) * 1px;
+        rows: root.bar.ab-menu-rows;
+        query: root.bar.ab-menu-query;
+        page: root.bar.ab-menu-page;
+        pages: root.bar.ab-menu-pages;
+        scroll: root.bar.ab-menu-scroll;
+        visible-rows: root.bar.ab-menu-visible-rows;
+        status: root.bar.ab-menu-status;
+        renaming: root.bar.ab-menu-renaming;
+        rename-text: root.bar.ab-menu-rename-text;
+        caret-center: root.ab-opener-x - root.ab-popup-x;
+        query-edited(text) => { root.ab-menu-query-edited(text); }
+        page-step(delta) => { root.ab-menu-page-step(delta); }
+        pick(index) => { root.ab-menu-pick(index); }
+        rename(index) => { root.ab-menu-rename(index); }
+        rename-edited(text) => { root.ab-menu-rename-edited(text); }
+        rename-commit(text) => { root.ab-menu-rename-commit(text); }
+        rename-cancel => { root.ab-menu-rename-cancel(); }
+        delete(index) => { root.ab-menu-delete(index); }
+        delete-all => { root.ab-menu-delete-all(); }
+        cancel => { root.ab-close-popup(); }
+        init => { self.focus-input(); }
+    }
+}

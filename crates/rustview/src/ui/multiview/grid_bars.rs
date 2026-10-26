@@ -1,20 +1,18 @@
 //! The video tiles of the tab grid (UI thread only): while the grid is shown, a tick looks where the pointer is, shows the
-//! small control bar of the video under it (`video_bar`, owner `TabGrid`) and keeps the time badges of every other video up to
-//! date. The tick runs only while the grid is shown and stops itself when it is not.
+//! small control bar of the video under it (`video_bar`: a model per Multiview, drawn by the canvas of its grid item) and keeps
+//! the time badges of every other video up to date. The tick runs only while the grid is shown and stops itself when it is not.
 
-use super::bar_overlay::BarOwner;
-use super::video_bar::{self, VideoBarHost};
-use crate::ui::MainWindow;
-use crate::viewer::multiview::follow::TileKey;
+use super::video_bar::VideoBarModel;
+use crate::ui::{MainWindow, MultiviewVideoBarView};
 use crate::viewer::multiview::instance::SharedInstance;
 use crate::viewer::multiview::route::HostMode;
-use crate::viewer::multiview::video_bar::prefs::{BarStyle, VideoBarPrefs};
+use crate::viewer::multiview::video_bar::prefs::{self, BarStyle, VideoBarPrefs};
 use crate::viewer::multiview::video_bar::view::VideoBarInput;
 use crate::viewer::{PointerProbe, ViewerTabManager, get_slint_window_xid};
 use rustview_core::settings::schema::{MULTIVIEW_TICK_MS, MULTIVIEW_VIDEO_BAR_MINI_HEIGHT_LOGICAL_PX};
-use slint::{ComponentHandle, Timer, TimerMode};
+use slint::{ComponentHandle, ModelRc, Timer, TimerMode};
 use std::cell::RefCell;
-use std::rc::Rc;
+use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 
@@ -28,6 +26,13 @@ struct GridBars {
 
 thread_local! {
     static GRID: RefCell<Option<GridBars>> = const { RefCell::new(None) };
+    /// The small bars of every Multiview of the grid, by instance id (its grid item draws them).
+    static BARS: RefCell<HashMap<u64, VideoBarModel>> = RefCell::new(HashMap::new());
+}
+
+/// The bars of the Multiview `instance_id` for its grid item (the same model for as long as the Multiview exists).
+pub fn model_for(instance_id: u64) -> ModelRc<MultiviewVideoBarView> {
+    BARS.with(|bars| bars.borrow_mut().entry(instance_id).or_default().model())
 }
 
 /// The grid is shown (or was synced): the tick runs from now on until the grid goes.
@@ -60,7 +65,7 @@ pub fn ensure_running(window: &MainWindow, tabs: &Arc<ViewerTabManager>) {
 
 /// The preferences of the small bars: the user's opacity and fade, a fixed height, always a bar.
 fn mini_prefs() -> VideoBarPrefs {
-    let mut prefs = video_bar::effective_prefs();
+    let mut prefs = prefs::current();
     prefs.style = BarStyle::Bar;
     prefs.height = MULTIVIEW_VIDEO_BAR_MINI_HEIGHT_LOGICAL_PX;
     prefs
@@ -77,12 +82,12 @@ fn grid_instances() -> Vec<SharedInstance> {
 }
 
 fn tick() {
-    let Some((window, pointer, main_xid)) = GRID.with(|cell| {
+    let Some((window, pointer)) = GRID.with(|cell| {
         let grid = cell.borrow();
         let grid = grid.as_ref()?;
         let window = grid.window.upgrade()?;
         let pointer = grid.probe.as_ref().and_then(|p| p.position_in(grid.main_xid));
-        Some((window, pointer, grid.main_xid))
+        Some((window, pointer))
     }) else {
         stop();
         return;
@@ -93,47 +98,65 @@ fn tick() {
     }
     // While a dialog locks the main window no bar shows (the badges stay).
     let pointer = pointer.filter(|_| !window.get_is_modal_locked());
-    update(pointer, main_xid);
+    update(pointer);
 }
 
 /// Shows the small bars for `pointer` and syncs the badges of every video in the grid.
-fn update(pointer: Option<(i32, i32)>, main_xid: u64) {
+fn update(pointer: Option<(i32, i32)>) {
     let prefs = mini_prefs();
     let now = Instant::now();
-    let mut targets = Vec::new();
+    let mut shown = Vec::new();
     for instance in grid_instances() {
         let mut guard = instance.lock();
-        let found = guard.grid_video_bar_targets(pointer, &prefs, now);
-        let bar_keys: Vec<TileKey> = found.iter().map(|t| t.key).collect();
+        let targets = guard.grid_video_bar_targets(pointer, &prefs, now);
+        let bar_keys: Vec<_> = targets.iter().map(|t| t.key).collect();
         guard.sync_time_badges(&bar_keys);
-        targets.extend(found);
+        let id = guard.id();
+        drop(guard);
+        shown.push(id);
+        BARS.with(|bars| {
+            let mut bars = bars.borrow_mut();
+            let model = bars.entry(id).or_default();
+            if targets.is_empty() {
+                model.clear();
+            } else {
+                model.sync(&targets, &prefs);
+            }
+        });
     }
-    let host = VideoBarHost {
-        owner: BarOwner::TabGrid,
-        host_xid: main_xid,
-        on_input: Rc::new(on_input),
-    };
-    video_bar::update(&host, &targets, &prefs);
+    // A Multiview that left the grid (or closed) keeps no bar.
+    BARS.with(|bars| {
+        bars.borrow_mut().retain(|id, model| {
+            if !shown.contains(id) {
+                model.clear();
+            }
+            shown.contains(id)
+        });
+    });
 }
 
-/// A click, drag or wheel on the small bar of tile `key` (tile keys are unique across all Multiviews).
-fn on_input(key: TileKey, input: VideoBarInput) {
+/// A click, drag or wheel on the small bar that reported `key` (tile keys are unique across all Multiviews).
+pub(super) fn on_input(key: i32, input: VideoBarInput) {
+    let Some((instance_id, tile)) = BARS.with(|bars| {
+        bars.borrow()
+            .iter()
+            .find_map(|(id, model)| model.tile(key).map(|tile| (*id, tile)))
+    }) else {
+        return;
+    };
     let prefs = mini_prefs();
     let changed = grid_instances()
         .into_iter()
-        .find(|instance| instance.lock().has_tile(key))
-        .is_some_and(|instance| instance.lock().video_bar_input(key, input, &prefs));
+        .find(|instance| instance.lock().id() == instance_id)
+        .is_some_and(|instance| instance.lock().video_bar_input(tile, input, &prefs));
     if changed {
-        let target = GRID.with(|cell| {
+        let pointer = GRID.with(|cell| {
             let grid = cell.borrow();
             let grid = grid.as_ref()?;
-            Some((
-                grid.probe.as_ref().and_then(|p| p.position_in(grid.main_xid)),
-                grid.main_xid,
-            ))
+            Some(grid.probe.as_ref().and_then(|p| p.position_in(grid.main_xid)))
         });
-        if let Some((pointer, main_xid)) = target {
-            update(pointer, main_xid);
+        if let Some(pointer) = pointer {
+            update(pointer);
         }
     }
 }
@@ -148,6 +171,10 @@ fn stop() {
     for instance in grid_instances() {
         instance.lock().release_video_bars();
     }
-    video_bar::hide(BarOwner::TabGrid);
+    BARS.with(|bars| {
+        for model in bars.borrow_mut().values_mut() {
+            model.clear();
+        }
+    });
     tracing::debug!("[Multiview: GridBars] Stopped");
 }

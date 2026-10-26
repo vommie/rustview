@@ -10,7 +10,6 @@ use super::bar_overlay::{self, BarOwner};
 use super::cursor;
 use super::handle::MultiviewHandle;
 use super::router;
-use super::video_bar::{self, VideoBarHost};
 use super::views::{self, ImageCache, ViewModels};
 use crate::ui::{MainWindow, MultiviewTabBus};
 use crate::viewer::multiview::HostSurface;
@@ -30,7 +29,7 @@ use slint::{ComponentHandle, ModelRc, Timer, TimerMode};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 #[derive(Default)]
 struct TabHost {
@@ -115,6 +114,7 @@ pub fn bind(window: &MainWindow, handle: MultiviewHandle) {
         bus.set_tiles(ModelRc::from(h.models.tiles.clone()));
         bus.set_gutters(ModelRc::from(h.models.gutters.clone()));
     });
+    super::tab_video_bar::bind(window);
     bus.on_gutter_drag_started(|index| act(|mv| mv.drag_started(index.max(0).saturating_as::<usize>())));
     bus.on_gutter_dragged(|_, distance| act(|mv| mv.dragged(distance)));
     bus.on_gutter_drag_finished(|_| act(MultiviewInstance::drag_finished));
@@ -301,7 +301,7 @@ fn update_bar_overlay() {
         with_host(|h| Some((h.window.clone()?.upgrade()?, h.instance.upgrade()?, h.main_xid))).flatten()
     else {
         bar_overlay::hide(BarOwner::TabView);
-        video_bar::hide(BarOwner::TabView);
+        super::tab_video_bar::clear(None);
         return;
     };
     // While a dialog (or the settings window) locks the main window, no bar is shown, so none can be used, and the video
@@ -327,7 +327,7 @@ fn update_bar_overlay() {
         BarTargets::of_instance(BarOwner::TabView, &instance, in_tab_view),
         in_tab_view,
     );
-    let video_bars_visible = update_video_bars(&instance, host_xid, in_tab_view);
+    let video_bars_visible = super::tab_video_bar::update(&window, &instance, in_tab_view);
     let mut window_hidden = with_host(|h| h.cursor_hidden).unwrap_or(false);
     if in_tab_view {
         cursor::sync(
@@ -342,37 +342,18 @@ fn update_bar_overlay() {
     with_host(|h| h.cursor_hidden = window_hidden);
 }
 
-/// Shows, updates or hides the control bars of the videos of the tab view (none while `active` is false). Returns whether one
-/// is visible.
-fn update_video_bars(instance: &SharedInstance, host_xid: u64, active: bool) -> bool {
-    if !active {
-        instance.lock().release_video_bars();
-        video_bar::hide(BarOwner::TabView);
-        return false;
-    }
-    let prefs = video_bar::effective_prefs();
-    let targets = instance.lock().video_bar_targets(&prefs, Instant::now());
-    let host = VideoBarHost {
-        owner: BarOwner::TabView,
-        host_xid,
-        on_input: Rc::new(|key, input| {
-            video_bar_after(|mv| mv.video_bar_input(key, input, &video_bar::effective_prefs()));
-        }),
-    };
-    video_bar::update(&host, &targets, &prefs)
-}
-
 /// Runs `f` on the shown instance; when it changed something, the view and the control bars follow at once.
-fn video_bar_after(f: impl FnOnce(&mut MultiviewInstance) -> bool) {
+pub(super) fn video_bar_after(f: impl FnOnce(&mut MultiviewInstance) -> bool) {
     let Some(instance) = current_instance() else {
         return;
     };
     let changed = f(&mut instance.lock());
     if changed {
         refresh();
-        let host_xid = with_host(|h| h.main_xid).unwrap_or(0);
         let shown_here = instance.lock().host_mode() == HostMode::TabView;
-        update_video_bars(&instance, host_xid, shown_here);
+        if let Some(window) = with_host(|h| h.window.clone()).flatten().and_then(|w| w.upgrade()) {
+            super::tab_video_bar::update(&window, &instance, shown_here);
+        }
     }
     arm_requested_feedback(&instance);
 }
@@ -399,11 +380,7 @@ fn on_click(is_ctrl: bool) {
     let Some(instance) = current_instance() else {
         return;
     };
-    let click = {
-        let mut guard = instance.lock();
-        guard.close_ab_popups();
-        guard.register_click(is_ctrl)
-    };
+    let click = instance.lock().register_click(is_ctrl);
     drop(instance);
     if click == ClickKind::None {
         return;
@@ -464,7 +441,8 @@ pub fn suspend() {
         return;
     }
     bar_overlay::hide(BarOwner::TabView);
-    video_bar::hide(BarOwner::TabView);
+    let window = with_host(|h| h.window.clone()).flatten().and_then(|w| w.upgrade());
+    super::tab_video_bar::clear(window.as_ref());
     if let Some(instance) = with_host(|h| h.instance.upgrade()).flatten() {
         instance.lock().release_video_bars();
     }

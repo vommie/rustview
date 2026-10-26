@@ -2,6 +2,8 @@ import { Theme } from "styles.slint";
 import { AppIdentity } from "app_identity.slint";
 import { MultiviewTileView, MultiviewGutterView } from "multiview_types.slint";
 import { MultiviewCanvas } from "multiview_canvas.slint";
+import { MultiviewVideoBarView } from "multiview_video_bar.slint";
+import { GlobalTooltipLayer } from "global_tooltip_layer.slint";
 
 /// Frameless fullscreen window showing one to four media (Multiview), drawn by the shared `MultiviewCanvas` (videos are the
 /// textures of their render threads, `video-frames`). The
@@ -16,6 +18,8 @@ export component MultiviewFullscreenWindow inherits Window {
     in property <[MultiviewGutterView]> gutters;
     // The newest picture of every video drawn in this window (`video_surface::hosts`).
     in property <[image]> video-frames;
+    // The control bars of the videos (their events go to `VideoBarBus`).
+    in property <[MultiviewVideoBarView]> video-bars;
     in property <int> navigation: 0; // 0 = off, 1 = previous/next allowed, 2 = refused (sticky single image)
     in property <int> background-mode: 0; // 0 = Dark Theme (#11111b), 1 = Deep Black (#000000), 2 = Checkerboard
     // Where the background comes from: 0 = the theme, 1 = `background-mode` (the viewer setting), 2 = `custom-fill`.
@@ -71,6 +75,11 @@ export component MultiviewFullscreenWindow inherits Window {
         root.size-changed();
     }
 
+    /// The keys go to the window's own handling again (a text field of a video's control bar that had them went away).
+    public function focus-keys() {
+        fs-focus.focus();
+    }
+
     forward-focus: fs-focus;
     fs-focus := FocusScope {
         key-pressed(event) => {
@@ -107,6 +116,7 @@ export component MultiviewFullscreenWindow inherits Window {
         tiles: root.tiles;
         gutters: root.gutters;
         video-frames: root.video-frames;
+        video-bars: root.video-bars;
         wheel-navigation: root.navigation != 0;
         screen: { x: 0px, y: 0px, width: root.width, height: root.height };
         background-mode: root.background-mode;
@@ -181,4 +191,7 @@ export component MultiviewFullscreenWindow inherits Window {
             }
         }
     }
+
+    // The tooltips of the control bars (A-B buttons, the rows of the load menu).
+    GlobalTooltipLayer {}
 }

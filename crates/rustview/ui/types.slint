@@ -1,5 +1,6 @@
 import { IconId } from "icons.slint";
 import { MultiviewTileView, MultiviewGutterView, MultiviewScreenView } from "multiview_types.slint";
+import { MultiviewVideoBarView } from "multiview_video_bar.slint";
 
 export struct MediaItemView {
     id: int,
@@ -173,6 +174,8 @@ export struct TabGridItemModel {
     mv_tiles: [MultiviewTileView],
     mv_gutters: [MultiviewGutterView],
     mv_screen: MultiviewScreenView,
+    // The small control bar of the video under the pointer (`grid_bars`).
+    mv_video_bars: [MultiviewVideoBarView],
     is_loading: bool,
     error_message: string,
     orig_width: int,

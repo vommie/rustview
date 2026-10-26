@@ -43,6 +43,13 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   keeps it playing. mpv itself, your mpv.conf and your scripts are unchanged; the control bars still float in windows of their own
   for now. Settings > Debug: the video self-test renders through the same path (no test window opens any more) and says how videos
   are drawn and whether the picture had content.
+- **The control bar of videos is drawn by RustView's own window** (branch video-in-slint, second step), together with its A-B group:
+  it no longer floats over the video in a window of its own. It fades in and out also without a compositing manager, and nothing of
+  it can stay behind over another application. The small bar of a video in the Tab-Grid is drawn the same way.
+- **The save bubble and the menu of saved A-B repeats open right above their button**: the caret points at the button that opened
+  them (also on a narrow video and with the pill style), the bubble touches the bar (no gap any more), and opening or closing them
+  no longer makes the whole bar flicker. A menu that is wider than its video may use the room next to it. A click anywhere else in
+  the view closes them, and the keys work again right after.
 - **The windows are drawn with Slint's skia renderer** (before: femtovg). It uses EGL, which mpv's hardware decoding needs to hand
   decoded frames over without copying them back. Text and shapes look the same. `RUSTVIEW_RENDERER=femtovg` starts with the old
   renderer once (for a check or a driver problem).

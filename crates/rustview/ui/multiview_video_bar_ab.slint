@@ -1,7 +1,7 @@
 // The A-B repeat group of a video's control bar (mpv script ab_repeat.lua, `viewer::multiview::video_bar::ab_view`): the
 // capsule with its five buttons, the save bubble and the load menu. The strip of saved repeats and the flags above the
-// progress bar are drawn by the bar window itself (they follow the progress bar). Every size comes from `pt` (one point of
-// the default bar) or from Rust (`placement::AbRoom`), so the window and Rust agree on the room the popups take.
+// progress bar are drawn by the bar itself (`multiview_video_bar.slint`; they follow the progress bar). Every size comes from
+// `pt` (one point of the default bar) or from Rust (`placement::AbRoom`, `placement::ab_popup_height`).
 
 import { Theme } from "styles.slint";
 import { AppIcon, IconId } from "icons.slint";
@@ -508,7 +508,8 @@ component AbHoldButton inherits Rectangle {
 component AbMenuRow inherits Rectangle {
     in property <AbMenuRowView> entry;
     in property <bool> renaming;
-    in-out property <string> rename-text;
+    // The text the rename field starts with (it is made when the rename starts).
+    in property <string> rename-text;
     in property <length> pt;
     in property <length> font-size;
     in property <length> icon-size;
@@ -569,7 +570,7 @@ component AbMenuRow inherits Rectangle {
                 height: Math.round(22 * root.pt / 1px) * 1px;
                 pt: root.pt;
                 placeholder: root.entry.name;
-                text <=> root.rename-text;
+                text: root.rename-text;
                 font-size: root.font-size;
                 edited(text) => { root.rename-edited(text); }
                 accepted(text) => { root.rename-commit(text); }
@@ -648,7 +649,7 @@ export component AbLoadMenu inherits Rectangle {
     in property <int> visible-rows;
     in property <string> status;
     in property <int> renaming: -1;
-    in-out property <string> rename-text;
+    in property <string> rename-text;
     in property <length> caret-center;
     in property <color> fill: Theme.surface;
     callback query-edited(string);
@@ -670,7 +671,7 @@ export component AbLoadMenu inherits Rectangle {
     property <length> caret: Math.round(7 * root.pt / 1px) * 1px;
     property <length> body-height: self.height - root.caret;
 
-    /// The search gets the keyboard (when the menu opens, and when the window got the focus of the X server).
+    /// The search gets the keyboard (when the menu opens).
     public function focus-input() {
         if root.renaming < 0 {
             search.focus-input();
@@ -712,7 +713,7 @@ export component AbLoadMenu inherits Rectangle {
                     height: root.row-height;
                     entry: row;
                     renaming: row.index == root.renaming;
-                    rename-text <=> root.rename-text;
+                    rename-text: root.rename-text;
                     pt: root.pt;
                     font-size: root.font-size;
                     icon-size: root.icon-size;

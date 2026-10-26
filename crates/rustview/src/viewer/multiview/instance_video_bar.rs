@@ -36,7 +36,8 @@ impl MultiviewInstance {
             && !self.host.menu_open
     }
 
-    /// The control bars to show (or to let fade out) on this tick, one per video at most, with their content.
+    /// The control bars to show (or to let fade out) on this tick, one per video at most, with their content and their place
+    /// relative to the host's rectangle (the canvas).
     pub fn video_bar_targets(&mut self, prefs: &VideoBarPrefs, now: Instant) -> Vec<VideoBarTarget> {
         let allowed = self.video_bars_allowed();
         let scale = self.host.surface.dpi.max(0.5);
@@ -62,6 +63,7 @@ impl MultiviewInstance {
             .to_int::<i32>();
         let fade = prefs.fade.then(|| Duration::from_millis(MULTIVIEW_VIDEO_BAR_FADE_MS));
         let pointer = self.pointer;
+        let origin = (self.host.surface.rect.x, self.host.surface.rect.y);
         let mut targets = Vec::new();
         for index in 0..self.tiles.len() {
             let video_rect = self.video_window_rect(index);
@@ -106,14 +108,14 @@ impl MultiviewInstance {
             }
             let view = bar_view(video, media_id, prefs, mini, now);
             let placement = match &view.ab {
-                Some(ab) => place.with_room_above(ab_room_px(ab, prefs.height, scale)),
+                Some(_) => place.with_room_above(ab_room_px(prefs.height, scale)),
                 None => place,
             };
             targets.push(VideoBarTarget {
                 key,
-                placement,
+                placement: placement.translated(-origin.0, -origin.1),
+                scale,
                 phase,
-                held: video.bar.dragging(),
                 mini,
                 view,
             });
@@ -286,12 +288,9 @@ impl MultiviewInstance {
     }
 }
 
-/// The room the A-B group of `ab` needs above a bar of `bar_height` (logical), in physical pixels.
-fn ab_room_px(ab: &ab_view::AbBarView, bar_height: f32, scale: f32) -> i32 {
-    let popup = ab
-        .popup_size()
-        .map_or(0.0, |popup| placement::ab_popup_height(popup, bar_height));
-    ((AbRoom::for_bar(bar_height).above_bar(bar_height) + popup) * scale)
+/// The room the A-B group needs above a bar of `bar_height` (logical), in physical pixels.
+fn ab_room_px(bar_height: f32, scale: f32) -> i32 {
+    (AbRoom::for_bar(bar_height).above_bar(bar_height) * scale)
         .round()
         .to_int::<i32>()
 }

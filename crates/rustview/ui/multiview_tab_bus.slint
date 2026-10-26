@@ -1,4 +1,5 @@
 import { MultiviewTileView, MultiviewGutterView, MultiviewScreenView } from "multiview_types.slint";
+import { MultiviewVideoBarView } from "multiview_video_bar.slint";
 
 /// What the Multiview shown in the active viewer tab draws, and the events it reports. Rust fills the properties from the
 /// instance of the tab and handles the callbacks; the canvas in the main window just binds to them, so the main window needs
@@ -7,6 +8,8 @@ export global MultiviewTabBus {
     in-out property <[MultiviewTileView]> tiles;
     in-out property <[MultiviewGutterView]> gutters;
     in-out property <MultiviewScreenView> screen;
+    // The control bars of the videos (their events go to `VideoBarBus`).
+    in-out property <[MultiviewVideoBarView]> video-bars;
 
     callback tile-clicked(int /* tile index */, bool /* is_ctrl */);
     callback tile-zoom-wheel(int /* tile index */, length /* delta-y */, length /* x */, length /* y */);

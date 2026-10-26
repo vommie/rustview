@@ -213,8 +213,8 @@ export component TabGridItemView inherits Rectangle {
                 color: Theme.text-muted;
             }
 
-            // Multiview: the miniature of the fullscreen arrangement. Its video tiles are native mpv windows that Rust places
-            // on top; the canvas is a picture (no touch areas), so clicks reach the tile touch area below.
+            // Multiview: the miniature of the fullscreen arrangement. The canvas is a picture (no touch areas), so clicks reach the
+            // tile touch area below; only the small control bar of the video under the pointer takes them.
             if root.item.is-multiview : MultiviewCanvas {
                 width: 100%;
                 height: 100%;
@@ -222,6 +222,7 @@ export component TabGridItemView inherits Rectangle {
                 tiles: root.item.mv-tiles;
                 gutters: root.item.mv-gutters;
                 video-frames: root.video-frames;
+                video-bars: root.item.mv-video-bars;
                 screen: root.item.mv-screen;
                 background-mode: root.background-mode;
                 outer-color: #000000;

@@ -1,4 +1,4 @@
-//! What the window of a control bar shows and what its clicks mean (pure data between the instance and the window).
+//! What a control bar shows and what its clicks mean (pure data between the instance and the canvas that draws the bar).
 
 use super::ab_state::AbPoint;
 use super::ab_view::AbBarView;
@@ -30,16 +30,17 @@ pub struct VideoBarView {
 #[derive(Debug, Clone, PartialEq)]
 pub struct VideoBarTarget {
     pub key: TileKey,
+    /// Physical pixels relative to the host's rectangle (the canvas).
     pub placement: VideoBarPlacement,
+    /// Physical pixels per logical pixel of the host.
+    pub scale: f32,
     pub phase: Phase,
-    /// A drag on the bar runs: it stays even while the pointer is over another window.
-    pub held: bool,
     /// The small bar of a tab grid item (play/pause and the progress bar only).
     pub mini: bool,
     pub view: VideoBarView,
 }
 
-/// The phases of a drag on the progress bar or the volume slider (the codes the window sends).
+/// The phases of a drag on the progress bar or the volume slider (the codes the canvas sends).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DragPhase {
     Press,
@@ -166,5 +167,158 @@ impl VideoBarInput {
             Self::Wheel { .. } => "wheel",
             Self::Ab(_) => "A-B repeat",
         }
+    }
+}
+
+/// What the canvas reports about a bar (`VideoBarEvent` of `ui/multiview_video_bar.slint`, which lists the codes).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct VideoBarEvent {
+    pub kind: i32,
+    pub share: f32,
+    pub phase: i32,
+    pub index: i32,
+    pub text: String,
+    pub delta: f32,
+}
+
+impl VideoBarInput {
+    /// The input an event of the canvas stands for (`None`: an unknown code).
+    pub fn from_event(event: VideoBarEvent) -> Option<Self> {
+        let VideoBarEvent {
+            kind,
+            share,
+            phase,
+            index,
+            text,
+            delta,
+        } = event;
+        let at = usize::try_from(index).ok();
+        let ab = |input: AbInput| Some(Self::Ab(input));
+        match kind {
+            0 => Some(Self::PlayPause),
+            1 => Some(Self::ToggleMs),
+            2 => Some(Self::Speaker),
+            3 => DragPhase::from_code(phase).map(|phase| Self::Seek { share, phase }),
+            4 => Some(Self::Hover {
+                share: (index == 1).then_some(share),
+            }),
+            5 => DragPhase::from_code(phase).map(|phase| Self::Volume { share, phase }),
+            6 => Some(Self::Wheel { delta_y: delta }),
+            10 => AbButton::from_code(index).map(|button| Self::Ab(AbInput::Button(button))),
+            11 => ab(AbInput::SaveText(text)),
+            12 => ab(AbInput::SaveCommit(text)),
+            13 => ab(AbInput::ClosePopup),
+            14 => ab(AbInput::MenuQuery(text)),
+            15 => ab(AbInput::MenuPage(index)),
+            16 => at.map(|i| Self::Ab(AbInput::MenuPick(i))),
+            17 => at.map(|i| Self::Ab(AbInput::MenuDelete(i))),
+            18 => ab(AbInput::MenuDeleteAll),
+            19 => at.map(|i| Self::Ab(AbInput::MenuRename(i))),
+            20 => ab(AbInput::MenuRenameText(text)),
+            21 => ab(AbInput::MenuRenameCommit(text)),
+            22 => ab(AbInput::MenuRenameCancel),
+            23 => ab(AbInput::StripHover((index == 1).then_some(share))),
+            24 => ab(AbInput::StripClick(share)),
+            25 => {
+                let point = if index == 0 { AbPoint::A } else { AbPoint::B };
+                DragPhase::from_code(phase).map(|phase| Self::Ab(AbInput::Flag { point, share, phase }))
+            }
+            _ => None,
+        }
+    }
+}
+
+impl AbButton {
+    /// The codes of the canvas: 0 = A, 1 = B, 2 = AB clicked, 3 = AB held, 4 = Save, 5 = Load.
+    pub const fn from_code(code: i32) -> Option<Self> {
+        match code {
+            0 => Some(Self::SetA),
+            1 => Some(Self::SetB),
+            2 => Some(Self::Loop),
+            3 => Some(Self::Clear),
+            4 => Some(Self::Save),
+            5 => Some(Self::Load),
+            _ => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn event(kind: i32) -> VideoBarEvent {
+        VideoBarEvent {
+            kind,
+            ..VideoBarEvent::default()
+        }
+    }
+
+    #[test]
+    fn the_events_of_the_canvas_become_inputs() {
+        assert_eq!(VideoBarInput::from_event(event(0)), Some(VideoBarInput::PlayPause));
+        let seek = VideoBarEvent {
+            share: 0.25,
+            phase: 1,
+            ..event(3)
+        };
+        assert_eq!(
+            VideoBarInput::from_event(seek),
+            Some(VideoBarInput::Seek {
+                share: 0.25,
+                phase: DragPhase::Move
+            })
+        );
+        let left = VideoBarEvent { share: 0.5, ..event(4) };
+        assert_eq!(
+            VideoBarInput::from_event(left),
+            Some(VideoBarInput::Hover { share: None })
+        );
+        let wheel = VideoBarEvent {
+            delta: -120.0,
+            ..event(6)
+        };
+        assert_eq!(
+            VideoBarInput::from_event(wheel),
+            Some(VideoBarInput::Wheel { delta_y: -120.0 })
+        );
+        let load = VideoBarEvent { index: 5, ..event(10) };
+        assert_eq!(
+            VideoBarInput::from_event(load),
+            Some(VideoBarInput::Ab(AbInput::Button(AbButton::Load)))
+        );
+        let save = VideoBarEvent {
+            text: "Intro".into(),
+            ..event(12)
+        };
+        assert_eq!(
+            VideoBarInput::from_event(save),
+            Some(VideoBarInput::Ab(AbInput::SaveCommit("Intro".into())))
+        );
+        let flag = VideoBarEvent {
+            index: 1,
+            share: 0.75,
+            phase: 2,
+            ..event(25)
+        };
+        assert_eq!(
+            VideoBarInput::from_event(flag),
+            Some(VideoBarInput::Ab(AbInput::Flag {
+                point: AbPoint::B,
+                share: 0.75,
+                phase: DragPhase::Release
+            }))
+        );
+    }
+
+    #[test]
+    fn unknown_codes_and_negative_rows_are_dropped() {
+        assert_eq!(VideoBarInput::from_event(event(99)), None);
+        assert_eq!(
+            VideoBarInput::from_event(VideoBarEvent { index: -1, ..event(16) }),
+            None
+        );
+        assert_eq!(VideoBarInput::from_event(VideoBarEvent { phase: 7, ..event(5) }), None);
+        assert_eq!(VideoBarInput::from_event(VideoBarEvent { index: 9, ..event(10) }), None);
     }
 }

@@ -1,6 +1,6 @@
 //! Where the control bar of a video goes (pure): at the bottom of the video, over its whole width (a pill keeps a margin to
-//! the edges). Its window is taller than the bar: the bubble with the time under the pointer floats above the progress bar.
-//! All rectangles are physical pixels in the coordinates of the host window.
+//! the edges). Its rectangle is taller than the bar: the bubble with the time under the pointer floats above the progress bar,
+//! and the A-B group adds its room. All rectangles are physical pixels in the coordinates of the host.
 
 use crate::viewer::multiview::layout::Rect;
 use crate::viewer::multiview::video_bar::prefs::BarStyle;
@@ -12,7 +12,7 @@ use rustview_core::util::cast::{Az, FloatToInt};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VideoBarPlacement {
-    /// The window of the bar.
+    /// The bar with the room above it (the canvas draws the bar component there).
     pub window: Rect,
     /// The bar inside it (at its bottom).
     pub bar: Rect,
@@ -23,7 +23,7 @@ pub fn bubble_height(bar_height: f32) -> f32 {
     (bar_height * 0.8).round() + 4.0
 }
 
-/// The room of the A-B repeat group above the bar, in logical pixels (`ui/multiview_video_bar_window.slint` draws into it):
+/// The room of the A-B repeat group above the bar, in logical pixels (`ui/multiview_video_bar.slint` draws into it):
 /// the strip of saved repeats (a third of the bar, at least 12 px), a row for the flags of A and B and a row for the label of
 /// the repeat under the pointer.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -50,7 +50,8 @@ impl AbRoom {
     }
 }
 
-/// The heights of the popups of the A-B group in logical pixels (the same sizes the window lays them out with).
+/// The heights of the popups of the A-B group in logical pixels (the same sizes the canvas lays them out with; a popup opens
+/// above the bar and is no part of its rectangle).
 pub fn ab_popup_height(popup: AbPopupSize, bar_height: f32) -> f32 {
     let pt = bar_height / 30.0;
     let p = |points: f32| (points * pt).round();
@@ -121,7 +122,7 @@ fn place_with(video: Rect, style: BarStyle, bar_height: f32, min_width: f32, sca
 }
 
 impl VideoBarPlacement {
-    /// The window grows upward so that `room` (physical pixels) is free above the bar (the A-B group, its popups).
+    /// The rectangle grows upward so that `room` (physical pixels) is free above the bar (the A-B group).
     pub fn with_room_above(self, room: i32) -> Self {
         let have = self.bar.y - self.window.y;
         if room <= have {
@@ -139,7 +140,7 @@ impl VideoBarPlacement {
         }
     }
 
-    /// The same placement moved by (`dx`, `dy`): from coordinates of the host window to coordinates of the screen.
+    /// The same placement moved by (`dx`, `dy`): from coordinates of the host window to coordinates of the host's canvas.
     pub fn translated(self, dx: i32, dy: i32) -> Self {
         let shift = |r: Rect| Rect::new(r.x + dx, r.y + dy, r.w, r.h);
         Self {

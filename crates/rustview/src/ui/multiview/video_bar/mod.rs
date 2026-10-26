@@ -1,124 +1,155 @@
-//! The windows of the video control bars (UI thread only): one per video tile that shows its bar, at the bottom of the video.
+//! The control bars of the videos as rows of a Slint model (UI thread only): every host (the fullscreen window, the tab view, each
+//! Multiview of the tab grid) has one `VideoBarModel`, and its canvas draws a `MultiviewVideoBar` per row over the video. What a bar
+//! shows, where and when is decided by the instance (`viewer::multiview::video_bar`); this module turns its targets into rows.
 //!
-//! Like the action bars (`bar_overlay`), a bar is an override-redirect window of its own above the native mpv window, blended
-//! by the compositing manager (solid and shaped without one). The windows are a pool: a tile takes one while its bar shows
-//! and hands it back afterwards, so a bar follows its tile (`TileKey`) however the layout changes. What a bar shows, where
-//! and when is decided by the instance (`viewer::multiview::video_bar`); this module only turns it into window calls.
+//! A row belongs to its tile (`TileKey`) for as long as the bar shows: rows are updated in place, never rebuilt, so a drag on the
+//! progress bar, an open popup and the text typed into it survive every tick. The bar with an open A-B popup is the last row, so
+//! no other bar is drawn over its popup. The events of every bar of a window arrive at its `VideoBarBus` with the tile's key.
 
-use super::bar_overlay::BarOwner;
+mod convert;
+
+use crate::ui::{AbMenuRowView, AbStripSegmentView, VideoBarSpanView};
+use crate::ui::{MultiviewVideoBarView, VideoBarEvent as SlintVideoBarEvent};
 use crate::viewer::multiview::follow::TileKey;
-use crate::viewer::multiview::video_bar::prefs::{self, VideoBarPrefs};
+use crate::viewer::multiview::video_bar::prefs::VideoBarPrefs;
 use crate::viewer::multiview::video_bar::reveal::Phase;
-use crate::viewer::multiview::video_bar::view::{VideoBarInput, VideoBarTarget};
-use std::cell::{Cell, RefCell};
+use crate::viewer::multiview::video_bar::view::{VideoBarEvent, VideoBarInput, VideoBarTarget, VideoBarView};
+use rustview_core::util::cast::WrappingAs;
+use slint::{Model, ModelRc, VecModel};
 use std::rc::Rc;
 
-mod window;
-use window::VideoBarWindow;
-
-/// Called with the tile and what the user did on its bar.
-pub type InputHandler = Rc<dyn Fn(TileKey, VideoBarInput)>;
-
-/// The host the bars float over.
-pub struct VideoBarHost {
-    pub owner: BarOwner,
-    /// The window the Multiview is drawn in (the bars are placed relative to it).
-    pub host_xid: u64,
-    pub on_input: InputHandler,
+/// What a bar keeps between ticks: the lists inside its row and the view they were made from.
+pub(super) struct Slot {
+    key: TileKey,
+    spans: Rc<VecModel<VideoBarSpanView>>,
+    ab_strip: Rc<VecModel<AbStripSegmentView>>,
+    ab_rows: Rc<VecModel<AbMenuRowView>>,
+    last: Option<VideoBarView>,
 }
 
-/// More video tiles than this never exist at once (see `MULTIVIEW_MAX_TILES`), so the pool never grows beyond it.
-const MAX_BARS: usize = 8;
-
-thread_local! {
-    static BARS: RefCell<Vec<Rc<RefCell<VideoBarWindow>>>> = const { RefCell::new(Vec::new()) };
-    /// Whether a compositing manager blended the last bar shown (a bar fades only then).
-    static COMPOSITED: Cell<bool> = const { Cell::new(true) };
-}
-
-/// The preferences of the bars as the instance should apply them: without a compositing manager nothing fades.
-pub fn effective_prefs() -> VideoBarPrefs {
-    let mut prefs = prefs::current();
-    prefs.fade &= COMPOSITED.with(Cell::get);
-    prefs
-}
-
-/// Shows, updates or hides the bars of `host`: every target gets the window of its tile, every other bar of the host goes.
-/// Returns whether a bar is visible.
-pub fn update(host: &VideoBarHost, targets: &[VideoBarTarget], prefs: &VideoBarPrefs) -> bool {
-    let mut kept: Vec<TileKey> = Vec::new();
-    for target in targets {
-        let Some(cell) = window_for(host.owner, target.key) else {
-            continue;
-        };
-        let Ok(mut bar) = cell.try_borrow_mut() else {
-            tracing::debug!("[Multiview: VideoBar] Skipped a re-entrant call");
-            kept.push(target.key);
-            continue;
-        };
-        if bar.show(host, target, prefs) {
-            COMPOSITED.with(|c| c.set(bar.translucent()));
-            kept.push(target.key);
-        }
-    }
-    hide_except(host.owner, &kept);
-    kept.iter()
-        .any(|key| targets.iter().any(|t| t.key == *key && t.phase == Phase::Shown))
-}
-
-/// Hides every bar `owner` shows (its Multiview closes, hides or is locked).
-pub fn hide(owner: BarOwner) {
-    hide_except(owner, &[]);
-}
-
-fn hide_except(owner: BarOwner, keep: &[TileKey]) {
-    for cell in all() {
-        let Ok(mut bar) = cell.try_borrow_mut() else {
-            continue;
-        };
-        if bar.assigned.is_some_and(|(o, key)| o == owner && !keep.contains(&key)) {
-            bar.hide("no bar is wanted for its tile now");
-            bar.assigned = None;
+impl Slot {
+    fn new(key: TileKey) -> Self {
+        Self {
+            key,
+            spans: Rc::default(),
+            ab_strip: Rc::default(),
+            ab_rows: Rc::default(),
+            last: None,
         }
     }
 }
 
-/// The application exits: all bar windows are hidden and dropped.
-pub fn shutdown() {
-    let taken: Vec<_> = BARS.with(|all| std::mem::take(&mut *all.borrow_mut()));
-    for cell in taken {
-        if let Ok(mut bar) = cell.try_borrow_mut() {
-            bar.hide("the application exits");
-        }
-    }
-    tracing::debug!("[Shutdown: Windows] Video control bar windows destroyed");
+/// The bars one canvas draws.
+#[derive(Default)]
+pub struct VideoBarModel {
+    rows: Rc<VecModel<MultiviewVideoBarView>>,
+    /// One per row, in the same order.
+    slots: Vec<Slot>,
+    /// An A-B popup closed: its text field had the keyboard, and the host gives it back to its window.
+    focus_back: bool,
 }
 
-/// The window of the bar of tile `key` of `owner`: the one it has, else a free one of the pool, else a new one.
-fn window_for(owner: BarOwner, key: TileKey) -> Option<Rc<RefCell<VideoBarWindow>>> {
-    let bars = all();
-    if let Some(cell) = bars
-        .iter()
-        .find(|cell| cell.try_borrow().is_ok_and(|b| b.assigned == Some((owner, key))))
-    {
-        return Some(cell.clone());
+impl VideoBarModel {
+    /// The model to hand to the canvas (once; it stays the same).
+    pub fn model(&self) -> ModelRc<MultiviewVideoBarView> {
+        ModelRc::from(self.rows.clone())
     }
-    let cell = match bars
-        .iter()
-        .find(|cell| cell.try_borrow().is_ok_and(|b| b.assigned.is_none()))
-    {
-        Some(cell) => cell.clone(),
-        None if bars.len() < MAX_BARS => {
-            let cell = Rc::new(RefCell::new(VideoBarWindow::new()?));
-            BARS.with(|all| all.borrow_mut().push(cell.clone()));
-            cell
+
+    /// Shows the bars of `targets` (and only those). Returns whether one of them is fully shown.
+    pub fn sync(&mut self, targets: &[VideoBarTarget], prefs: &VideoBarPrefs) -> bool {
+        let popup_before = self.popup_open();
+        // The bar with an open popup last: it is drawn above every other bar.
+        let mut ordered: Vec<&VideoBarTarget> = targets.iter().collect();
+        ordered.sort_by_key(|target| target.view.ab.as_ref().is_some_and(|ab| ab.popup_size().is_some()));
+        for (index, target) in ordered.iter().enumerate() {
+            match self.slots.iter().position(|slot| slot.key == target.key) {
+                Some(found) if found == index => {}
+                Some(found) => {
+                    // A row moves by being made again (only when a popup opens or closes, so nothing typed is lost).
+                    let slot = self.remove(found);
+                    self.insert(index, slot, target, prefs);
+                    continue;
+                }
+                None => {
+                    self.insert(index, Slot::new(target.key), target, prefs);
+                    tracing::debug!(tile = target.key, "[Multiview: VideoBar] Bar shown");
+                    continue;
+                }
+            }
+            let row = convert::row(target, prefs, &mut self.slots[index]);
+            if self.rows.row_data(index).as_ref() != Some(&row) {
+                self.rows.set_row_data(index, row);
+            }
         }
-        None => return None,
-    };
-    cell.try_borrow_mut().ok()?.assign(owner, key);
-    Some(cell)
+        while self.slots.len() > ordered.len() {
+            let slot = self.remove(self.slots.len() - 1);
+            tracing::debug!(tile = slot.key, "[Multiview: VideoBar] Bar hidden");
+        }
+        if popup_before && !self.popup_open() {
+            tracing::debug!("[Multiview: VideoBar] A-B popup closed");
+            self.focus_back = true;
+        }
+        targets.iter().any(|target| target.phase == Phase::Shown)
+    }
+
+    /// No bar shows any more (the host closes, hides or is locked).
+    pub fn clear(&mut self) {
+        if !self.slots.is_empty() {
+            tracing::debug!(bars = self.slots.len(), "[Multiview: VideoBar] Bars hidden");
+        }
+        self.focus_back |= self.popup_open();
+        self.slots.clear();
+        self.rows.set_vec(Vec::new());
+    }
+
+    /// The tile whose bar reported `key` (the 32-bit key of the canvas), if it is one of these bars.
+    pub fn tile(&self, key: i32) -> Option<TileKey> {
+        self.slots
+            .iter()
+            .map(|slot| slot.key)
+            .find(|tile| (*tile).wrapping_as::<i32>() == key)
+    }
+
+    /// Whether the keyboard has to go back to the window (once after a popup closed).
+    pub fn take_focus_back(&mut self) -> bool {
+        std::mem::take(&mut self.focus_back)
+    }
+
+    /// Whether an A-B popup of one of these bars is open.
+    pub fn popup_open(&self) -> bool {
+        self.slots.iter().any(|slot| {
+            slot.last
+                .as_ref()
+                .and_then(|view| view.ab.as_ref())
+                .is_some_and(|ab| ab.popup_size().is_some())
+        })
+    }
+
+    fn insert(&mut self, index: usize, mut slot: Slot, target: &VideoBarTarget, prefs: &VideoBarPrefs) {
+        slot.last = None;
+        let row = convert::row(target, prefs, &mut slot);
+        self.rows.insert(index, row);
+        self.slots.insert(index, slot);
+    }
+
+    fn remove(&mut self, index: usize) -> Slot {
+        self.rows.remove(index);
+        self.slots.remove(index)
+    }
 }
 
-fn all() -> Vec<Rc<RefCell<VideoBarWindow>>> {
-    BARS.with(|all| all.borrow().clone())
+/// What the canvas reported (`VideoBarBus.event`), as an input of the bar (`None`: an unknown code).
+pub fn input_of(event: SlintVideoBarEvent) -> Option<VideoBarInput> {
+    let decoded = VideoBarInput::from_event(VideoBarEvent {
+        kind: event.kind,
+        share: event.share,
+        phase: event.phase,
+        index: event.index,
+        text: event.text.into(),
+        delta: event.delta,
+    });
+    if decoded.is_none() {
+        tracing::warn!(kind = event.kind, "[Multiview: VideoBar] Unknown event of a bar");
+    }
+    decoded
 }

@@ -128,22 +128,6 @@ pub(super) fn create_override_redirect<T>(
     created
 }
 
-/// Another window that floats over the Multiview like the bars (a video control bar): a pointer on it still counts as being on
-/// the Multiview.
-pub(super) fn register_overlay_xid(xid: u64) {
-    OVERLAY_XIDS.with(|ids| {
-        let mut ids = ids.borrow_mut();
-        if !ids.contains(&xid) {
-            ids.push(xid);
-        }
-    });
-}
-
-/// Whether `xid` is one of the windows that float over the Multiview (the bars).
-pub(super) fn is_overlay_xid(xid: u64) -> bool {
-    OVERLAY_XIDS.with(|ids| ids.borrow().contains(&xid))
-}
-
 /// The tooltip settings of the application (they apply to the overlay window too).
 pub fn set_tooltip_settings(enabled: bool, delay_ms: i32) {
     TOOLTIPS.with(|cell| cell.set((enabled, delay_ms)));
