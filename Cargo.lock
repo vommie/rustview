@@ -5219,7 +5219,7 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
 name = "rustview"
-version = "0.5.6"
+version = "0.5.7"
 dependencies = [
  "arboard",
  "ashpd",
@@ -5266,7 +5266,7 @@ dependencies = [
 
 [[package]]
 name = "rustview-core"
-version = "0.5.6"
+version = "0.5.7"
 dependencies = [
  "atomic-write-file",
  "avif-parse",

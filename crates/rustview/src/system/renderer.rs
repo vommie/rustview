@@ -15,8 +15,9 @@ pub enum Renderer {
 }
 
 impl Renderer {
-    /// The renderer when nothing else is asked for.
-    pub const DEFAULT: Self = Self::Femtovg;
+    /// The renderer when nothing else is asked for (user decision 2026-10-26: skia; in the VM both drew the UI alike and both
+    /// carried the videos, and skia's EGL context is the one mpv's hardware decoders need without copies).
+    pub const DEFAULT: Self = Self::Skia;
 
     /// The name Slint's backend selector takes.
     pub fn slint_name(self) -> &'static str {
