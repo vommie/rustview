@@ -184,6 +184,32 @@ pub enum Command {
 }
 
 impl Command {
+    /// Clears only A (`a`) or only B. The script can only clear both, so the other point is set again where it was, and a loop
+    /// that was off stays off (setting a point switches it on). Nothing when the point is not set by the user (a point the
+    /// script set by itself only stands for "not set"); a plain clear when the other one is not set by the user either.
+    pub fn clear_point(a: bool, state: &ScriptState) -> Vec<Self> {
+        let (this, this_auto, other, other_auto) = if a {
+            (state.a, state.a_auto, state.b, state.b_auto)
+        } else {
+            (state.b, state.b_auto, state.a, state.a_auto)
+        };
+        if this.is_none() || this_auto {
+            return Vec::new();
+        }
+        let mut commands = vec![Self::Clear];
+        if let Some(other) = other.filter(|_| !other_auto) {
+            commands.push(if a {
+                Self::SetB(Some(other))
+            } else {
+                Self::SetA(Some(other))
+            });
+            if !state.loop_on {
+                commands.push(Self::Loop(false));
+            }
+        }
+        commands
+    }
+
     /// The arguments of `script-message-to` for the script running as `client`.
     pub fn args(&self, client: &str) -> Vec<String> {
         let time = |secs: f64| format!("{secs:.3}");
@@ -271,5 +297,41 @@ mod tests {
         assert_eq!(Command::SetB(None).args("abr"), vec!["abr", "set-b"]);
         assert_eq!(Command::Loop(false).args("abr"), vec!["abr", "loop", "off"]);
         assert!(RangeRef::of(&list, 1).is_none());
+    }
+
+    #[test]
+    fn one_point_is_cleared_by_clearing_both_and_setting_the_other_again() {
+        let both = ScriptState {
+            a: Some(10.0),
+            b: Some(20.0),
+            valid: true,
+            loop_on: true,
+            ..ScriptState::default()
+        };
+        assert_eq!(
+            Command::clear_point(true, &both),
+            vec![Command::Clear, Command::SetB(Some(20.0))]
+        );
+        assert_eq!(
+            Command::clear_point(false, &ScriptState { loop_on: false, ..both }),
+            vec![Command::Clear, Command::SetA(Some(10.0)), Command::Loop(false)],
+            "a loop that was off stays off"
+        );
+        let only_a = ScriptState {
+            b: Some(89.9),
+            b_auto: true,
+            ..both
+        };
+        assert_eq!(
+            Command::clear_point(true, &only_a),
+            vec![Command::Clear],
+            "the script's B goes too"
+        );
+        assert_eq!(
+            Command::clear_point(false, &only_a),
+            Vec::new(),
+            "B set by the script is no point of the user"
+        );
+        assert_eq!(Command::clear_point(true, &ScriptState::default()), Vec::new());
     }
 }

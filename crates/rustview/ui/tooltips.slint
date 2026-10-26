@@ -40,6 +40,9 @@ export global GlobalTooltip {
     in-out property <IconId> icon: IconId.none;
     in-out property <length> pos-x: 0px;
     in-out property <length> pos-y: 0px;
+    // The bottom edge of the bubble when it goes above its element, because below it there is no room (a bar at the bottom of
+    // the window): just over the element, never over it.
+    in-out property <length> top-y: 0px;
     // A context menu of the window is open: only the tooltips of its entries show (`TooltipHost.in-menu`). An element behind the
     // menu's backdrop never hears that the pointer left, so its tooltip would appear over the menu.
     in-out property <bool> menu-open: false;
@@ -49,13 +52,15 @@ export global GlobalTooltip {
         shortcut: string,
         icon: IconId,
         x: length,
-        y: length
+        y: length,
+        top: length
     ) {
         root.text = text;
         root.shortcut = shortcut;
         root.icon = icon;
         root.pos-x = x;
         root.pos-y = y;
+        root.top-y = top;
         root.is-visible = true;
     }
 
@@ -175,7 +180,8 @@ export component TooltipHost inherits Rectangle {
                     root.shortcut,
                     root.icon,
                     target-x,
-                    target-y
+                    target-y,
+                    root.absolute-position.y - 6px
                 );
             }
             self.running = false;
@@ -210,13 +216,15 @@ export component TooltipHost inherits Rectangle {
         let target-y = root.follow-cursor
             ? (root.absolute-position.y + my + 16px)
             : (root.absolute-position.y + root.height + 4px + root.offset-y);
+        let top-y = root.follow-cursor ? (root.absolute-position.y + my - 8px) : (root.absolute-position.y - 6px);
         GlobalTooltip.hold = root.hold;
         GlobalTooltip.show(
             root.text,
             root.shortcut,
             root.icon,
             target-x,
-            target-y
+            target-y,
+            top-y
         );
     }
 

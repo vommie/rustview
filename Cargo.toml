@@ -4,7 +4,7 @@ members = ["crates/rustview-core", "crates/rustview"]
 default-members = ["crates/rustview-core", "crates/rustview"]
 
 [workspace.package]
-version = "0.6.3"
+version = "0.6.4"
 edition = "2024"
 # The lowest toolchain known to work: the code uses `AtomicUsize::try_update` (1.95). rust-toolchain.toml pins `stable`.
 rust-version = "1.95"
@@ -91,6 +91,8 @@ async-io = "2"
 base64 = "0.23"
 # Numeric conversions that say what happens on overflow (saturate, wrap) instead of the silent truncation of `as`.
 az = "1"
+# Grapheme clusters, counted like Slint's `character-count`: names cut in the middle (`ui::middle_elide`) never split a character.
+unicode-segmentation = "1"
 # Image editing (crop and save): lossless JPEG crop (jpegtran in pure Rust) and re-encoding with the original quantization tables,
 # the containers and headers of the formats that are written, the AVIF encoder (rav1e, pure Rust; without the assembler, which needs
 # nasm), and replacing a file atomically (temporary file, fsync, rename, permissions kept).

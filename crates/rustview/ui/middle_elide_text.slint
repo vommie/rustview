@@ -1,0 +1,55 @@
+// A text that is shortened in the middle when it is too wide ("Concert in the … the old town"), so its beginning and its end
+// stay readable. Slint measures (the whole text and the width it has); Rust only cuts the string (`TextCut.middle`), because
+// Slint cannot take a string apart: call `crate::ui::middle_elide::install(&window)` once for every window that shows one.
+
+/// Cuts strings for `MiddleElideText`.
+export global TextCut {
+    /// `text` with only `keep` of its characters (grapheme clusters), half from its start and half from its end, joined by an
+    /// ellipsis.
+    pure callback middle(string, int) -> string;
+}
+
+export component MiddleElideText inherits Rectangle {
+    in property <string> text;
+    in property <length> font-size;
+    in property <color> text-color;
+    in property <int> font-weight: 400;
+
+    // The whole text and the ellipsis, measured on one line.
+    whole := Text {
+        visible: false;
+        text: root.text;
+        font-size: root.font-size;
+        font-weight: root.font-weight;
+    }
+
+    dots := Text {
+        visible: false;
+        text: "\u{2026}";
+        font-size: root.font-size;
+        font-weight: root.font-weight;
+    }
+
+    property <bool> fits: whole.preferred-width <= root.width;
+    // As many characters as the width holds next to the ellipsis, from the mean width of a character; the `elide` of the shown
+    // text catches the rare case that the kept ones are wider than the mean.
+    property <int> keep: Math.max(2, Math.floor(root.text.character-count * (root.width - dots.preferred-width) / Math.max(1px, whole.preferred-width)));
+
+    min-width: dots.preferred-width;
+    preferred-width: whole.preferred-width;
+    preferred-height: whole.preferred-height;
+
+    // Placed explicitly, so its own size does not feed the size of this element (that would loop through `fits`).
+    Text {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
+        text: root.fits ? root.text : TextCut.middle(root.text, root.keep);
+        font-size: root.font-size;
+        font-weight: root.font-weight;
+        color: root.text-color;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+}

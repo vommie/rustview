@@ -18,10 +18,10 @@ use crate::viewer::multiview::follow::TileKey;
 use rustview_core::settings::schema::MULTIVIEW_VIDEO_BAR_PULSE_MS;
 use std::time::{Duration, Instant};
 
-/// What an input asks of the script, and whether the video plays afterwards.
+/// What an input asks of the script (in this order), and whether the video plays afterwards.
 #[derive(Default)]
 struct Outcome {
-    command: Option<Command>,
+    commands: Vec<Command>,
     play: bool,
 }
 
@@ -55,7 +55,7 @@ impl MultiviewInstance {
         let state = &mut video.bar.ab;
         let mut outcome = Outcome::default();
         match input {
-            AbInput::Button(button) => outcome.command = button_command(button, &snapshot, state),
+            AbInput::Button(button) => outcome.commands = button_commands(button, &snapshot, state),
             AbInput::SaveText(text) => {
                 if let Some(AbPopup::Save { text: shown }) = state.popup.as_mut() {
                     *shown = text;
@@ -64,7 +64,7 @@ impl MultiviewInstance {
             AbInput::SaveCommit(text) => {
                 state.popup = None;
                 if snapshot.state.valid {
-                    outcome.command = Some(Command::Save(text));
+                    outcome.commands.push(Command::Save(text));
                 }
             }
             AbInput::ClosePopup => state.popup = None,
@@ -75,7 +75,7 @@ impl MultiviewInstance {
                         .and_then(|i| RangeRef::of(&snapshot.ranges.list, i))
                 {
                     outcome = Outcome {
-                        command: Some(Command::Load(range)),
+                        commands: vec![Command::Load(range)],
                         play: true,
                     };
                 }
@@ -86,7 +86,7 @@ impl MultiviewInstance {
                 }
                 if phase == DragPhase::Release {
                     let secs = state.drop_flag().map_or(f64::from(share), |(_, s)| f64::from(s)) * duration;
-                    outcome.command = Some(match point {
+                    outcome.commands.push(match point {
                         AbPoint::A => Command::SetA(Some(secs)),
                         AbPoint::B => Command::SetB(Some(secs)),
                     });
@@ -96,7 +96,7 @@ impl MultiviewInstance {
             }
             menu => outcome = menu_input(menu, &snapshot, state),
         }
-        if let Some(command) = &outcome.command {
+        for command in &outcome.commands {
             tracing::info!(media_id, ?command, "[Multiview: AbRepeat] Command from the control bar");
             if let Err(e) = video.player.ab_command(command) {
                 tracing::warn!(media_id, error = %e, "[Multiview: AbRepeat] The script did not take it");
@@ -179,30 +179,32 @@ impl MultiviewInstance {
     }
 }
 
-/// A click on a button of the group: a command, or a popup that opens or closes.
-fn button_command(
+/// A click on a button of the group: commands, or a popup that opens or closes.
+fn button_commands(
     button: AbButton,
     snapshot: &AbSnapshot,
     state: &mut super::video_bar::ab_state::AbBarState,
-) -> Option<Command> {
+) -> Vec<Command> {
     match button {
-        AbButton::SetA => Some(Command::SetA(None)),
-        AbButton::SetB => Some(Command::SetB(None)),
-        AbButton::Loop => snapshot.state.valid.then_some(Command::Loop(!snapshot.state.loop_on)),
-        AbButton::Clear => Some(Command::Clear),
+        AbButton::SetA => vec![Command::SetA(None)],
+        AbButton::SetB => vec![Command::SetB(None)],
+        AbButton::Loop => Vec::from_iter(snapshot.state.valid.then_some(Command::Loop(!snapshot.state.loop_on))),
+        AbButton::Clear => vec![Command::Clear],
+        AbButton::ClearA => Command::clear_point(true, &snapshot.state),
+        AbButton::ClearB => Command::clear_point(false, &snapshot.state),
         AbButton::Save => {
             state.popup = match state.popup {
                 Some(AbPopup::Save { .. }) => None,
                 _ => snapshot.state.valid.then(|| AbPopup::Save { text: String::new() }),
             };
-            None
+            Vec::new()
         }
         AbButton::Load => {
             state.popup = match state.popup {
                 Some(AbPopup::Load { .. }) => None,
                 _ => (!snapshot.ranges.list.is_empty()).then(|| load_popup(snapshot)),
             };
-            None
+            Vec::new()
         }
     }
 }
@@ -239,14 +241,14 @@ fn menu_input(input: AbInput, snapshot: &AbSnapshot, state: &mut super::video_ba
         AbInput::MenuPick(index) => {
             if let Some(range) = RangeRef::of(list, index) {
                 outcome = Outcome {
-                    command: Some(Command::Load(range)),
+                    commands: vec![Command::Load(range)],
                     play: true,
                 };
                 state.popup = None;
             }
         }
-        AbInput::MenuDelete(index) => outcome.command = RangeRef::of(list, index).map(Command::Delete),
-        AbInput::MenuDeleteAll => outcome.command = Some(Command::DeleteAll),
+        AbInput::MenuDelete(index) => outcome.commands.extend(RangeRef::of(list, index).map(Command::Delete)),
+        AbInput::MenuDeleteAll => outcome.commands.push(Command::DeleteAll),
         AbInput::MenuRename(index) => {
             *renaming = list.get(index).map(|range| Renaming {
                 index,
@@ -262,7 +264,9 @@ fn menu_input(input: AbInput, snapshot: &AbSnapshot, state: &mut super::video_ba
             if let Some(done) = renaming.take() {
                 let name = text.trim();
                 if !name.is_empty() {
-                    outcome.command = RangeRef::of(list, done.index).map(|r| Command::Rename(r, name.to_owned()));
+                    outcome
+                        .commands
+                        .extend(RangeRef::of(list, done.index).map(|r| Command::Rename(r, name.to_owned())));
                 }
             }
         }

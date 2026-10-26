@@ -8,7 +8,7 @@
 pub mod main_window;
 
 use crate::ui::keymap::{Action, Area, Chord, KeyPress, Keymap, table_from_json};
-use crate::viewer::multiview::key_labels::{self, EditKeys};
+use crate::viewer::multiview::key_labels::{self, AbKeys, EditKeys};
 use parking_lot::RwLock;
 use std::collections::BTreeMap;
 use std::sync::{Arc, LazyLock};
@@ -41,6 +41,11 @@ pub fn apply(stored: &BTreeMap<String, serde_json::Value>) {
             Action::FullscreenApplyCrop,
         ),
     );
+    key_labels::set_ab(AbKeys {
+        set_a: keymap.first_label(Action::AbSetA),
+        set_b: keymap.first_label(Action::AbSetB),
+        clear: keymap.first_label(Action::AbClear),
+    });
     tracing::info!(
         changed = stored.len(),
         repaired = notes.len(),

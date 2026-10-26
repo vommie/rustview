@@ -29,6 +29,28 @@ static LABELS: RwLock<(EditKeys, EditKeys)> = RwLock::new((
     },
 ));
 
+/// The first key of the A-B repeat keys the control bar names in its tooltips ("" = no key).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AbKeys {
+    pub set_a: String,
+    pub set_b: String,
+    pub clear: String,
+}
+
+static AB_LABELS: RwLock<AbKeys> = RwLock::new(AbKeys {
+    set_a: String::new(),
+    set_b: String::new(),
+    clear: String::new(),
+});
+
+pub fn set_ab(keys: AbKeys) {
+    *AB_LABELS.write() = keys;
+}
+
+pub fn ab() -> AbKeys {
+    AB_LABELS.read().clone()
+}
+
 pub fn set(tab: EditKeys, fullscreen: EditKeys) {
     *LABELS.write() = (tab, fullscreen);
 }

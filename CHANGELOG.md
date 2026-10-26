@@ -25,11 +25,21 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   script-opts other than the A-B script's message switch are kept now.
 - A fresh crop tool covers the whole picture: dragging inside it now draws a new rectangle (before, nothing happened).
 
+- **A-B repeat in the control bar**: the current A-B is drawn in the progress bar itself (yellow, the progress shows through)
+  instead of in the strip of saved repeats, so a loaded saved repeat stays visible there. A right click on Set A or Set B clears
+  that point, a right click on the AB button clears both (holding it still works); the tooltips say so and name the keys. A blue
+  (not looping) marker turns white where it crosses the played part of the progress bar. The strip of saved repeats keeps a
+  margin of 7 points to the ends of the progress bar, "Delete all" in the menu of saved repeats is only as wide as its label, and
+  names too long for the menu are shortened in the middle.
+- Tooltips of elements at the bottom of a window (the control bar of a video) open above the element instead of covering it.
+
 ### Removed
 - The switch "Show the script's messages in the video" (Settings > Multiview > mpv script ab_repeat.lua): the script shows no
   messages in RustView's videos any more, the control bar shows what happens. mpv itself is not changed.
 
 ### Fixed
+- The line under the column headers of the Browse view runs through; before, it showed only as light bits in the gaps between
+  the headers.
 - A click on the progress bar of a playing video no longer makes the picture jump back and forth for a moment: the click seeks
   once instead of once on press and again on release.
 - **A video that cannot be played shows why**: instead of an empty black tile, the tile shows a warning icon and mpv's reason

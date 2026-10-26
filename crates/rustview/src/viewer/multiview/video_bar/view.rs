@@ -66,8 +66,11 @@ pub enum AbButton {
     SetB,
     /// A click on AB: the loop of a valid A-B on or off.
     Loop,
-    /// AB held: A and B are cleared.
+    /// AB held or right-clicked: A and B are cleared.
     Clear,
+    /// A right click on A (or B): only this point is cleared.
+    ClearA,
+    ClearB,
     /// The save bubble opens or closes.
     Save,
     /// The load menu opens or closes.
@@ -229,7 +232,8 @@ impl VideoBarInput {
 }
 
 impl AbButton {
-    /// The codes of the canvas: 0 = A, 1 = B, 2 = AB clicked, 3 = AB held, 4 = Save, 5 = Load.
+    /// The codes of the canvas: 0 = A, 1 = B, 2 = AB clicked, 3 = AB held or right-clicked, 4 = Save, 5 = Load, 6 = A
+    /// right-clicked, 7 = B right-clicked.
     pub const fn from_code(code: i32) -> Option<Self> {
         match code {
             0 => Some(Self::SetA),
@@ -238,6 +242,8 @@ impl AbButton {
             3 => Some(Self::Clear),
             4 => Some(Self::Save),
             5 => Some(Self::Load),
+            6 => Some(Self::ClearA),
+            7 => Some(Self::ClearB),
             _ => None,
         }
     }

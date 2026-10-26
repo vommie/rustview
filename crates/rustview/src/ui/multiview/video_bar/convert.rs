@@ -74,6 +74,10 @@ fn fill_ab(row: &mut MultiviewVideoBarView, ab: &AbBarView, bar_height: f32) {
     row.ab_a_tip = ab.a_tip.as_str().into();
     row.ab_b_tip = ab.b_tip.as_str().into();
     row.ab_loop_tip = ab.loop_tip.as_str().into();
+    row.ab_a_key = ab.a_key.as_str().into();
+    row.ab_b_key = ab.b_key.as_str().into();
+    row.ab_loop_key = ab.loop_key.as_str().into();
+    row.ab_clearable = ab.clearable;
     row.ab_save_enabled = ab.save_enabled;
     row.ab_save_tip = ab.save_tip.as_str().into();
     row.ab_load_count = ab.load_count.saturating_as::<i32>();

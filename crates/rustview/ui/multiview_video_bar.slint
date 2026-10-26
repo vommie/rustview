@@ -112,6 +112,11 @@ export struct MultiviewVideoBarView {
     ab-a-tip: string,
     ab-b-tip: string,
     ab-loop-tip: string,
+    // The keys the badges of the tooltips of A, B and AB name ("" = no badge) and whether a right click on AB clears anything.
+    ab-a-key: string,
+    ab-b-key: string,
+    ab-loop-key: string,
+    ab-clearable: bool,
     ab-save-enabled: bool,
     ab-save-tip: string,
     ab-load-count: int,
@@ -244,6 +249,13 @@ export component MultiviewVideoBar inherits Rectangle {
     property <length> ab-popup-y: Math.max(4px - root.y, root.bar-top - root.bar.ab-popup-height);
     // The progress block inside the bar (the flags' stems end at its bottom).
     property <length> block-bottom: root.bar-top + (root.bar.bar-height + (root.bar.bar-height - 2 * Math.round(6 * root.pt / 1px) * 1px)) / 2;
+    property <length> block-top: root.block-bottom - (root.bar.bar-height - 2 * Math.round(6 * root.pt / 1px) * 1px);
+    // How far the video has played (the first span is always the played part, from the start), as a share of the progress bar.
+    property <float> played-share: root.bar.spans.length > 0 && root.bar.spans[0].kind == 0 ? root.bar.spans[0].to : 0;
+    // A blue stem would vanish over the blue played part: there, inside the progress block only, it is white.
+    property <bool> ab-a-foot-light: root.bar.ab-a-look != 1 && root.bar.ab-a-flag-share <= root.played-share;
+    property <bool> ab-b-foot-light: root.bar.ab-b-look != 1 && root.bar.ab-b-flag-share <= root.played-share;
+    property <length> ab-strip-margin: Math.round(7 * root.pt / 1px) * 1px;
     property <length> ab-lane: Math.max(3px, Math.round(root.bar.ab-strip-height * 0.42 / 1px) * 1px);
     property <length> ab-lane-y: root.ab-strip-top + Math.round((root.bar.ab-strip-height - root.ab-lane) / 2 / 1px) * 1px + 1px;
     // The flag labels: centered over their stems, or pushed apart (the left one to the left, the right one to the right) when
@@ -346,6 +358,15 @@ export component MultiviewVideoBar inherits Rectangle {
                             background: span.kind == 0 ? Theme.primary : Theme.text-muted;
                         }
 
+                        // The current A-B over the progress, translucent yellow (stronger while it loops), so the progress
+                        // shows through and a saved repeat in the strip stays visible when it is loaded.
+                        if root.bar.ab-shown && root.bar.ab-span-shown : Rectangle {
+                            x: root.bar.ab-span-from * parent.width;
+                            width: Math.max(2px, (root.bar.ab-span-to - root.bar.ab-span-from) * parent.width);
+                            height: 100%;
+                            background: Theme.accent.with-alpha(root.bar.ab-span-looping ? 0.8 : 0.5);
+                        }
+
                         if root.bar.ab-shown && root.bar.ab-dim : Rectangle {
                             x: 0;
                             width: root.bar.ab-span-from * parent.width;
@@ -432,6 +453,10 @@ export component MultiviewVideoBar inherits Rectangle {
                             a-tip: root.bar.ab-a-tip;
                             b-tip: root.bar.ab-b-tip;
                             loop-tip: root.bar.ab-loop-tip;
+                            a-key: root.bar.ab-a-key;
+                            b-key: root.bar.ab-b-key;
+                            loop-key: root.bar.ab-loop-key;
+                            clearable: root.bar.ab-clearable;
                             save-tip: root.bar.ab-save-tip;
                             load-tip: root.bar.ab-load-tip;
                             button(code) => { root.ab-button(code); }
@@ -510,16 +535,18 @@ export component MultiviewVideoBar inherits Rectangle {
         // ---- The A-B repeat group above the progress bar (only while `ab-shown`).
 
         // The strip of saved repeats: a tab that grows out of the bar over the progress bar, its flanks curving into the bar. It
-        // ends exactly on the bar: an overlap would show as a darker seam where the two translucent fills lie on each other.
+        // ends exactly on the bar: an overlap would show as a darker seam where the two translucent fills lie on each other. Its
+        // sides stand `ab-strip-margin` outside the progress bar (the repeats in it line up with the progress bar exactly).
         Path {
             visible: root.ab-strip-shown;
+            property <length> outset: root.bar.ab-strip-flank + root.ab-strip-margin;
             property <float> h: root.bar.ab-strip-height / 1px;
             property <float> f: root.bar.ab-strip-flank / 1px;
             property <float> c: root.bar.ab-strip-height / 2 / 1px;
-            property <float> w: (root.track-w + 2 * root.bar.ab-strip-flank) / 1px;
-            x: root.track-x - root.bar.ab-strip-flank;
+            property <float> w: (root.track-w + 2 * self.outset) / 1px;
+            x: root.track-x - self.outset;
             y: root.ab-strip-top;
-            width: Math.max(1px, root.track-w + 2 * root.bar.ab-strip-flank);
+            width: Math.max(1px, root.track-w + 2 * self.outset);
             height: root.bar.ab-strip-height;
             viewbox-width: Math.max(1, self.w);
             viewbox-height: self.h;
@@ -540,17 +567,6 @@ export component MultiviewVideoBar inherits Rectangle {
             height: root.ab-lane;
             border-radius: root.ab-lane / 2;
             background: AbColors.of(segment.color).with-alpha(0.55);
-        }
-
-        // The current A-B: yellow while it loops, blue while it does not.
-        Rectangle {
-            visible: root.bar.ab-shown && root.bar.ab-span-shown;
-            x: root.track-x + root.bar.ab-span-from * root.track-w;
-            y: root.ab-lane-y;
-            width: Math.max(2px, (root.bar.ab-span-to - root.bar.ab-span-from) * root.track-w);
-            height: root.ab-lane;
-            border-radius: root.ab-lane / 2;
-            background: root.bar.ab-span-looping ? Theme.accent : Theme.primary.with-alpha(0.8);
         }
 
         strip-touch := TouchArea {
@@ -576,7 +592,14 @@ export component MultiviewVideoBar inherits Rectangle {
             y: root.ab-flag-row-y + root.ab-label-height + i * 4px;
             width: 2px;
             height: root.bar.ab-a-flag-auto ? 2px : 4px;
+            clip: true;
             background: root.ab-a-color;
+
+            if root.ab-a-foot-light : Rectangle {
+                y: root.block-top - parent.y;
+                height: root.block-bottom - root.block-top;
+                background: Colors.white;
+            }
         }
 
         for i in (root.bar.ab-shown && root.bar.ab-b-flag-shown ? Math.ceil((root.block-bottom - root.ab-flag-row-y - root.ab-label-height) / 4px) : 0) : Rectangle {
@@ -584,7 +607,14 @@ export component MultiviewVideoBar inherits Rectangle {
             y: root.ab-flag-row-y + root.ab-label-height + i * 4px;
             width: 2px;
             height: root.bar.ab-b-flag-auto ? 2px : 4px;
+            clip: true;
             background: root.ab-b-color;
+
+            if root.ab-b-foot-light : Rectangle {
+                y: root.block-top - parent.y;
+                height: root.block-bottom - root.block-top;
+                background: Colors.white;
+            }
         }
 
         a-flag := Rectangle {

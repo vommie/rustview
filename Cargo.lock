@@ -5219,7 +5219,7 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
 name = "rustview"
-version = "0.6.3"
+version = "0.6.4"
 dependencies = [
  "arboard",
  "ashpd",
@@ -5259,6 +5259,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "trash",
+ "unicode-segmentation",
  "url",
  "x11-dl",
  "x11rb",
@@ -5266,7 +5267,7 @@ dependencies = [
 
 [[package]]
 name = "rustview-core"
-version = "0.6.3"
+version = "0.6.4"
 dependencies = [
  "atomic-write-file",
  "avif-parse",

@@ -264,6 +264,7 @@ impl UiBridge {
         window.set_tooltip_delay_ms(app_settings.appearance.tooltip_delay_ms.saturating_as::<i32>());
         type_ahead::config::apply(&app_settings.appearance);
         crate::ui::hold_confirm::install(&window, app_settings.general.hold_to_confirm_ms);
+        crate::ui::middle_elide::install(&window);
         crate::ui::hotkeys::apply(&app_settings.hotkeys);
         crate::viewer::multiview::player_prefs::apply(&app_settings.viewer.videos);
         crate::viewer::ab_repeat::prefs::apply(&app_settings.viewer.videos.ab_repeat);

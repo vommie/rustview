@@ -44,7 +44,13 @@ export component GlobalTooltipLayer inherits Rectangle {
     property <length> bubble-w: tooltip-bubble.preferred-width;
     property <length> bubble-h: Math.max(tooltip-bubble.preferred-height, wrapped.preferred-height + 2 * TooltipSettings.default-padding-v);
     property <length> bubble-x: Math.max(8px, Math.min(root.width - root.bubble-w - 8px, GlobalTooltip.pos-x));
-    property <length> bubble-y: Math.max(8px, Math.min(root.height - root.bubble-h - 8px, GlobalTooltip.pos-y));
+    // Below the element; above it when the window ends first (the control bar of a video at its bottom), so the bubble never
+    // covers the element it explains.
+    property <bool> fits-below: GlobalTooltip.pos-y + root.bubble-h + 8px <= root.height;
+    property <bool> fits-above: GlobalTooltip.top-y - root.bubble-h >= 8px;
+    property <length> bubble-y: root.fits-below || !root.fits-above
+        ? Math.max(8px, Math.min(root.height - root.bubble-h - 8px, GlobalTooltip.pos-y))
+        : GlobalTooltip.top-y - root.bubble-h;
 
     z: 200;
     background: transparent;

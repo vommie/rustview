@@ -28,6 +28,7 @@ workspace = true
 az.workspace = true
 rustview-core.workspace = true
 slint.workspace = true
+unicode-segmentation.workspace = true
 raw-window-handle.workspace = true
 libmpv2.workspace = true
 libmpv2-sys.workspace = true

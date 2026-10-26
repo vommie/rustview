@@ -7,6 +7,7 @@ import { Theme } from "styles.slint";
 import { AppIcon, IconId } from "icons.slint";
 import { HoldConfirm, HoldLogic, HoldRing } from "hold.slint";
 import { TooltipHost } from "tooltips.slint";
+import { MiddleElideText } from "middle_elide_text.slint";
 
 /// A saved repeat in the strip: shares of the progress bar and its palette color (-1: grey).
 export struct AbStripSegmentView {
@@ -47,10 +48,13 @@ component AbButton inherits Rectangle {
     in property <bool> open;
     in property <length> icon-size;
     in property <string> tip;
+    // The key badge of the tooltip ("" = none).
+    in property <string> shortcut;
     // A small number in the corner (the saved repeats of the load button; 0 = none).
     in property <int> badge;
     in property <length> pt;
     callback clicked();
+    callback right-clicked();
 
     border-radius: Math.round(5 * root.pt / 1px) * 1px;
     background: root.open ? Colors.white.with-alpha(0.16) : touch.has-hover && root.enabled ? Colors.white.with-alpha(0.10) : transparent;
@@ -84,6 +88,12 @@ component AbButton inherits Rectangle {
     // Also over a disabled button: its tooltip says why it is disabled.
     touch := TouchArea {
         mouse-cursor: root.enabled ? pointer : default;
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down && event.button == PointerEventButton.right {
+                tip-host.on-hover-leave();
+                root.right-clicked();
+            }
+        }
         clicked => {
             // A click may open a popup (or rebuild the bar): the tooltip goes first.
             tip-host.on-hover-leave();
@@ -102,16 +112,20 @@ component AbButton inherits Rectangle {
 
     tip-host := TooltipHost {
         text: root.tip;
+        shortcut: root.shortcut;
     }
 }
 
-/// The AB button: a click switches the loop of a valid A-B on or off, holding it clears A and B (hold to confirm, at least
-/// 0.6 s even when holding is switched off elsewhere).
+/// The AB button: a click switches the loop of a valid A-B on or off, a right click or holding it clears A and B (hold to
+/// confirm, at least 0.6 s even when holding is switched off elsewhere).
 component AbLoopButton inherits Rectangle {
     // 0 = no valid A-B (disabled, crossed out), 1 = can play (blue), 2 = plays (yellow).
     in property <int> look;
     in property <length> icon-size;
     in property <string> tip;
+    in property <string> shortcut;
+    // A or B is set: a right click clears them (also while the loop button is disabled).
+    in property <bool> clearable;
     in property <length> pt;
     callback clicked();
     callback held();
@@ -155,6 +169,11 @@ component AbLoopButton inherits Rectangle {
         pointer-event(event) => {
             if event.kind == PointerEventKind.down {
                 root.fired = false;
+                if event.button == PointerEventButton.right && root.clearable {
+                    root.fired = true;
+                    tip-host.on-hover-leave();
+                    root.held();
+                }
             }
         }
         clicked => {
@@ -174,6 +193,7 @@ component AbLoopButton inherits Rectangle {
 
     tip-host := TooltipHost {
         text: root.tip;
+        shortcut: root.shortcut;
         hold: root.enabled;
     }
 }
@@ -196,11 +216,15 @@ export component AbGroup inherits Rectangle {
     in property <string> loop-tip;
     in property <string> save-tip;
     in property <string> load-tip;
+    in property <string> a-key;
+    in property <string> b-key;
+    in property <string> loop-key;
+    in property <bool> clearable;
     // Where the centers of Save and Load are (the carets of their popups point there), relative to the group. A button's own `x`
     // is relative to the layout that centers it vertically, so the position of that layout counts.
     out property <length> save-center: save-slot.x + save-slot.width / 2;
     out property <length> load-center: load-slot.x + load-slot.width / 2;
-    // 0 = A, 1 = B, 2 = AB clicked, 3 = AB held, 4 = Save, 5 = Load.
+    // 0 = A, 1 = B, 2 = AB clicked, 3 = AB held or right-clicked, 4 = Save, 5 = Load, 6 = A right-clicked, 7 = B right-clicked.
     callback button(int);
 
     property <length> inset: Math.round(3 * root.pt / 1px) * 1px;
@@ -230,7 +254,9 @@ export component AbGroup inherits Rectangle {
                 icon-size: root.icon-size;
                 tint: root.point-tint(root.a-look);
                 tip: root.a-tip;
+                shortcut: root.a-key;
                 clicked => { root.button(0); }
+                right-clicked => { root.button(6); }
             }
         }
 
@@ -244,7 +270,9 @@ export component AbGroup inherits Rectangle {
                 icon-size: root.icon-size;
                 tint: root.point-tint(root.b-look);
                 tip: root.b-tip;
+                shortcut: root.b-key;
                 clicked => { root.button(1); }
+                right-clicked => { root.button(7); }
             }
         }
 
@@ -257,6 +285,8 @@ export component AbGroup inherits Rectangle {
                 look: root.loop-look;
                 icon-size: root.icon-size;
                 tip: root.loop-tip;
+                shortcut: root.loop-key;
+                clearable: root.clearable;
                 clicked => { root.button(2); }
                 held => { root.button(3); }
             }
@@ -477,6 +507,9 @@ component AbHoldButton inherits Rectangle {
     in property <length> font-size;
     callback confirmed();
 
+    // As wide as its icon and label (the layout is placed by hand for the nudge, so it does not size the button by itself).
+    min-width: content.preferred-width;
+    preferred-width: content.preferred-width;
     border-radius: Math.round(4 * root.pt / 1px) * 1px;
     clip: true;
     background: touch.has-hover ? Colors.white.with-alpha(0.08) : transparent;
@@ -492,7 +525,7 @@ component AbHoldButton inherits Rectangle {
         ring: false;
     }
 
-    HorizontalLayout {
+    content := HorizontalLayout {
         x: logic.nudge;
         padding-left: Math.round(4 * root.pt / 1px) * 1px;
         padding-right: Math.round(4 * root.pt / 1px) * 1px;
@@ -588,14 +621,12 @@ component AbMenuRow inherits Rectangle {
             vertical-alignment: center;
         }
 
-        if !root.renaming : Text {
+        if !root.renaming : MiddleElideText {
             horizontal-stretch: 1;
             min-width: Math.round(60 * root.pt / 1px) * 1px;
             text: root.entry.name;
             font-size: root.font-size;
-            color: root.entry.current ? Theme.accent : Theme.text;
-            vertical-alignment: center;
-            overflow: elide;
+            text-color: root.entry.current ? Theme.accent : Theme.text;
         }
 
         if root.renaming : VerticalLayout {
@@ -802,6 +833,7 @@ export component AbLoadMenu inherits Rectangle {
                 }
 
                 AbHoldButton {
+                    horizontal-stretch: 0;
                     pt: root.pt;
                     icon: IconId.delete;
                     label: "Delete all";

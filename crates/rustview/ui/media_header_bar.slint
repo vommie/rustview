@@ -47,13 +47,6 @@ export component MediaHeaderBar inherits Rectangle {
     callback column-resized(int /* column_index */, length /* new_width */);
     callback column-resize-finished(int /* column_index */, length /* final_width */);
 
-    // Bottom border separator line
-    Rectangle {
-        y: parent.height - 1px;
-        height: 1px;
-        background: Theme.border;
-    }
-
     // 1. DYNAMIC AUTO-WIDTH MODE (Grid View: adapts width automatically to text length)
     if root.auto-width : HorizontalLayout {
         padding-left: 6px;
@@ -404,5 +397,12 @@ export component MediaHeaderBar inherits Rectangle {
             column-resized(idx, w) => { root.column-resized(idx, w); }
             column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
         }
+    }
+
+    // Bottom border separator line, drawn above the columns: under them it showed only in the gaps between them.
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Theme.border;
     }
 }

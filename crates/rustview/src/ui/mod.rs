@@ -22,6 +22,7 @@ pub mod keymap;
 pub mod list_loader;
 pub mod log_window;
 pub mod media;
+pub mod middle_elide;
 pub mod models;
 pub mod multiview;
 pub mod open_confirmation;

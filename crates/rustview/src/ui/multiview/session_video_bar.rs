@@ -20,6 +20,7 @@ thread_local! {
 /// Hands the bar model to the window and its bar events to the session. Once, when the window is made.
 pub(super) fn bind(win: &MultiviewFullscreenWindow) {
     BARS.with(|bars| win.set_video_bars(bars.borrow().model()));
+    crate::ui::middle_elide::install(win);
     win.global::<VideoBarBus>().on_event(|key, event| {
         let tile = BARS.with(|bars| bars.borrow().tile(key));
         if let (Some(tile), Some(input)) = (tile, video_bar::input_of(event)) {

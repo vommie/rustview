@@ -10,6 +10,7 @@ use crate::viewer::ab_repeat::colors;
 use crate::viewer::ab_repeat::prefs::{AbRepeatPrefs, MenuPaging, RangeColors};
 use crate::viewer::ab_repeat::protocol::SavedRange;
 use crate::viewer::mpv_engine::ab_repeat::AbSnapshot;
+use crate::viewer::multiview::key_labels;
 use rustview_core::util::cast::Az;
 
 /// How A or B looks: not set, set while the repeat loops (yellow), set while it does not (blue).
@@ -110,6 +111,12 @@ pub struct AbBarView {
     pub a_tip: String,
     pub b_tip: String,
     pub loop_tip: String,
+    /// The keys the badges of the tooltips of A, B and AB name (Set A, Set B, Clear A and B; "" = none).
+    pub a_key: String,
+    pub b_key: String,
+    pub loop_key: String,
+    /// A right click on AB clears the points: one of them is set.
+    pub clearable: bool,
     pub save_enabled: bool,
     pub save_tip: String,
     pub load_count: usize,
@@ -163,6 +170,8 @@ pub fn view(
         }
     };
     let script = &snapshot.state;
+    let keys = key_labels::ab();
+    let clearable = script.a.is_some() || script.b.is_some();
     let list = &snapshot.ranges.list;
     let palette = match prefs.colors {
         RangeColors::Each => colors::colors(&snapshot.ranges.path, list),
@@ -218,10 +227,15 @@ pub fn view(
         a_tip: point_tip("A", "start", script.a.map(time), script.a_auto),
         b_tip: point_tip("B", "end", script.b.map(time), script.b_auto),
         loop_tip: match loop_look {
+            LoopLook::Disabled if clearable => "A-B repeat: set A and B first; right click clears them".to_owned(),
             LoopLook::Disabled => "A-B repeat: set A and B first".to_owned(),
-            LoopLook::Ready => "Play the A-B repeat (hold to clear A and B)".to_owned(),
-            LoopLook::Looping => "Stop the A-B repeat (hold to clear A and B)".to_owned(),
+            LoopLook::Ready => "Play the A-B repeat; right click (or hold) clears A and B".to_owned(),
+            LoopLook::Looping => "Stop the A-B repeat; right click (or hold) clears A and B".to_owned(),
         },
+        a_key: keys.set_a,
+        b_key: keys.set_b,
+        loop_key: if clearable { keys.clear } else { String::new() },
+        clearable,
         save_enabled: script.valid && !script.busy,
         save_tip: if script.valid {
             "Save this A-B repeat".to_owned()
@@ -273,7 +287,7 @@ fn point_tip(letter: &str, role: &str, at: Option<String>, auto: bool) -> String
     match at {
         None => format!("Set {letter} here (the {role} of the repeat)"),
         Some(at) if auto => format!("{letter} at {at}, set by the script; click to set {letter} here"),
-        Some(at) => format!("{letter} at {at}; click to set {letter} here"),
+        Some(at) => format!("{letter} at {at}; click to set {letter} here, right click clears it"),
     }
 }
 
