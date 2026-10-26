@@ -14,8 +14,6 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   mpv.conf asks for them, for example `osd-level=3`), and no key bindings of mpv or your input.conf (RustView handles every key
   and click over a video anyway). Messages of scripts, like those of ab_repeat.lua, still appear as set in Settings > Multiview.
   Your mpv.conf otherwise applies as before (languages, cache, decoding).
-
-### Changed
 - **Videos no longer ask mpv for their state 50 times a second**: every player is told by mpv when its time, pause state,
   volume, mute or picture size changes and otherwise sleeps. A paused video tab now costs about 0.3 % of a CPU core instead of
   5 %.
