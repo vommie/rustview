@@ -47,3 +47,13 @@ VM's display (VirGL), mpv's hardware decoding on Wayland and two monitors are le
 
 - 2026-10-26 (M7): list made. Found and fixed on the way: the Multiview fullscreen never opened on native Wayland (it waited
   for an X11 window id and closed itself after 40 tries); it now enters winit's borderless fullscreen (`ui/multiview/fullscreen_mode.rs`).
+- 2026-10-26 (M7, in the user's Plasma Wayland session in the VM; Claude drove the MCP build, spectacle took the shots; no pointer injection
+  tool exists there, so nothing that needs a hovering mouse or a drag was run). Native Wayland (`RUSTVIEW_WINDOW_SYSTEM=wayland`, EGL on
+  virgl): starts maximized; a video tab; the control bar (shown by the jump key); the tab's context menu over the playing video; the
+  fullscreen and back; four videos in the fullscreen; zoom with the live minimap; the tab grid with the time badge; the rename dialog (an
+  ordinary window, W2); Settings > Debug shows "Native Wayland" with the degraded features. Found: after the first open, every second
+  fullscreen was not fullscreen (the panel stayed above it; KWin dropped the request once the reused window had been hidden). Fixed: the
+  state is checked 200 ms after the request on Wayland too (winit's last configure) and asked for again; 6 of 6 opens fullscreen
+  afterwards (5 needed the second request). XWayland (no variable): tab, context menu over the video, 4 of 4 fullscreen opens (one
+  second request). Not run by Claude: copying a picture (the media context menu cannot be driven through the MCP), dragging in and out,
+  the minimap's pointer lock, fractional scaling.

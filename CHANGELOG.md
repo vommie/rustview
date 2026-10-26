@@ -90,8 +90,9 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 ### Fixed
 - **The Multiview fullscreen opens on native Wayland**: it waited for an X11 window and closed itself again; it now goes into
   Wayland's fullscreen on the monitor that is set (or the one the window opened on).
-- **The Multiview fullscreen no longer opens as a merely maximized window now and then** (with the panel visible): when the window
-  manager did not take the fullscreen state, RustView asks for it again.
+- **The Multiview fullscreen no longer opens as a merely maximized window now and then** (with the panel visible, on X11 and on
+  native Wayland, where it happened every second time): when the window manager did not take the fullscreen state, RustView asks for
+  it again.
 - **The buttons of the A-B group and of the menu of saved repeats show their tooltips** (they never appeared).
 - **The menu of saved A-B repeats and the save bubble work with the mouse**: a press inside them was taken for a press outside
   and closed them, so a click on an entry could get lost and deleting by holding never worked; a click on the video now closes
