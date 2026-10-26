@@ -10,7 +10,6 @@ use slint::ComponentHandle;
 
 pub(super) fn populate(window: &SettingsWindow, settings: &AbRepeatSettings) {
     window.set_ab_enabled(settings.enabled);
-    window.set_ab_osd_messages(settings.osd_messages);
     window.set_ab_colors_idx(i32::from(settings.colors == "grey"));
     window.set_ab_click_loads(settings.click_loads);
     window.set_ab_hover_name(settings.hover_name);
@@ -24,7 +23,6 @@ pub(super) fn populate(window: &SettingsWindow, settings: &AbRepeatSettings) {
 
 pub(super) fn save(window: &SettingsWindow, settings: &mut AbRepeatSettings) {
     settings.enabled = window.get_ab_enabled();
-    settings.osd_messages = window.get_ab_osd_messages();
     if window.get_ab_colors_idx() == 1 {
         "grey"
     } else {

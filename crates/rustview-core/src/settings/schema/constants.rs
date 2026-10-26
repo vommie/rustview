@@ -399,9 +399,6 @@ pub const MAX_VIEWER_VIDEO_JUMP_SECS: u32 = 600;
 /// Support for the mpv script `ab_repeat.lua` (Settings > Multiview, `docs/mpv_ab_repeat.md`): look for it in the players.
 pub const DEFAULT_AB_REPEAT_ENABLED: bool = true;
 
-/// Let the script show its own on-screen messages in `RustView`'s players (as in mpv; off sets `ab_repeat-osd_messages=no`).
-pub const DEFAULT_AB_REPEAT_OSD_MESSAGES: bool = true;
-
 /// The colors of saved repeats in the playbar: "each" (each its own color) or "grey" (all grey, the active A-B yellow).
 pub const DEFAULT_AB_REPEAT_COLORS: &str = "each";
 

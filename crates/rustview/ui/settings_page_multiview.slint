@@ -84,7 +84,6 @@ export component SettingsPageMultiview inherits VerticalLayout {
     in-out property <int> video-jump-long-secs: 60;
     // The mpv script ab_repeat.lua (`settings_card_ab_repeat.slint`).
     in-out property <bool> ab-enabled: true;
-    in-out property <bool> ab-osd-messages: true;
     in-out property <int> ab-colors-idx: 0;
     in-out property <bool> ab-click-loads: true;
     in-out property <bool> ab-hover-name: true;
@@ -430,7 +429,6 @@ export component SettingsPageMultiview inherits VerticalLayout {
 
     SettingsCardAbRepeat {
         enabled <=> root.ab-enabled;
-        osd-messages <=> root.ab-osd-messages;
         colors-idx <=> root.ab-colors-idx;
         click-loads <=> root.ab-click-loads;
         hover-name <=> root.ab-hover-name;

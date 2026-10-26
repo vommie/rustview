@@ -2,8 +2,8 @@
 
 use super::{
     DEFAULT_AB_REPEAT_CLICK_LOADS, DEFAULT_AB_REPEAT_COLORS, DEFAULT_AB_REPEAT_DRAG_FLAGS, DEFAULT_AB_REPEAT_ENABLED,
-    DEFAULT_AB_REPEAT_HOVER_NAME, DEFAULT_AB_REPEAT_HOVER_TIMES, DEFAULT_AB_REPEAT_MENU,
-    DEFAULT_AB_REPEAT_OSD_MESSAGES, DEFAULT_AB_REPEAT_PAGE_SIZE, MAX_AB_REPEAT_PAGE_SIZE, MIN_AB_REPEAT_PAGE_SIZE,
+    DEFAULT_AB_REPEAT_HOVER_NAME, DEFAULT_AB_REPEAT_HOVER_TIMES, DEFAULT_AB_REPEAT_MENU, DEFAULT_AB_REPEAT_PAGE_SIZE,
+    MAX_AB_REPEAT_PAGE_SIZE, MIN_AB_REPEAT_PAGE_SIZE,
 };
 use super::{
     DEFAULT_FULLSCREEN_BACKGROUND_COLOR, DEFAULT_FULLSCREEN_BACKGROUND_SOURCE, DEFAULT_FULLSCREEN_ENABLE_FALLBACK_RULE,
@@ -82,8 +82,6 @@ impl Default for ViewerVideoSettings {
 pub struct AbRepeatSettings {
     /// Look for the script in the players.
     pub enabled: bool,
-    /// Let the script show its own on-screen messages.
-    pub osd_messages: bool,
     /// "each" or "grey".
     pub colors: String,
     pub click_loads: bool,
@@ -99,7 +97,6 @@ impl Default for AbRepeatSettings {
     fn default() -> Self {
         Self {
             enabled: DEFAULT_AB_REPEAT_ENABLED,
-            osd_messages: DEFAULT_AB_REPEAT_OSD_MESSAGES,
             colors: DEFAULT_AB_REPEAT_COLORS.to_owned(),
             click_loads: DEFAULT_AB_REPEAT_CLICK_LOADS,
             hover_name: DEFAULT_AB_REPEAT_HOVER_NAME,

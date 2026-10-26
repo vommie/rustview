@@ -98,8 +98,9 @@ at the first loaded file, sends commands, forwards a saved-list change of one pl
 `AbRepeatSettings`), a check on Settings > Debug (`health::ab_repeat_check`) and the move observer of the library
 (`file_operations::set_move_observer`): a renamed or moved file whose path has saved repeats has them moved by the script
 (through a running player or a headless mpv; RustView reads the script's JSON for that check only, on that explicit action, and
-never writes it). The script's OSD texts stay as in mpv unless "Show the script's messages" is off (then
-`ab_repeat-osd_messages=no` for RustView's players). Not covered: renamed folders (their files keep their old keys) and paths
+never writes it). The script shows no OSD texts in RustView's players (user decision 2026-10-26, the control bar shows
+what happens): mpv's OSD is off (`osd-level=0`) and `ab_repeat-osd_messages=no` is appended to the players' `script-opts`; mpv
+itself is not changed. Not covered: renamed folders (their files keep their old keys) and paths
 through symbolic links (the script keys them as given).
 
 ## Checked with a compositing manager (0.5.6, 2026-10-26)

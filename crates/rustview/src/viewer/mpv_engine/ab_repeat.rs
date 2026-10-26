@@ -82,24 +82,17 @@ fn live_players() -> Vec<Live> {
         .collect()
 }
 
-/// The `script-opts` key of the script's on-screen messages (`prefs::AbRepeatPrefs::script_opt` sets it to `no`).
-const OSD_MESSAGES_KEY: &str = "ab_repeat-osd_messages";
-
 /// The listener slot of a player (`MpvPlayer::on_notice`).
 type Listener = Arc<RwLock<Option<super::MpvNoticeCallback>>>;
 
 static PLAYERS: Mutex<Vec<Registered>> = Mutex::new(Vec::new());
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
-/// The script's own on-screen messages follow Settings > Multiview: switched off, `ab_repeat-osd_messages=no` is added to the
-/// player's `script-opts`; switched on, the key is removed again (the script's own configuration decides). Other script options
-/// of the user stay as they are.
-pub(super) fn apply_script_opts(mpv: &Mpv) {
-    let result = match prefs::current().script_opt() {
-        Some(opt) => mpv.command("change-list", &["script-opts", "append", opt]),
-        None => mpv.command("change-list", &["script-opts", "remove", OSD_MESSAGES_KEY]),
-    };
-    if let Err(e) = result {
+/// The script shows no messages of its own in `RustView`'s players (user decision 2026-10-26: the control bar shows what happens):
+/// `ab_repeat-osd_messages=no` is added to the player's `script-opts`; the user's other script options stay. mpv's OSD is off
+/// anyway (`options::FORCED`), this also keeps the script from drawing when a configuration turns the OSD on again.
+pub(super) fn mute_script_messages(mpv: &Mpv) {
+    if let Err(e) = mpv.command("change-list", &["script-opts", "append", "ab_repeat-osd_messages=no"]) {
         tracing::warn!(error = ?e, "[AbRepeat: Player] The script options could not be set");
     }
 }
@@ -125,7 +118,6 @@ pub(super) fn unregister(id: u64) {
 pub fn apply_prefs() {
     let enabled = prefs::current().enabled;
     for player in live_players() {
-        apply_script_opts(&player.mpv);
         if player.ab.read().watching != enabled {
             watch(&player.mpv, &player.ab, enabled);
             player.notify(AbChange::Support);

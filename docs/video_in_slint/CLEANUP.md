@@ -54,3 +54,13 @@ presented to the user as a questionnaire; the outcome per row is at the end of t
 | 19 | later | `docs/BACKLOG.md` B3. |
 | 20 | later | `docs/BACKLOG.md` B4. |
 | 21 | later | `docs/BACKLOG.md` B5. |
+
+### The mpv check of the same questionnaire (wish), decided in `2026-10-26-rustview-mpv-einstellungen` and `2026-10-26-rustview-ab-meldungen`
+
+Found: mpv never got keys or the pointer (no window of its own; `mpv_command` shows no OSD), the OSC was forced off, but mpv
+could still draw its OSD into the video texture (script messages, and whatever a `mpv.conf` turns on, e.g. `osd-level=3`), RustView
+switched mpv's built-in bindings and the user's `input.conf` on, and six key-driven built-in scripts plus the youtube-dl hook ran in
+every player. Decided and done (0.6.2, `viewer/mpv_engine/options.rs`): no OSD at all (`osd-level=0`, also over `mpv.conf`, and
+`ab_repeat-osd_messages=no`; the switch "Show the script's messages" is gone, the control bar shows what happens), no input of mpv's
+own (no built-in or `input.conf` bindings, no keyboard, pointer, terminal or media keys), the user's `mpv.conf` stays loaded with
+its cache and everything else; an `input-ipc-server` in it stays (the test environment uses it).

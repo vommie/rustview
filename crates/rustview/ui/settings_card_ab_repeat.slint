@@ -8,7 +8,6 @@ import { TooltipArea } from "tooltips.slint";
 /// `docs/mpv_ab_repeat.md`). The longer explanations are tooltips, so the card stays short.
 export component SettingsCardAbRepeat inherits VerticalLayout {
     in-out property <bool> enabled: true;
-    in-out property <bool> osd-messages: true;
     in-out property <int> colors-idx: 0; // 0 = each its own color, 1 = all grey
     in-out property <bool> click-loads: true;
     in-out property <bool> hover-name: true;
@@ -78,13 +77,6 @@ export component SettingsCardAbRepeat inherits VerticalLayout {
                 enabled: !root.checking;
                 clicked => { root.check-again(); }
             }
-        }
-
-        SettingsSwitchRow {
-            label: "Show the script's messages in the video";
-            tooltip: "As in mpv: the script writes short texts over the video (\"A point set at ...\", \"Saved AB range ...\", the number of saved repeats when a video opens). Off: RustView switches all of them off for its players (ab_repeat-osd_messages=no); mpv itself is not changed. On: the script's own settings decide.";
-            enabled: root.on;
-            checked <=> root.osd-messages;
         }
 
         SettingsOptionRow {

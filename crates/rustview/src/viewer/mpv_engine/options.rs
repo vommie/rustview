@@ -3,7 +3,7 @@
 //! draws the control bar and its messages, and drives mpv with commands (`mpv_command` never shows mpv's OSD). The user's
 //! `mpv.conf` and scripts are loaded (the script `ab_repeat.lua` is part of the player, `docs/mpv_ab_repeat.md`); what in them
 //! would collide with `RustView`'s own interface is set back after the configuration was read (`after_init`): mpv shows nothing
-//! of its own over a video but the messages of scripts (the A-B script's follow Settings > Multiview), and takes no input
+//! over a video (no OSD at all, scripts' messages included: the control bar shows what happens) and takes no input
 //! (user decisions 2026-10-26, questionnaire `2026-10-26-rustview-mpv-einstellungen`; the cache and everything else of the
 //! user's `mpv.conf` stay as configured).
 
@@ -23,9 +23,8 @@ const UNUSED_BUILTIN_SCRIPTS: [&str; 6] = [
 
 /// What `RustView` always sets, also over the user's `mpv.conf` (set before and again after `mpv_initialize`).
 const FORCED: [(&str, &str); 12] = [
-    // mpv's own OSD: no bars, no seek or playing messages, no permanent status line (`osd-level` 2 and 3) and no fixed
-    // message (`osd-msg1`); level 1 keeps the messages scripts show (`show-text`).
-    ("osd-level", "1"),
+    // No OSD at all: no bars, no seek, playing or status messages, no messages of scripts (`show-text` needs level 1).
+    ("osd-level", "0"),
     ("osd-bar", "no"),
     ("osd-on-seek", "no"),
     ("osd-playing-msg", ""),
@@ -88,7 +87,7 @@ pub(super) fn after_init(mpv: &Mpv) {
             match mpv.set_property(name, value) {
                 Ok(()) => overridden.push(name),
                 Err(e) => {
-                    tracing::warn!(option = name, error = ?e, "[MpvPlayer: Init] mpv did not take an option back")
+                    tracing::warn!(option = name, error = ?e, "[MpvPlayer: Init] mpv did not take an option back");
                 }
             }
         }
@@ -99,5 +98,5 @@ pub(super) fn after_init(mpv: &Mpv) {
             "[MpvPlayer: Init] Options of the user's mpv configuration set back to RustView's"
         );
     }
-    ab_repeat::apply_script_opts(mpv);
+    ab_repeat::mute_script_messages(mpv);
 }

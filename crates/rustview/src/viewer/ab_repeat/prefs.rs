@@ -3,8 +3,7 @@
 use parking_lot::RwLock;
 use rustview_core::settings::schema::{
     AbRepeatSettings, DEFAULT_AB_REPEAT_CLICK_LOADS, DEFAULT_AB_REPEAT_DRAG_FLAGS, DEFAULT_AB_REPEAT_ENABLED,
-    DEFAULT_AB_REPEAT_HOVER_NAME, DEFAULT_AB_REPEAT_HOVER_TIMES, DEFAULT_AB_REPEAT_OSD_MESSAGES,
-    DEFAULT_AB_REPEAT_PAGE_SIZE,
+    DEFAULT_AB_REPEAT_HOVER_NAME, DEFAULT_AB_REPEAT_HOVER_TIMES, DEFAULT_AB_REPEAT_PAGE_SIZE,
 };
 use rustview_core::util::cast::SaturatingAs;
 
@@ -28,8 +27,6 @@ pub enum MenuPaging {
 pub struct AbRepeatPrefs {
     /// Look for the script in the players.
     pub enabled: bool,
-    /// The script shows its own on-screen messages.
-    pub osd_messages: bool,
     pub colors: RangeColors,
     pub click_loads: bool,
     pub hover_name: bool,
@@ -43,7 +40,6 @@ pub struct AbRepeatPrefs {
 impl AbRepeatPrefs {
     pub const DEFAULT: Self = Self {
         enabled: DEFAULT_AB_REPEAT_ENABLED,
-        osd_messages: DEFAULT_AB_REPEAT_OSD_MESSAGES,
         colors: RangeColors::Each,
         click_loads: DEFAULT_AB_REPEAT_CLICK_LOADS,
         hover_name: DEFAULT_AB_REPEAT_HOVER_NAME,
@@ -56,7 +52,6 @@ impl AbRepeatPrefs {
     pub fn from_settings(settings: &AbRepeatSettings) -> Self {
         Self {
             enabled: settings.enabled,
-            osd_messages: settings.osd_messages,
             colors: if settings.colors == "grey" {
                 RangeColors::Grey
             } else {
@@ -72,15 +67,6 @@ impl AbRepeatPrefs {
                 MenuPaging::Pages
             },
             page_size: settings.page_size.saturating_as::<usize>().max(1),
-        }
-    }
-
-    /// The `script-opts` entry that silences the script's messages in `RustView`'s players (`None`: its own settings apply).
-    pub const fn script_opt(self) -> Option<&'static str> {
-        if self.osd_messages {
-            None
-        } else {
-            Some("ab_repeat-osd_messages=no")
         }
     }
 }
@@ -105,11 +91,9 @@ mod tests {
     fn settings_map_to_prefs() {
         let defaults = AbRepeatPrefs::from_settings(&AbRepeatSettings::default());
         assert_eq!(defaults, AbRepeatPrefs::DEFAULT);
-        assert_eq!(defaults.script_opt(), None);
         let settings = AbRepeatSettings {
             colors: "grey".into(),
             menu: "scroll".into(),
-            osd_messages: false,
             page_size: 7,
             ..AbRepeatSettings::default()
         };
@@ -117,6 +101,5 @@ mod tests {
         assert_eq!(prefs.colors, RangeColors::Grey);
         assert_eq!(prefs.paging, MenuPaging::Scroll);
         assert_eq!(prefs.page_size, 7);
-        assert_eq!(prefs.script_opt(), Some("ab_repeat-osd_messages=no"));
     }
 }
