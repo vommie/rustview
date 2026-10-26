@@ -119,6 +119,9 @@ KWin compositing is on in the VM since 2026-10-26, so the translucent bar was ch
 | Tab and bar | no seam any more; the tab shows only with a saved repeat, A or B |
 | Without a compositor (KWin's "Suspend Compositing" for the check) | solid bar, the tab a plain rectangle over the progress bar, menu fine |
 
+Times of the A-B group (flags, menu, label) stay in whole seconds like the rest of the bar (milliseconds with the bar's own
+switch); lengths are rounded, not cut off (user decision 2026-10-26: no tenths of a second).
+
 The sync needs no timer: the player that wrote publishes `ranges` with cause `write`, its observer thread sends `reload` to every
 other player of the file, their scripts publish again (`reload_others` in `viewer/mpv_engine/ab_repeat.rs`).
 
