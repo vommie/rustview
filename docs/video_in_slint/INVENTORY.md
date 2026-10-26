@@ -171,6 +171,15 @@ from `grid_time_badges`) drawn by the canvas of the grid item (done in M4, not w
 | `src/viewer/mpv_engine/still.rs` (`still`, `raw_frame`, `to_rgb`: `screenshot-raw` through `libmpv2-sys`), `PlayerEvent::VideoStill`, `instance_video_zoom.rs` `request_still`, `on_video_still`, `VideoTile::{still_pending, still_at}`, `router.rs` arm | minimap stills on a worker thread every 2 s while it shows | **M5** draw the minimap from the video's own texture (no CPU copy); delete `still.rs` if nothing else needs it |
 | `src/viewer/multiview/instance_video_bar.rs` `collect_bar_targets` (`video_window_rect`) | the bar follows the visible part of the native window | **M2** (canvas rect), **M5** (zoomed room) |
 
+**Done in M5 (0.5.11):** every row of this section, with one change of plan. A texture of the room's size with mpv's own zoom
+(`video-zoom`/`video-pan-*`) cannot feed the minimap: it only holds the zoomed part. So mpv now always renders the whole, fitted picture
+into a texture of the picture's size (at most the video's own size) and the canvas places and scales it like a picture
+(`VideoPlacement::{plain, zoomed}`: frame = where the whole picture is drawn, clip = the medium's place or the room; `texture_size`,
+`keeps_texture` while a zoom animates; `size_video_textures`). The minimap is the same texture in small (`MinimapPicture::Video`,
+`mm-video-row`). Deleted with it: `zoom/mpv_view.rs`, `MpvPlayer::{set_view, set_subtitle_margins}`, `VideoTile::{zoom_view, placement}`,
+`still.rs` and everything of the stills. `zoom_video_by` stays as the fallback before mpv reported the size (undone when the zoom model
+arrives). The control bar lies at the bottom of the clip (the place, a lone video's is the whole view, or the room while zoomed).
+
 ## 7. Tab grid and the handover fullscreen ↔ tab (M6)
 
 | File / function | What it does today | Milestone |

@@ -204,14 +204,14 @@ also offered as a German questionnaire with a tick and a note field per item.
   media bar's zoom slider (logarithmic, marks, percentage below the bubble) too. — *Test:* each on `full_hd_h264.mp4`.
 - [ ] **M2** A zoomed video grows into the free room of its tile (a portrait video over the whole width when alone); the
   picture can be dragged; never an empty margin when it is larger than the room. — *Test:* `portrait_1080x1920.mp4` alone
-  in the fullscreen, zoom in, drag.
+  in the fullscreen, zoom in, drag. *Checked in M5: `portrait_1080x1920.mp4` alone in the fullscreen, Ctrl+Plus three times: the picture grows over the whole screen width, a drag moves it at once (Slint moves the texture; mpv is not asked), the top edge stops at the screen edge; in a Multiview of two videos the selected one grows into its column at the full height.*
 - [ ] **M3** Going from 100 % to zoomed and back shows no stale or stretched frame. — *Test:* Ctrl+wheel one notch in and
-  out several times.
+  out several times. *M5: by construction (the texture is drawn where the zoom puts the picture; a texture of the old size is only drawn softer for a moment, never in the wrong place); zoom in and Ctrl+Backspace looked right in the VM.*
 - [ ] **M4** The minimap (bottom corner) shows the whole video with the visible part marked, its picture follows the video
   (refreshed while it plays); drag in it moves the view finely (the pointer is held and hidden), middle click resets, right
-  click opens a slider bubble above it. — *Test:* each.
+  click opens a slider bubble above it. — *Test:* each. *Checked in M5: the minimap of a zoomed video (fullscreen, one and two videos, tab view) shows the video's own texture and plays along (same time code as the big picture), the visible part is framed; drag, middle and right click not run through.*
 - [ ] **M5** While zoomed, the control bar, the media bar and the focus marks stay at the right places and nothing covers
-  the minimap. — *Test:* zoom, hover the bottom, select the tile.
+  the minimap. — *Test:* zoom, hover the bottom, select the tile. *Checked in M5: two videos, the left one selected and zoomed: corner marks in the corners of its column, the control bar at the bottom of the column over the whole column width, the volume bar on the visible picture, the minimap uncovered.*
 
 ## N. Tab grid
 
