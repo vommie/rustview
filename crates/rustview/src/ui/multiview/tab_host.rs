@@ -21,7 +21,7 @@ use crate::viewer::multiview::media_actions::{BarClick, MediaActionId};
 use crate::viewer::multiview::primary_actions::PrimaryActionId;
 use crate::viewer::multiview::route::{HostMode, OriginKind, RoutedEvent, UiAction, route};
 use crate::viewer::video_surface::MAIN_WINDOW;
-use crate::viewer::{PointerProbe, ViewerTabManager, get_slint_window_xid};
+use crate::viewer::{ViewerTabManager, get_slint_window_xid};
 use rustview_core::library::models::MediaId;
 use rustview_core::settings::schema::MULTIVIEW_TICK_MS;
 use rustview_core::util::cast::SaturatingAs;
@@ -37,7 +37,10 @@ struct TabHost {
     handle: Option<MultiviewHandle>,
     instance: WeakInstance,
     main_xid: u64,
-    probe: Option<PointerProbe>,
+    /// The pointer over the main window (window coordinates), from its pointer events; `None` outside it.
+    pointer: Option<(i32, i32)>,
+    /// Brings the bars in line with the pointer once per turn of the event loop, however many movements arrived in it.
+    pointer_sync: Timer,
     models: ViewModels,
     images: ImageCache,
     /// Instance id and revision that the bus shows right now.
@@ -115,6 +118,7 @@ pub fn bind(window: &MainWindow, handle: MultiviewHandle) {
         bus.set_gutters(ModelRc::from(h.models.gutters.clone()));
     });
     super::tab_video_bar::bind(window);
+    super::pointer_events::install(window.window(), on_pointer);
     bus.on_gutter_drag_started(|index| act(|mv| mv.drag_started(index.max(0).saturating_as::<usize>())));
     bus.on_gutter_dragged(|_, distance| act(|mv| mv.dragged(distance)));
     bus.on_gutter_drag_finished(|_| act(MultiviewInstance::drag_finished));
@@ -414,20 +418,9 @@ pub fn sync(window: &MainWindow, instance: &SharedInstance) {
         h.window = Some(window.as_weak());
         h.instance = Arc::downgrade(instance);
         h.main_xid = main_xid;
-        if h.probe.is_none() {
-            h.probe = PointerProbe::new()
-                .map_err(
-                    |e| tracing::warn!(error = %e, "[Multiview: TabView] No pointer probe; the hover bar is disabled"),
-                )
-                .ok();
-        }
-        if h.probe.is_some() {
-            if !h.tick.running() {
-                h.tick
-                    .start(TimerMode::Repeated, Duration::from_millis(MULTIVIEW_TICK_MS), on_tick);
-            }
-        } else {
-            h.tick.stop();
+        if !h.tick.running() {
+            h.tick
+                .start(TimerMode::Repeated, Duration::from_millis(MULTIVIEW_TICK_MS), on_tick);
         }
     });
     refresh();
@@ -454,6 +447,7 @@ pub fn suspend() {
     }
     let released = with_host(|h| {
         h.tick.stop();
+        h.pointer_sync.stop();
         h.glide.stop();
         h.feedback.stop();
         h.instance = WeakInstance::new();
@@ -469,11 +463,10 @@ pub fn suspend() {
     }
 }
 
-/// The application exits: the host lets go of the instance, its timer and its connection to the X server.
+/// The application exits: the host lets go of the instance and its timers.
 pub fn shutdown() {
     suspend();
     with_host(|h| {
-        h.probe = None;
         h.window = None;
         h.handle = None;
     });
@@ -546,18 +539,31 @@ fn manage_glide(animating: bool) {
 }
 
 fn on_tick() {
-    let Some((instance, pointer)) = with_host(|h| {
-        let instance = h.instance.upgrade()?;
-        let pointer = h.probe.as_ref().and_then(|p| p.position_in(h.main_xid));
-        Some((instance, pointer))
+    let Some((instance, pointer)) = with_host(|h| Some((h.instance.upgrade()?, h.pointer))).flatten() else {
+        return;
+    };
+    instance.lock().tick(pointer);
+    drop(instance);
+    refresh();
+    update_bar_overlay();
+}
+
+/// The pointer moved over the main window or left it: the bars of the tab view follow on this turn of the event loop.
+fn on_pointer(pointer: Option<(i32, i32)>) {
+    let Some(instance) = with_host(|h| {
+        h.pointer = pointer;
+        h.instance.upgrade()
     })
     .flatten() else {
         return;
     };
-    instance.lock().tick(|| pointer);
-    drop(instance);
-    refresh();
-    update_bar_overlay();
+    instance.lock().pointer_moved(pointer);
+    with_host(|h| {
+        if !h.pointer_sync.running() {
+            h.pointer_sync
+                .start(TimerMode::SingleShot, Duration::ZERO, update_bar_overlay);
+        }
+    });
 }
 
 /// The medium an F2 rename acts on in the active tab: its selected medium (the hint shows when several are shown and none is).

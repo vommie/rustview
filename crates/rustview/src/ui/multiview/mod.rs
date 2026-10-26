@@ -16,6 +16,7 @@ pub mod handle;
 mod handle_edit;
 pub mod hint;
 mod navigation;
+mod pointer_events;
 mod pointer_lock;
 mod rating;
 mod router;

@@ -1,10 +1,9 @@
 //! Instance behavior around the pointer: the 50 ms tick, which tile is hovered, which tile the hover bar belongs to and
 //! the runtime correction of aspect ratios reported by mpv.
 //!
-//! mpv swallows the pointer events over a video, so the hovered tile is found by asking the X server for the pointer and
-//! testing it against the tile layout. The bar is a window of its own that the host places and reveals; the instance only
-//! says which tile it belongs to (the hovered one) and hands over what the host needs to decide whether the pointer is
-//! close enough to the bar.
+//! The host hands in the pointer from the pointer events of its window (`ui::multiview::pointer_events`), in window
+//! coordinates; the hovered tile is found by testing it against the tile layout. The action bars are drawn by the canvas; the
+//! instance says which bars show (the tile under the pointer near the corner of the bar, plus the bars that stay) and where.
 
 use super::bar_placement::{BarCorner, near_bar_corner};
 use super::follow::TileKey;
@@ -16,12 +15,12 @@ use super::view::MediaBarTarget;
 use std::time::Instant;
 
 impl MultiviewInstance {
-    /// Runs every tick while the Multiview is shown. `pointer` is asked for only when there is something to do; it returns
-    /// the pointer position in the coordinates of the host window. Sound changes inside mpv and aspect probing only
-    /// matter for videos.
-    pub fn tick(&mut self, pointer: impl FnOnce() -> Option<(i32, i32)>) {
+    /// Runs every tick while the Multiview is shown. `pointer` is the last pointer position the host saw over its window
+    /// (window coordinates, `None` outside it); the hovered tile is found again, the layout may have changed. Sound changes
+    /// inside mpv and aspect probing only matter for videos.
+    pub fn tick(&mut self, pointer: Option<(i32, i32)>) {
         self.ticks = self.ticks.wrapping_add(1);
-        self.poll_pointer(pointer());
+        self.pointer_moved(pointer);
         self.poll_zoom();
         self.poll_mark_reveal(Instant::now());
         if !self.has_video() {
@@ -51,7 +50,8 @@ impl MultiviewInstance {
         self.layout.tile_at(cx, cy)
     }
 
-    fn poll_pointer(&mut self, pointer: Option<(i32, i32)>) {
+    /// The pointer moved over the host window, or left it (`None`); window coordinates (physical pixels).
+    pub fn pointer_moved(&mut self, pointer: Option<(i32, i32)>) {
         if pointer != self.pointer || self.last_move.is_none() {
             self.last_move = Some(Instant::now());
         }

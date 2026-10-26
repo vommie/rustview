@@ -1,7 +1,7 @@
 //! The running fullscreen Multiview: one persistent Slint window plus the session state, both living on the UI thread.
 //!
 //! The Multiview itself (tiles, arrangement, sound, interaction) is a `MultiviewInstance`; the session is its presenter in
-//! the fullscreen window: it owns the Slint window and models, the timers and the pointer probe, and syncs the models
+//! the fullscreen window: it owns the Slint window and models, the timers and the last pointer position, and syncs the models
 //! whenever the instance changed. Every event (Slint callback, timer, finished image decode) goes through [`run`] /
 //! [`with_session`], which serialize access to the thread-local session and skip re-entrant calls instead of panicking.
 //! Input handling lives in `session_input`; this file owns the lifecycle: open, close, window wiring.
@@ -22,8 +22,8 @@ use crate::viewer::multiview::command::{MultiviewCommand, ZoomKey};
 use crate::viewer::multiview::instance::{MultiviewInstance, SharedInstance};
 use crate::viewer::multiview::route::UiAction;
 use crate::viewer::video_surface::FULLSCREEN_WINDOW;
-use crate::viewer::{PointerProbe, force_x11_fullscreen_on_monitor, get_raw_window_xid};
 use crate::viewer::{TabId, ViewerTabManager};
+use crate::viewer::{force_x11_fullscreen_on_monitor, get_raw_window_xid};
 use parking_lot::RwLock;
 use rustview_core::settings::SettingsManager;
 use rustview_core::settings::schema::{
@@ -73,7 +73,10 @@ pub(super) struct Session {
     pub(super) fs_xid: u64,
     pub(super) instance: SharedInstance,
     pub(super) tab_return: Option<TabReturn>,
-    pub(super) probe: Option<PointerProbe>,
+    /// The pointer over the window (window coordinates), from its pointer events; `None` outside it.
+    pub(super) pointer: Option<(i32, i32)>,
+    /// Brings the bars in line with the pointer once per turn of the event loop, however many movements arrived in it.
+    pub(super) pointer_sync: Timer,
     pub(super) models: ViewModels,
     /// What a click on a button of the action bar window does (the window is shared with the viewer tab host).
     pub(super) bar_click: Rc<dyn Fn(i32, i32)>,
@@ -206,6 +209,7 @@ fn create_window() -> Result<MultiviewFullscreenWindow, slint::PlatformError> {
     super::video_host::register(&win, FULLSCREEN_WINDOW, MultiviewFullscreenWindow::set_video_frames);
     super::video_host::install_notifier(&win, FULLSCREEN_WINDOW);
     super::session_video_bar::bind(&win);
+    super::pointer_events::install(win.window(), |pointer| with_session(|s| s.on_pointer(pointer)));
     win.on_request_close(|| {
         close_by_user();
     });
@@ -580,7 +584,8 @@ impl Session {
             fs_xid: 0,
             instance,
             tab_return,
-            probe: None,
+            pointer: None,
+            pointer_sync: Timer::default(),
             models: ViewModels::default(),
             bar_click: Rc::new(|tile, action| run(|s| s.on_action(tile, action))),
             primary_click: Rc::new(|_, action| run(|s| s.on_primary_action(action))),
@@ -616,13 +621,6 @@ impl Session {
             }
         }
 
-        self.probe = match PointerProbe::new() {
-            Ok(probe) => Some(probe),
-            Err(e) => {
-                tracing::warn!(error = %e, "[Multiview: Hover] No pointer probe; the hover bar is disabled");
-                None
-            }
-        };
         self.populated = true;
         self.refresh();
         if let Some(win) = self.window.upgrade() {
@@ -683,6 +681,7 @@ impl Session {
     pub(super) fn shutdown(mut self) {
         self.debounce.stop();
         self.tick.stop();
+        self.pointer_sync.stop();
         self.glide.stop();
         self.feedback_timer.stop();
         self.instance.lock().clear_feedback();

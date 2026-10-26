@@ -5,10 +5,8 @@ use super::bar_hosting::{self, BarHost, BarTargets};
 use super::bar_overlay::{self, BarKind, BarOwner};
 use super::cursor;
 use super::eligibility;
-use super::session::Session;
-use crate::system::MonitorInfo;
+use super::session::{Session, with_session};
 use crate::ui::MultiviewFullscreenWindow;
-use crate::viewer::PointerProbe;
 use crate::viewer::multiview::HostSurface;
 use crate::viewer::multiview::click::ClickKind;
 use crate::viewer::multiview::command::MultiviewCommand;
@@ -19,13 +17,8 @@ use crate::viewer::multiview::tile::TileSeed;
 use crate::viewer::video_surface::FULLSCREEN_WINDOW;
 use rustview_core::library::models::MediaId;
 use rustview_core::util::cast::SaturatingAs;
-use slint::ComponentHandle;
-
-/// The pointer in the coordinates of the fullscreen window, which covers its monitor.
-fn pointer_in_window(probe: Option<&PointerProbe>, monitor: &MonitorInfo) -> Option<(i32, i32)> {
-    let (root_x, root_y) = probe?.position()?;
-    Some((root_x - monitor.x, root_y - monitor.y))
-}
+use slint::{ComponentHandle, TimerMode};
+use std::time::Duration;
 
 impl Session {
     /// The fullscreen window as host rectangle, or `None` when the window is gone.
@@ -54,10 +47,23 @@ impl Session {
     }
 
     pub(super) fn on_tick(&mut self) {
-        let (probe, monitor) = (self.probe.as_ref(), &self.monitor);
-        self.instance.lock().tick(|| pointer_in_window(probe, monitor));
+        self.instance.lock().tick(self.pointer);
         self.refresh();
         self.update_bar_overlay();
+    }
+
+    /// The pointer moved over the window or left it: the bars follow on this turn of the event loop.
+    pub(super) fn on_pointer(&mut self, pointer: Option<(i32, i32)>) {
+        self.pointer = pointer;
+        if !self.populated {
+            return;
+        }
+        self.instance.lock().pointer_moved(pointer);
+        if !self.pointer_sync.running() {
+            self.pointer_sync.start(TimerMode::SingleShot, Duration::ZERO, || {
+                with_session(Session::update_bar_overlay)
+            });
+        }
     }
 
     pub(super) fn drag_started(&mut self, index: usize) {
