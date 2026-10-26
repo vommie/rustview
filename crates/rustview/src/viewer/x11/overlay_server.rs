@@ -2,8 +2,8 @@
 //! whether a compositing manager blends windows, where a window is on the screen, stacking and the input and bounding
 //! shape of the overlay. Everything here is a single round trip; nothing touches the drive.
 
+use super::rectangle::{XRectangle, protocol_rectangles};
 use super::session::{Session, x11_error};
-use super::subwindow::{XRectangle, protocol_rectangles};
 use crate::viewer::ViewerError;
 use std::sync::atomic::{AtomicBool, Ordering};
 use x11rb::protocol::shape::{self, ConnectionExt as _};

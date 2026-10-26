@@ -17,6 +17,8 @@ export component TabGridView inherits Rectangle {
     clip: true;
 
     in property <[TabGridItemModel]> items: [];
+    /// The newest picture of every video of the main window (the rows the video tiles of the items name).
+    in property <[image]> video-frames;
     /// The tab that is shown in the fullscreen window (-1 = none): its video is not in its item right now.
     in property <int> away-tab-id: -1;
     in property <length> total-content-height: 0px;
@@ -115,6 +117,7 @@ export component TabGridView inherits Rectangle {
 
                     for tab-item in root.items : TabGridItemView {
                         item: tab-item;
+                        video-frames: root.video-frames;
                         away: root.away-tab-id == tab-item.id;
                         padding-h: root.item-p-h;
                         padding-v: root.item-p-v;

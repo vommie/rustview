@@ -216,13 +216,9 @@ impl MultiviewInstance {
                 .is_some_and(|at| at.elapsed() >= Duration::from_millis(u64::from(prefs.idle_cursor_ms)))
     }
 
-    /// Hides or shows the mouse cursor over the video windows (the Slint window part is the host's); also for videos that
-    /// start later. mpv is not asked: whatever it does with its own cursor, ours is on the windows around it.
+    /// Records whether the host hides the mouse cursor over the Multiview (the host's Slint window does it, videos included).
     pub fn set_cursor_hidden(&mut self, hidden: bool) {
         self.cursor_hidden = hidden;
-        for video in self.tiles.iter_mut().filter_map(|t| t.video.as_mut()) {
-            video.window.set_cursor_hidden(hidden);
-        }
         // The marks of the selected medium may go and come with the cursor.
         self.marks_visibility_changed();
     }

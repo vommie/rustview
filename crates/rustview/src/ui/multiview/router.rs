@@ -1,18 +1,17 @@
 //! Turns player events into UI actions.
 //!
-//! mpv observer threads and decode workers post `PlayerEvent`s together with a weak reference to their instance. The sink
-//! hops to the UI thread, and `route` (a pure table) decides from the current host of the instance what the event means.
-//! A dead weak reference means the Multiview is gone, so the event is dropped.
+//! mpv observer threads and decode workers post `PlayerEvent`s together with a weak reference to their instance; the sink hops to
+//! the UI thread and hands them to the instance. A dead weak reference means the Multiview is gone, so the event is dropped.
+//! `execute` carries out the `UiAction`s the hosts decide (`route`, a pure table, for clicks on the canvas).
 
 use super::handle::MultiviewHandle;
 use super::session::{self, Session};
 use super::session_convert;
 use super::tab_host;
-use crate::viewer::multiview::click::ClickKind;
 use crate::viewer::multiview::events::{MultiviewEventSink, PlayerEvent};
 use crate::viewer::multiview::instance::WeakInstance;
 use crate::viewer::multiview::media_actions::MediaActionId;
-use crate::viewer::multiview::route::{HostMode, RoutedEvent, UiAction, route};
+use crate::viewer::multiview::route::{HostMode, UiAction};
 
 pub(super) struct UiEventSink {
     handle: MultiviewHandle,
@@ -35,116 +34,22 @@ fn route_event(handle: &MultiviewHandle, weak: &WeakInstance, event: PlayerEvent
     let Some(instance) = weak.upgrade() else {
         return;
     };
-    let (routed, click) = match event {
-        PlayerEvent::ImageDecoded { tile, result, source } => {
-            let mode = {
-                let mut guard = instance.lock();
-                guard.on_image_loaded(tile, result, source);
-                guard.host_mode()
-            };
-            drop(instance);
-            refresh_host(handle, mode);
-            return;
+    let mode = {
+        let mut guard = instance.lock();
+        match event {
+            PlayerEvent::ImageDecoded { tile, result, source } => guard.on_image_loaded(tile, result, source),
+            PlayerEvent::EditPreview { tile, revision, result } => guard.on_edit_preview(tile, revision, result),
+            PlayerEvent::ZoomSource { tile, result } => guard.on_zoom_source(tile, result),
+            PlayerEvent::VideoStill { tile, result } => guard.on_video_still(tile, result),
+            PlayerEvent::ZoomRendered { tile, done } => guard.on_zoom_rendered(tile, done),
+            PlayerEvent::MuteChanged { tile, muted } => guard.on_player_mute_changed(tile, muted),
+            PlayerEvent::AbRepeat { tile, change } => guard.on_ab_repeat_changed(tile, change),
+            PlayerEvent::PauseChanged { tile, paused } => guard.on_player_pause_changed(tile, paused),
         }
-        PlayerEvent::EditPreview { tile, revision, result } => {
-            let mode = {
-                let mut guard = instance.lock();
-                guard.on_edit_preview(tile, revision, result);
-                guard.host_mode()
-            };
-            drop(instance);
-            refresh_host(handle, mode);
-            return;
-        }
-        PlayerEvent::ZoomSource { tile, result } => {
-            let mode = {
-                let mut guard = instance.lock();
-                guard.on_zoom_source(tile, result);
-                guard.host_mode()
-            };
-            drop(instance);
-            refresh_host(handle, mode);
-            return;
-        }
-        PlayerEvent::VideoStill { tile, result } => {
-            let mode = {
-                let mut guard = instance.lock();
-                guard.on_video_still(tile, result);
-                guard.host_mode()
-            };
-            drop(instance);
-            refresh_host(handle, mode);
-            return;
-        }
-        PlayerEvent::ZoomRendered { tile, done } => {
-            let mode = {
-                let mut guard = instance.lock();
-                guard.on_zoom_rendered(tile, done);
-                guard.host_mode()
-            };
-            drop(instance);
-            refresh_host(handle, mode);
-            return;
-        }
-        PlayerEvent::MuteChanged { tile, muted } => {
-            let mode = {
-                let mut guard = instance.lock();
-                guard.on_player_mute_changed(tile, muted);
-                guard.host_mode()
-            };
-            drop(instance);
-            refresh_host(handle, mode);
-            return;
-        }
-        PlayerEvent::AbRepeat { tile, change } => {
-            let mode = {
-                let mut guard = instance.lock();
-                guard.on_ab_repeat_changed(tile, change);
-                guard.host_mode()
-            };
-            drop(instance);
-            refresh_host(handle, mode);
-            return;
-        }
-        PlayerEvent::PauseChanged { tile, paused } => {
-            let mode = {
-                let mut guard = instance.lock();
-                guard.on_player_pause_changed(tile, paused);
-                guard.host_mode()
-            };
-            drop(instance);
-            refresh_host(handle, mode);
-            return;
-        }
-        PlayerEvent::ToggleFullscreen => (RoutedEvent::ToggleFullscreen, ClickKind::None),
-        // A plain click on a video selects its tile (Slint never sees clicks on the native window).
-        PlayerEvent::Clicked(tile) => {
-            super::bar_overlay::close_menu(super::bar_overlay::BarKind::Media);
-            let mode = {
-                let mut guard = instance.lock();
-                guard.close_ab_popups();
-                guard.select_tile(tile);
-                guard.host_mode()
-            };
-            drop(instance);
-            refresh_host(handle, mode);
-            return;
-        }
-        PlayerEvent::CtrlClick => {
-            let click = instance.lock().register_click(true);
-            (RoutedEvent::CtrlClick, click)
-        }
-    };
-    let (mode, origin, instance_id) = {
-        let guard = instance.lock();
-        (guard.host_mode(), guard.origin(), guard.id())
+        guard.host_mode()
     };
     drop(instance);
-    let action = route(mode, origin, routed, click);
-    if click == ClickKind::CtrlDouble && action != UiAction::None {
-        tracing::info!(?action, "[Multiview: Click] Ctrl+double click on a video");
-    }
-    execute(action, handle, Some(instance_id));
+    refresh_host(handle, mode);
 }
 
 /// Shows the changed state of an instance in the host that presents it.

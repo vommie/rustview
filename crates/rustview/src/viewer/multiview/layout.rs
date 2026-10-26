@@ -47,7 +47,7 @@ pub struct LayoutParams {
 pub struct TileLayout {
     /// Space reserved for the tile (full row height, column width).
     pub column: Rect,
-    /// The fitted medium inside the column; this is also the rectangle of the X11 video window.
+    /// The fitted medium inside the column (where a video shows when it is not zoomed).
     pub content: Rect,
 }
 

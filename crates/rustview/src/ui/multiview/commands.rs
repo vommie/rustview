@@ -1,6 +1,6 @@
 //! The keys of a Multiview that act on one medium, on the UI side (UI thread only).
 //!
-//! Every key source (the fullscreen window, the main window for the tab view, the messages of the video windows) runs its key as a
+//! Every key source (the fullscreen window, the main window for the tab view, the bar windows) runs its key as a
 //! `MultiviewCommand` on the instance: the target is the selected medium (`instance_commands`), a refusal shows the hint with
 //! its reason, and what the application still has to do (a dialog, saving) is handed back to the caller, which carries it out
 //! without holding any session borrow.

@@ -75,6 +75,9 @@ export component MainWindow inherits Window {
     min-height: 600px;
     background: Theme.background;
 
+    // The newest picture of every video drawn in this window (tab view and tab grid; `video_surface::hosts`).
+    in property <[image]> video-frames;
+
     // Global Operation State Properties (Single Refreshment Guarantee)
     in-out property <bool> is-system-busy: false;
 
@@ -321,8 +324,6 @@ export component MainWindow inherits Window {
     in-out property <bool> info-is-collapsed: false;
     callback info-collapsed-toggled(bool);
 
-    callback global-tooltip-state-changed(bool /* is_visible */, length /* x */, length /* y */, length /* width */, length /* height */);
-
     callback refresh-folder();
     callback regenerate-thumbs-clicked();
     callback new-folder-clicked();
@@ -380,10 +381,10 @@ export component MainWindow inherits Window {
     callback refresh-medium(int /* media id */);
     // The first key of the tab view's refresh (Settings > Hotkeys), for the tooltip of the toolbar's refresh button.
     in property <string> viewer-refresh-key-label;
-    // The area of the viewer tab that a Multiview fills changed (size or position); Rust places the native video windows.
+    // The area of the viewer tab that a Multiview fills changed (size or position); Rust lays the Multiview out again.
     callback multiview-viewport-changed();
 
-    /// The area of the Multiview canvas in the window (logical pixels), read by Rust to place the native video windows.
+    /// The area of the Multiview canvas in the window (logical pixels), read by Rust to lay the Multiview out.
     public pure function multiview-viewport() -> MultiviewScreenView {
         return {
             x: multiview-viewer.absolute-position.x,
@@ -997,6 +998,7 @@ export component MainWindow inherits Window {
                         visible: root.active-view-mode == 1;
                         tiles: MultiviewTabBus.tiles;
                         gutters: MultiviewTabBus.gutters;
+                        video-frames: root.video-frames;
                         screen: MultiviewTabBus.screen;
                         background-mode: root.viewer-background-mode;
                         outer-color: #000000;
@@ -1034,6 +1036,7 @@ export component MainWindow inherits Window {
                     tab-grid-view := TabGridView {
                         visible: root.active-view-mode == 2;
                         items: root.tab-grid-items;
+                        video-frames: root.video-frames;
                         away-tab-id: root.fullscreen-tab-id;
                         total-content-height: root.tab-grid-content-height;
                         columns <=> root.tab-grid-columns;
@@ -1178,10 +1181,6 @@ export component MainWindow inherits Window {
         y: 0px;
         width: 100%;
         height: 100%;
-
-        state-changed(is-visible, x, y, w, h) => {
-            root.global-tooltip-state-changed(is-visible, x, y, w, h);
-        }
     }
 
     if root.is-modal-locked || root.is-fullscreen-locked : Rectangle {

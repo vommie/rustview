@@ -26,6 +26,7 @@ mod session_keys;
 mod session_video_bar;
 pub mod tab_host;
 pub mod video_bar;
+pub mod video_host;
 mod views;
 
 pub use eligibility::OpenSummary;

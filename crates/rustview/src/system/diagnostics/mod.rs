@@ -1,5 +1,5 @@
 //! The checks of Settings > Debug and `rustview check` (`docs/debug_page.md`): what only the app knows (the window system, the
-//! X server, the GL renderer, mpv's GPU context) plus the collectors of `rustview_core::diagnostics`.
+//! X server, the GL renderer, how videos are drawn) plus the collectors of `rustview_core::diagnostics`.
 
 pub mod graphics;
 
@@ -47,7 +47,7 @@ pub fn window_system_facts() -> (WindowSystemKind, Option<String>) {
     }
 }
 
-/// What is known about the display (inside the app: also the GL renderer and mpv's GPU context).
+/// What is known about the display (inside the app: also the GL renderer and how videos are drawn).
 pub fn display_facts(in_app: bool) -> DisplayFacts {
     let (window_system, wayland_reason) = window_system_facts();
     let gl = graphics::gl_info();
@@ -56,7 +56,7 @@ pub fn display_facts(in_app: bool) -> DisplayFacts {
         wayland_reason,
         gl_renderer: gl.map(|info| info.renderer.clone()),
         gl_version: gl.map(|info| info.version.clone()),
-        mpv_context: graphics::mpv_context(),
+        video_path: graphics::video_path(),
         in_app,
         ab_repeat: ab_repeat_facts(),
     }

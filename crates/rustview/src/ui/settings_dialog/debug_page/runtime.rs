@@ -125,7 +125,7 @@ pub fn rows(inputs: &RuntimeInputs) -> Vec<(String, String)> {
         || "not known yet".to_owned(),
         |info| format!("{}, {}", info.renderer, health::gl_version_text(&info.version)),
     );
-    let context = graphics::mpv_context().map_or_else(String::new, |c| format!(", draw with {c}"));
+    let context = graphics::video_path().map_or_else(String::new, |c| format!(", videos: {c}"));
     vec![
         ("Version".to_owned(), format!("{} ({build})", env!("CARGO_PKG_VERSION"))),
         (

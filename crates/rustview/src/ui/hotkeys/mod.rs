@@ -1,8 +1,8 @@
 //! Key presses -> actions of the keymap (`ui::keymap`, `docs/hotkeys.md`).
 //!
 //! The windows keep their fixed handling in Slint (dialog locks, popups, Esc, type-ahead find) and hand every other key press
-//! to Rust: the main window through [`main_window`], the fullscreen window through `ui::multiview::session_keys`. mpv takes no
-//! keys (`input-vo-keyboard=no`), so a key pressed over a video reaches the window under it like any other. This module keeps
+//! to Rust: the main window through [`main_window`], the fullscreen window through `ui::multiview::session_keys`. mpv has no window
+//! of its own (videos are drawn by the Slint windows), so a key pressed over a video reaches the window like any other. This module keeps
 //! the one keymap of the application: it is built from `settings.json` at startup and when the settings change.
 
 pub mod main_window;
@@ -20,7 +20,7 @@ pub fn keymap() -> Arc<Keymap> {
     KEYMAP.read().clone()
 }
 
-/// Builds the keymap from the stored `hotkeys` table (repairs are logged) and gives the video windows their keys.
+/// Builds the keymap from the stored `hotkeys` table (repairs are logged) and gives the labels of the media bar their keys.
 pub fn apply(stored: &BTreeMap<String, serde_json::Value>) {
     let (keymap, notes) = Keymap::from_table(&table_from_json(stored));
     for note in &notes {

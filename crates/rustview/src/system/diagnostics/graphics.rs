@@ -1,5 +1,5 @@
 //! The OpenGL renderer the windows of `RustView` draw with, read once when the main window sets up its rendering (one call
-//! into the GL driver, no drive access), and mpv's GPU context of the last video.
+//! into the GL driver, no drive access), and how videos are drawn (mpv's render API in the share group of a window).
 
 use parking_lot::Mutex;
 use std::ffi::{CStr, c_void};
@@ -13,7 +13,7 @@ pub struct GlInfo {
 }
 
 static GL_INFO: OnceLock<GlInfo> = OnceLock::new();
-static MPV_CONTEXT: Mutex<Option<String>> = Mutex::new(None);
+static VIDEO_PATH: Mutex<Option<String>> = Mutex::new(None);
 
 const GL_RENDERER: u32 = 0x1F01;
 const GL_VERSION: u32 = 0x1F02;
@@ -57,16 +57,16 @@ pub fn gl_info() -> Option<&'static GlInfo> {
     GL_INFO.get()
 }
 
-/// Remembers the GPU context mpv chose for a video (`current-gpu-context`).
-pub fn record_mpv_context(context: &str) {
-    let mut last = MPV_CONTEXT.lock();
-    if last.as_deref() != Some(context) {
-        tracing::info!(context, "[SystemDiagnostics: Graphics] mpv draws with this GPU context");
-        *last = Some(context.to_owned());
+/// Remembers how videos are drawn ("mpv's render API, GLX", plus the decoder when the self-test found it).
+pub fn record_video_path(path: &str) {
+    let mut last = VIDEO_PATH.lock();
+    if last.as_deref() != Some(path) {
+        tracing::info!(path, "[SystemDiagnostics: Graphics] Videos are drawn this way");
+        *last = Some(path.to_owned());
     }
 }
 
-/// mpv's GPU context of the last video (`None` = no video was shown yet).
-pub fn mpv_context() -> Option<String> {
-    MPV_CONTEXT.lock().clone()
+/// How videos are drawn (`None` = no window could draw them yet).
+pub fn video_path() -> Option<String> {
+    VIDEO_PATH.lock().clone()
 }

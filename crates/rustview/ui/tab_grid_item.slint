@@ -5,9 +5,12 @@ import { MultiviewCanvas } from "multiview_canvas.slint";
 import { AwayBadge } from "fullscreen_away.slint";
 
 /// Standalone Masonry Tile item for the TabGridView.
-/// Displays live loaded image buffers or solid video subwindow placeholders with full aspect ratio preservation.
+/// Shows the Multiview of the tab as a miniature (images and the textures of its videos), or a placeholder while its videos play
+/// in the fullscreen window.
 export component TabGridItemView inherits Rectangle {
     in property <TabGridItemModel> item;
+    /// The newest picture of every video of the main window (the rows the video tiles of the item name).
+    in property <[image]> video-frames;
     in property <length> padding-h: 8px;
     in property <length> padding-v: 6px;
     in property <length> border-width-val: 1px;
@@ -218,6 +221,7 @@ export component TabGridItemView inherits Rectangle {
                 interactive: false;
                 tiles: root.item.mv-tiles;
                 gutters: root.item.mv-gutters;
+                video-frames: root.video-frames;
                 screen: root.item.mv-screen;
                 background-mode: root.background-mode;
                 outer-color: #000000;
@@ -237,9 +241,7 @@ export component TabGridItemView inherits Rectangle {
                 }
             }
 
-            // Video Viewport Area: Solid black background ensures Slint's canvas is 100% opaque.
-            // When XShape cutouts punch through the MPV window, Slint's opaque background and menus are revealed,
-            // guaranteeing the desktop never shines through.
+            // A single video whose player is in the fullscreen window.
             if root.item.is-video && root.item.error-message == "" && root.away : AwayBadge {
                 width: 100%;
                 height: 100%;

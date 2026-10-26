@@ -23,8 +23,6 @@ impl MultiviewInstance {
         now: Instant,
     ) -> Vec<VideoBarTarget> {
         self.pointer = pointer;
-        // A video that started in the grid (its tab was never shown) lets the pointer through like the others.
-        self.apply_pointer_passthrough();
         let allowed = self.host.surface.mode == HostMode::TabGrid && !self.host.modal_locked && !self.host.menu_open;
         let scale = self.host.surface.dpi.max(0.5);
         let clip = self.host.surface.clip;

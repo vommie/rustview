@@ -1,8 +1,8 @@
 //! The rating keys of the main window (Settings > Hotkeys; Ctrl+0 for no rating to Ctrl+5 by default).
 //!
 //! The Browse view rates the selected media (never folder rows), a viewer tab rates the selected medium of its Multiview, and
-//! while a fullscreen Multiview is open the keys belong to it. The keys of the fullscreen window and of the video windows
-//! arrive through `ui::multiview::rating`; every path ends in `BridgeTags::apply_rating_to_ids`, the one that the Tag & Rate
+//! while a fullscreen Multiview is open the keys belong to it. The keys of the fullscreen window arrive through
+//! `ui::multiview::rating`; every path ends in `BridgeTags::apply_rating_to_ids`, the one that the Tag & Rate
 //! panel and the context menu use. Which key is a rating key, and key repeat, are decided by the keymap (`ui::hotkeys`).
 
 mod targets;

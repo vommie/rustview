@@ -77,6 +77,10 @@ rust-ini = "0.21"
 # The X11 protocol in pure Rust (video windows, overlay windows, window manager state); x11-dl only for libmpv's Xlib error handler.
 x11rb = { version = "0.13", features = ["shape", "xfixes"] }
 x11-dl = "2"
+# Videos are drawn with mpv's OpenGL render API into textures that Slint shows (`viewer::video_surface`): GL calls through glow, and the
+# EGL entry points (loaded at runtime) for render contexts that share textures with Slint's context (GLX comes from x11-dl).
+glow = "0.18"
+khronos-egl = { version = "6", features = ["dynamic"] }
 # The desktop portal (the application chooser of "Open With"): the same D-Bus service that sandboxed apps use, no helper processes.
 ashpd = { version = "0.13", default-features = false, features = ["async-io", "open_uri"] }
 zbus = { version = "5", default-features = false, features = ["async-io", "blocking-api"] }

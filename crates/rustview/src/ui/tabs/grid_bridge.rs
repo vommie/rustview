@@ -1,4 +1,3 @@
-use crate::ui::MultiviewScreenView;
 use crate::ui::multiview::MultiviewHandle;
 use crate::ui::multiview::grid_host::{GridHost, GridItemView};
 use crate::ui::state::UiState;
@@ -65,7 +64,7 @@ impl BridgeTabGrid {
                 st.cached_tab_grid_rects.clear();
                 st.cached_tab_grid_total_h = 0.0;
             }
-            tab_manager.hide_all_video_subwindows();
+            tab_manager.deactivate_all_tabs();
             StatusBarBridge::update_metrics(window, state);
             return;
         }
@@ -99,7 +98,7 @@ impl BridgeTabGrid {
 
         // 3. Assemble the Slint models: every tab is a Multiview, drawn as a miniature of its arrangement
         let scroll_y = window.get_tab_grid_scroll_y();
-        let grid_host = GridHost::new(window, tab_manager);
+        let grid_host = GridHost::new(window);
         let selection = state.read().tab_selection.clone();
         let mark = state.read().tab_grid_mark;
 
@@ -113,14 +112,8 @@ impl BridgeTabGrid {
                 // built, and `tab_icon` takes the same lock again (the tab grid hung as soon as a tab was open).
                 let has_unsaved = s.multiview.instance.lock().has_unsaved_edits();
                 let (width, height) = s.display_size();
-                let multiview_item = grid_host.as_ref().map_or_else(
-                    || GridItemView {
-                        tiles: Vec::new(),
-                        gutters: Vec::new(),
-                        screen: MultiviewScreenView::default(),
-                    },
-                    |host| host.place(&s.multiview.instance, canvas_rect(r, p_h, p_v, scroll_y)),
-                );
+                let multiview_item: GridItemView =
+                    grid_host.place(&s.multiview.instance, canvas_rect(r, p_h, p_v, scroll_y));
 
                 TabGridItemModel {
                     id: s.id.wrapping_as::<i32>(),
@@ -180,13 +173,11 @@ impl BridgeTabGrid {
         padding_v: f32,
     ) {
         if window.get_active_view_mode() != 2 {
-            tab_manager.hide_all_video_subwindows();
+            tab_manager.deactivate_all_tabs();
             return;
         }
 
-        let Some(grid_host) = GridHost::new(window, tab_manager) else {
-            return;
-        };
+        let grid_host = GridHost::new(window);
 
         for (idx, session) in tab_manager.list_tabs().iter().enumerate() {
             match rects.get(idx) {
@@ -214,7 +205,7 @@ impl BridgeTabGrid {
         tracing::info!(tab_id, "[TabGrid: LeftClick] Opening selected tab in Tab Viewer mode");
 
         // Hide all other video subwindows that were mapped on TabGrid tiles
-        tab_manager.hide_video_subwindows_except(Some(tab_id));
+        tab_manager.deactivate_tabs_except(Some(tab_id));
 
         state.write().tab_selection.click_plain(tab_id);
         tab_manager.set_active_tab_internal(tab_id, true);
@@ -266,7 +257,7 @@ impl BridgeTabGrid {
         state: &Arc<RwLock<UiState>>,
     ) {
         if window.get_active_view_mode() != 2 {
-            tab_manager.hide_all_video_subwindows();
+            tab_manager.deactivate_all_tabs();
             return;
         }
 
@@ -282,7 +273,7 @@ impl BridgeTabGrid {
         if cached_rects.is_empty() {
             let sessions = tab_manager.list_tabs();
             if sessions.is_empty() {
-                tab_manager.hide_all_video_subwindows();
+                tab_manager.deactivate_all_tabs();
                 return;
             }
 

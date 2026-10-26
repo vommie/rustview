@@ -1,6 +1,5 @@
 //! Building and showing the menu of a kind of item.
 
-use super::calculate_all_active_menu_cutouts;
 use super::{BridgeContextMenu, FolderMenuContext, MediaMenuContext};
 use crate::ctx_menu::CtxMenu;
 use crate::system::DesktopIntegration;
@@ -176,7 +175,6 @@ impl BridgeContextMenu {
     ) {
         let mut st = state.write();
         CtxMenuPresenter::open(window, &mut st.active_context_menu, menu, x, y);
-        let cutouts = calculate_all_active_menu_cutouts(window);
-        tab_manager.set_menu_cutouts(cutouts);
+        tab_manager.set_menu_open(true);
     }
 }

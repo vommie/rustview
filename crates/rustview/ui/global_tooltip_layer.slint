@@ -31,9 +31,8 @@ component HoldBadge inherits Rectangle {
 }
 
 /// The tooltip bubble of `GlobalTooltip`, drawn on the highest z level of a window. Every window that hosts tooltip
-/// sources puts one of these over its content (the main window and the Multiview window). Native video windows are
-/// cut open where a bubble is, so `state-changed` reports the bubble rectangle (logical pixels in this layer) whenever it
-/// appears, moves or disappears.
+/// sources puts one of these over its content (the main window and the Multiview window). `state-changed` reports the bubble
+/// rectangle (logical pixels in this layer) whenever it appears, moves or disappears (the bar windows grow to hold it).
 export component GlobalTooltipLayer inherits Rectangle {
     callback state-changed(bool /* is_visible */, length /* x */, length /* y */, length /* width */, length /* height */);
 

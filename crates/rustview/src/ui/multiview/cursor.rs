@@ -1,10 +1,8 @@
 //! Hiding the mouse cursor over a Multiview while it rests (UI thread only).
 //!
-//! The Multiview is made of a Slint window (images, gutters, margins) and native video windows on top of it. mpv has
-//! nothing to do with it: the cursor is hidden on the Slint window through winit and on the video windows with an invisible
-//! X11 cursor (`X11VideoSubwindow::set_cursor_hidden`), so it disappears everywhere over the Multiview, over a video, an
-//! image, a resizer or empty space alike, and a single medium is no different. The pointer is polled by the host tick; any
-//! movement shows the cursor again. It is only ever hidden while the pointer rests inside the Multiview.
+//! The Multiview, its videos included, is drawn by its Slint window, so the cursor is hidden on that window through winit and
+//! disappears everywhere over the Multiview, over a video, an image, a resizer or empty space alike. The pointer is polled by the
+//! host tick; any movement shows the cursor again. It is only ever hidden while the pointer rests inside the Multiview.
 
 use crate::viewer::multiview::instance::SharedInstance;
 use slint::winit_030::WinitWindowAccessor;

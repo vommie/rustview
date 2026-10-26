@@ -253,7 +253,7 @@ mod tests {
 
     fn shown(media: &[MediaId]) -> SharedInstance {
         let shared = MultiviewInstance::create(Arc::new(NullSink), media.iter().map(|&m| seed(m)).collect());
-        shared.lock().set_host(&HostSurface::fullscreen(0, 1920, 1080, 1.0));
+        shared.lock().set_host(&HostSurface::fullscreen(0, 0, 1920, 1080, 1.0));
         shared
     }
 

@@ -21,16 +21,26 @@ export struct MultiviewBarButtonView {
     split: bool,
 }
 
-/// One tile of the Multiview window. All geometry is computed in Rust (physical pixels converted to logical pixels), so
-/// Slint and the X11 video windows always use the same rectangles. Video tiles are drawn by mpv in a native window on
-/// top of the Slint scene; Slint only draws images, loading and error states.
+/// One tile of the Multiview window. All geometry is computed in Rust (physical pixels converted to logical pixels). A video is
+/// drawn as the texture its render thread made (`video-row` of the window's `video-frames`).
 export struct MultiviewTileView {
     x: length,
     y: length,
     width: length,
     height: length,
-    kind: int, // 0 = image, 1 = video (native window), 2 = unavailable
+    kind: int, // 0 = image, 1 = video, 2 = unavailable
     image: image,
+    // A video: the row of the window's `video-frames` with its newest picture (-1: none yet), the frame mpv draws into (the size
+    // of the texture) and the part of it that shows, relative to the tile.
+    video-row: int,
+    video-frame-x: length,
+    video-frame-y: length,
+    video-frame-width: length,
+    video-frame-height: length,
+    video-clip-x: length,
+    video-clip-y: length,
+    video-clip-width: length,
+    video-clip-height: length,
     is-loading: bool,
     error-text: string,
     // A zoomed image: drawn instead of `image` (which is its fitted picture) in the rectangle zoom-x/y/width/height of the tile.

@@ -296,13 +296,13 @@ impl ViewerTabManager {
     // =========================================================================
 
     pub(super) fn pause_session_playback(tab: &mut MediaTabSession) {
-        tab.deactivate_native();
+        tab.deactivate();
     }
 
     /// The tab is closed: playback stops and the windows disappear. The Multiview shuts its players down before their windows are
     /// destroyed (see `teardown`; dropping the tab would destroy a window under a running player and end the application).
     pub(super) fn cleanup_session_resources(session: &MediaTabSession) {
-        session.stop_native();
+        session.stop();
     }
 
     /// The tab that is shown after the tab at `closed_index` was closed: the one that took its place, else the one before.

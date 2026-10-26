@@ -582,14 +582,6 @@ impl MultiviewInstance {
         layout.map_or((0.0, 0.0), |l| (f64::from(l.rect.w), f64::from(l.rect.h)))
     }
 
-    /// The minimap of tile `index` (for the cutouts of a video window).
-    pub(super) fn minimap_view_of(&self, index: usize, prefs: &zoom_prefs::ZoomPrefs) -> Option<MinimapView> {
-        if !self.zoomable(index) {
-            return None;
-        }
-        self.minimap_view(index, prefs)
-    }
-
     fn minimap_view(&self, index: usize, prefs: &zoom_prefs::ZoomPrefs) -> Option<MinimapView> {
         let tile = &self.tiles[index];
         let zoom = tile.zoom.as_ref()?;

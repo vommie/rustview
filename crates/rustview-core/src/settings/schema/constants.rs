@@ -704,7 +704,7 @@ pub const MULTIVIEW_OPEN_POLL_MS: u64 = 15;
 
 pub const MULTIVIEW_OPEN_XID_ATTEMPTS: u32 = 40;
 
-/// Video windows smaller than this (host pixels) are hidden: X11 containers are clamped to 16 px, which would distort the tile.
+/// Videos smaller than this (host pixels) are not drawn (their textures would be too small to show anything).
 pub const MULTIVIEW_MIN_VIDEO_WINDOW_PX: i32 = 16;
 
 /// The action bar floats in a small window of its own (see `viewer/multiview/bar_placement.rs`): its distance from the
@@ -732,10 +732,6 @@ pub const SHUTDOWN_WATCHDOG_MS: u64 = 10_000;
 
 /// How long the exit waits for the players that closed Multiviews are still shutting down on their worker threads.
 pub const SHUTDOWN_TEARDOWN_WAIT_MS: u64 = 3_000;
-
-/// How long the teardown of a closed video tab waits until nothing else holds its player (short-lived references of UI code that
-/// is still finishing) before it gives up and leaves the window alone.
-pub const PLAYER_TEARDOWN_WAIT_MS: u64 = 2_000;
 
 // =============================================================================
 // SECTION 12: API & External Tools Settings - Single Point of Truth Constants

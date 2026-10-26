@@ -2,9 +2,9 @@
 //! window exists.
 //!
 //! In a Wayland session `RustView` runs as an X11 program through `XWayland` (user decision 2026-10-25, `docs/rendering.md`): the
-//! native mpv video windows and the other X11 features exist only there. Every place that depends on the window system (the
-//! clipboard tool, drag and drop, mpv's GPU context, the logs) asks [`current`] instead of reading the environment, which says
-//! "Wayland" while the windows are X11 windows.
+//! floating bar windows and the other X11 features exist only there (videos are drawn by Slint since `video-in-slint` M1; native
+//! Wayland becomes the default after M7). Every place that depends on the window system (the clipboard tool, drag and drop, the
+//! logs) asks [`current`] instead of reading the environment, which says "Wayland" while the windows are X11 windows.
 
 mod choice;
 

@@ -1,7 +1,8 @@
-//! Runtime state of one Multiview tile and the creation of its native video window.
+//! Runtime state of one Multiview tile and the creation of its video player.
 //!
-//! A video tile is an `X11VideoSubwindow` below the host window with an `MpvPlayer` attached to it, the usual callbacks,
-//! `load_file` + `play`. mpv does whatever it does inside its rectangle; the layout only decides where that rectangle is.
+//! A video tile is an `MpvPlayer` with a `VideoSurface` (mpv's render API on a render thread, drawing into textures of the window
+//! that shows the tile; the canvas shows them as an image), the usual callbacks, `load_file` + `play` once the surface has its
+//! render context. The layout decides the size of the textures and where the canvas shows them.
 
 use super::audio::TileAudio;
 use super::events::{MultiviewEventSink, PlayerEvent};
@@ -9,23 +10,21 @@ use super::feedback_overlay::OverlayState;
 use super::focus_overlay::WindowMarks;
 use super::follow::TileKey;
 use super::instance::WeakInstance;
-use super::layout::Rect;
 use super::media_actions::MediaActionId;
 use super::model::{AspectSource, TileKind};
 use super::video_bar::state::VideoBarState;
 use super::video_placement::VideoPlacement;
 use super::volume_overlay::VolumeOverlayState;
 use crate::ui::button_feedback::ButtonFeedback;
-use crate::viewer::XRectangle;
+use crate::viewer::MpvPlayer;
 use crate::viewer::edit::save_badge::SaveBadge;
 use crate::viewer::edit::tile_edit::{EditSource, TileEdit};
 use crate::viewer::mpv_engine::OsdText;
+use crate::viewer::video_surface::{HostWindowId, VideoSurface};
 use crate::viewer::zoom::mpv_view::MpvView;
 use crate::viewer::zoom::state::ZoomState;
-use crate::viewer::{MpvPlayer, X11VideoSubwindow, install_nonfatal_error_handler};
 use parking_lot::RwLock;
 use rustview_core::library::models::MediaId;
-use rustview_core::util::cast::SaturatingAs;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -40,7 +39,8 @@ pub type EventOwner = Arc<RwLock<WeakInstance>>;
 
 pub struct VideoTile {
     pub player: Arc<MpvPlayer>,
-    pub window: X11VideoSubwindow,
+    /// Draws the player into textures of the window that shows the tile.
+    pub surface: VideoSurface,
     /// Mute state mpv started with (user config); `Native` audio restores it.
     pub native_mute: bool,
     /// Last mute state known, to tell our own changes from changes made inside mpv (`m`, OSC).
@@ -62,10 +62,8 @@ pub struct VideoTile {
     pub time_badge: Option<OsdText>,
     /// The view mpv was given last (`None`: never, i.e. the plain fitted video).
     pub zoom_view: Option<MpvView>,
-    /// Where the window was placed last: mpv's frame and the part of it that shows (host pixels).
+    /// Where the video was placed last: mpv's frame (the size of the textures) and the part of it that shows (host pixels).
     pub placement: Option<VideoPlacement>,
-    /// The minimap (and its bubble) cut out of the window right now, host pixels.
-    pub minimap_cut: Vec<XRectangle>,
     /// A still for the minimap is being taken, and when the last one was asked for.
     pub still_pending: bool,
     pub still_at: Option<Instant>,
@@ -189,19 +187,6 @@ impl TileState {
     }
 }
 
-/// A player callback that posts an event for its instance; the event is built per call so it never has to be `Clone`.
-fn forward(
-    sink: &Arc<dyn MultiviewEventSink>,
-    owner: &EventOwner,
-    make: impl Fn() -> PlayerEvent + Send + Sync + 'static,
-) -> impl Fn() + Send + Sync + 'static {
-    let (sink, owner) = (Arc::clone(sink), Arc::clone(owner));
-    move || {
-        let me = owner.read().clone();
-        sink.post(me, make());
-    }
-}
-
 /// Installs every player callback once, when the tile is created. What an event means is decided when it arrives (by the
 /// current host of the instance), so the callbacks never have to be replaced.
 pub(super) fn connect_callbacks(
@@ -210,7 +195,6 @@ pub(super) fn connect_callbacks(
     owner: &EventOwner,
     current_tile: &Arc<AtomicU64>,
 ) {
-    player.on_toggle_fullscreen(forward(sink, owner, || PlayerEvent::ToggleFullscreen));
     let tile = current_tile.clone();
     let (mute_sink, mute_owner) = (Arc::clone(sink), Arc::clone(owner));
     player.on_mute_changed(move |muted| {
@@ -232,55 +216,41 @@ pub(super) fn connect_callbacks(
         let me = ab_owner.read().clone();
         ab_sink.post(me, PlayerEvent::AbRepeat { tile, change });
     });
-    let tile = Arc::clone(current_tile);
-    player.on_clicked(forward(sink, owner, move || {
-        PlayerEvent::Clicked(tile.load(Ordering::SeqCst))
-    }));
-    player.on_convert_to_background_tab(forward(sink, owner, || PlayerEvent::CtrlClick));
 }
 
-/// Creates the video window inside `rect` (coordinates of the parent window) and starts playback.
+/// Creates the player of a video tile and its surface in `window` (0: no window yet; the host attaches it later) and starts
+/// playback as soon as the surface has its render context.
 pub fn create_video(
     sink: &Arc<dyn MultiviewEventSink>,
     me: &WeakInstance,
-    parent_xid: u64,
-    rect: Rect,
+    window: HostWindowId,
     tile: TileKey,
     path: &Path,
 ) -> Result<VideoTile, String> {
-    let mut window = X11VideoSubwindow::new(
-        parent_xid,
-        rect.x,
-        rect.y,
-        rect.w.max(16).saturating_as::<u32>(),
-        rect.h.max(16).saturating_as::<u32>(),
-    )
-    .map_err(|e| e.to_string())?;
-    let wid = window.xid();
-    window.show();
-
     let player = Arc::new(MpvPlayer::new().map_err(|e| e.to_string())?);
+    let mut surface = match VideoSurface::new(&player) {
+        Ok(surface) => surface,
+        Err(e) => {
+            player.shutdown_blocking();
+            return Err(e);
+        }
+    };
     let current_tile = Arc::new(AtomicU64::new(tile));
     let owner: EventOwner = Arc::new(RwLock::new(me.clone()));
     connect_callbacks(&player, sink, &owner, &current_tile);
 
-    let started = player.attach_to_window(wid).and_then(|()| {
-        player.set_tab_grid_mode(false);
-        player.set_view_active(true);
-        player.set_user_paused(false);
-        player.load_file(path)?;
-        player.play()
-    });
-    if let Err(e) = started {
-        player.shutdown_blocking();
-        install_nonfatal_error_handler();
-        return Err(e.to_string());
+    player.set_tab_grid_mode(false);
+    player.set_view_active(true);
+    player.set_user_paused(false);
+    if window != 0 {
+        surface.attach(window, &player);
     }
+    load_when_ready(&surface, &player, path);
 
     let native_mute = player.get_mute();
     Ok(VideoTile {
         player,
-        window,
+        surface,
         native_mute,
         last_mute: native_mute,
         current_tile,
@@ -292,17 +262,32 @@ pub fn create_video(
         time_badge: None,
         zoom_view: None,
         placement: None,
-        minimap_cut: Vec::new(),
         still_pending: false,
         still_at: None,
     })
 }
 
-/// Plays another medium in the player of `video`, now serving `tile`: one player and one window, `loadfile replace`, so
+/// Loads `path` and plays it once the surface has a render context (mpv would disable the video track before).
+fn load_when_ready(surface: &VideoSurface, player: &Arc<MpvPlayer>, path: &Path) {
+    let (player, path) = (Arc::clone(player), path.to_path_buf());
+    let surface_id = surface.id();
+    surface.when_ready(Box::new(move || {
+        if let Err(e) = player.load_file(&path).and_then(|()| player.play()) {
+            tracing::error!(surface = surface_id, error = %e, "[Multiview: Tile] The video could not be loaded");
+        }
+    }));
+}
+
+/// Plays another medium in the player of `video`, now serving `tile`: one player and one surface, `loadfile replace`, so
 /// volume, speed and loop settings carry over.
-pub fn reload_video(video: &VideoTile, tile: TileKey, path: &Path) -> Result<(), String> {
+pub fn reload_video(video: &VideoTile, tile: TileKey, path: &Path) {
     video.current_tile.store(tile, Ordering::SeqCst);
-    video.player.load_file(path).map_err(|e| e.to_string())
+    let (player, path) = (Arc::clone(&video.player), path.to_path_buf());
+    video.surface.when_ready(Box::new(move || {
+        if let Err(e) = player.load_file(&path) {
+            tracing::error!(error = %e, "[Multiview: Tile] The recycled player could not load the video");
+        }
+    }));
 }
 
 #[cfg(test)]
@@ -310,6 +295,19 @@ mod tests {
     use super::*;
     use crate::viewer::multiview::instance::MultiviewInstance;
     use parking_lot::Mutex;
+
+    /// A player callback that posts an event for its instance; the event is built per call so it never has to be `Clone`.
+    fn forward(
+        sink: &Arc<dyn MultiviewEventSink>,
+        owner: &EventOwner,
+        make: impl Fn() -> PlayerEvent + Send + Sync + 'static,
+    ) -> impl Fn() + Send + Sync + 'static {
+        let (sink, owner) = (Arc::clone(sink), Arc::clone(owner));
+        move || {
+            let me = owner.read().clone();
+            sink.post(me, make());
+        }
+    }
 
     /// Remembers the id of the instance each event was posted for.
     struct Recorder(Mutex<Vec<Option<u64>>>);
@@ -329,7 +327,7 @@ mod tests {
         let (first_id, second_id) = (first.lock().id(), second.lock().id());
 
         let owner: EventOwner = Arc::new(RwLock::new(Arc::downgrade(&first)));
-        let callback = forward(&sink, &owner, || PlayerEvent::ToggleFullscreen);
+        let callback = forward(&sink, &owner, || PlayerEvent::MuteChanged { tile: 1, muted: true });
         callback();
         *owner.write() = Arc::downgrade(&second);
         callback();

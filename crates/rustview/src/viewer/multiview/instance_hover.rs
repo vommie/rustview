@@ -28,7 +28,6 @@ impl MultiviewInstance {
             return;
         }
         self.probe_aspects();
-        self.apply_pointer_passthrough();
         // A mark mpv did not take yet (no picture) is tried again.
         self.sync_focus_overlays();
     }

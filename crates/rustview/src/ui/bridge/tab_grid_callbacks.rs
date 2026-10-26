@@ -21,7 +21,7 @@ impl UiBridge {
             tracing::info!("[UiBridge: TabGrid] Tab-Grid button clicked. Switching to Masonry Tab Grid view");
             // The keyboard mark starts hidden every time the grid opens.
             st_grid.write().tab_grid_mark = None;
-            tm_grid.set_all_videos_view_active(false);
+            tm_grid.deactivate_all_tabs();
             win_grid.set_active_view_mode(2);
             win_grid.set_is_browse_active(false);
             win_grid.set_is_tab_grid_active(true);

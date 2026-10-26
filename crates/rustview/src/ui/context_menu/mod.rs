@@ -35,12 +35,10 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-pub mod cutouts;
 mod dispatcher;
 mod outside_click;
 mod registration;
 mod show;
-pub use cutouts::{calculate_all_active_menu_cutouts, make_rounded_cutout_rectangles};
 
 pub struct MediaMenuContext<'a> {
     pub window: &'a MainWindow,

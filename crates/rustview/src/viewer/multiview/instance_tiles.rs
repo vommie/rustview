@@ -7,7 +7,6 @@ use super::image_decode;
 use super::instance::MultiviewInstance;
 use super::model::{AspectSource, TileKind, aspect_differs, aspect_from_size};
 use super::prefs;
-use super::teardown::teardown_videos;
 use super::tile;
 use crate::viewer::edit::tile_edit::{EditSource, TileEdit};
 use crate::viewer::zoom::state::ZoomState;
@@ -88,7 +87,7 @@ impl MultiviewInstance {
         }
     }
 
-    /// A video tile took over the player of the tile it replaced: the player plays the new file in its existing window.
+    /// A video tile took over the player of the tile it replaced: the player plays the new file on its existing surface.
     fn reload_video(&mut self, index: usize) {
         let (media_id, key, path) = {
             let tile = &self.tiles[index];
@@ -97,47 +96,30 @@ impl MultiviewInstance {
         let Some(video) = self.tiles[index].video.as_ref() else {
             return;
         };
-        match tile::reload_video(video, key, &path) {
-            Ok(()) => {
-                // The zoom belonged to the file before (mpv resets its view on a new file); the new one gets its own once probed.
-                let tile = &mut self.tiles[index];
-                tile.zoom = None;
-                if let Some(video) = tile.video.as_mut() {
-                    video.zoom_view = None;
-                    video.minimap_cut.clear();
-                }
-                tracing::info!(
-                media_id,
-                index,
-                filename = %LogObscurer::filename(&self.tiles[index].filename),
-                    "[Multiview: Tile] Video tile recycled the player of the tile it replaced"
-                );
-            }
-            Err(e) => {
-                tracing::error!(media_id, index, error = %loggable(&e), "[Multiview: Tile] Recycled video failed");
-                let tile = &mut self.tiles[index];
-                tile.error = Some(format!("This video could not be played\n{e}"));
-                tile.audio = None;
-                let failed = tile.video.take();
-                teardown_videos(failed.into_iter().collect());
-                self.bump();
-            }
+        tile::reload_video(video, key, &path);
+        // The zoom belonged to the file before (mpv resets its view on a new file); the new one gets its own once probed.
+        let tile = &mut self.tiles[index];
+        tile.zoom = None;
+        if let Some(video) = tile.video.as_mut() {
+            video.zoom_view = None;
         }
+        tracing::info!(
+            media_id,
+            index,
+            filename = %LogObscurer::filename(&self.tiles[index].filename),
+            "[Multiview: Tile] Video tile recycled the player of the tile it replaced"
+        );
     }
 
     fn start_video(&mut self, index: usize) {
-        let content = self.host_content(index).unwrap_or_default();
         let (media_id, key, path) = {
             let tile = &self.tiles[index];
             (tile.media_id, tile.key, tile.path.clone())
         };
-        let created = tile::create_video(&self.sink, &self.me, self.host.surface.parent_xid, content, key, &path);
+        let created = tile::create_video(&self.sink, &self.me, self.host.surface.window, key, &path);
         match created {
-            Ok(mut video) => {
+            Ok(video) => {
                 video.player.set_background_color(self.effective_video_background());
-                if self.cursor_hidden {
-                    video.window.set_cursor_hidden(true);
-                }
                 let tile = &mut self.tiles[index];
                 tile.video = Some(video);
                 tracing::info!(

@@ -203,7 +203,7 @@ mod tests {
 
     fn shown(seeds: Vec<TileSeed>) -> SharedInstance {
         let shared = MultiviewInstance::create(Arc::new(NullSink), seeds);
-        shared.lock().set_host(&HostSurface::fullscreen(0, 1920, 1080, 1.0));
+        shared.lock().set_host(&HostSurface::fullscreen(0, 0, 1920, 1080, 1.0));
         shared
     }
 

@@ -140,13 +140,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize Slint Window
     // The action bar of the Multiview floats in a window of its own; it has to be an override-redirect window, which Slint only
     // lets us request before the first window is created. The same goes for the window system winit opens.
+    // Videos are drawn with mpv's OpenGL render API into textures Slint shows (`viewer::video_surface`): Slint must use desktop
+    // OpenGL (on its default OpenGL ES 2.0 context mpv drew only black in the lab).
     let selector = slint::BackendSelector::new()
+        .require_opengl()
         .with_winit_window_attributes_hook(rustview::ui::multiview::bar_overlay::window_attributes_hook);
     window_system::select_backend(selector, window_system).select()?;
 
     startup_clock::mark("Backend");
     let main_window = MainWindow::new()?;
     startup_clock::mark("MainWindowCreated");
+    rustview::ui::multiview::video_host::register(
+        &main_window,
+        rustview::viewer::video_surface::MAIN_WINDOW,
+        MainWindow::set_video_frames,
+    );
     rustview::ui::dialog_parent::register_parent(&main_window, rustview::ui::dialog_parent::Role::Main);
     // The restored window state is needed before the first frame: Slint renders it before it maps the window (X11), and the
     // maximized state must be in place at that moment.
@@ -161,9 +169,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         SystemDisplayService::spawn_monitor_diagnostics();
     }))));
     let after_first_frame_render = after_first_frame.clone();
-    if let Err(e) = main_window
-        .window()
-        .set_rendering_notifier(move |state, graphics_api| match state {
+    if let Err(e) = main_window.window().set_rendering_notifier(move |state, graphics_api| {
+        rustview::viewer::video_surface::hosts::on_rendering(
+            rustview::viewer::video_surface::MAIN_WINDOW,
+            &state,
+            graphics_api,
+        );
+        match state {
             // Called while the window exists but is not mapped yet.
             slint::RenderingState::RenderingSetup => {
                 startup_clock::mark("GlReady");
@@ -187,8 +199,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             _ => {}
-        })
-    {
+        }
+    }) {
         tracing::debug!(error = %e, "[Startup: Stage] No rendering notifier; the first frame is not logged");
         let pending = after_first_frame.borrow_mut().take();
         if let Some(start) = pending {

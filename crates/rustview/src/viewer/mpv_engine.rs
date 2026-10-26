@@ -2,7 +2,6 @@ use super::error::ViewerError;
 use super::types::MpvPlaybackState;
 use libmpv2::Mpv;
 use parking_lot::{Mutex, RwLock};
-use rustview_core::util::cast::SaturatingAs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -11,25 +10,21 @@ use std::time::Instant;
 pub mod ab_repeat;
 mod controls;
 mod events;
-mod gpu_context;
 mod messages;
 mod osd_text;
 pub mod overlay;
 mod playback;
+mod render;
 mod still;
 pub use controls::SeekPrecision;
 pub use osd_text::OsdText;
 pub use playback::PlaybackNumbers;
+pub use render::{MpvRenderContext, NativeDisplay, RenderCore};
 mod rating;
 pub mod self_test;
 mod zoom;
 
 pub type MpvEventCallback = Arc<dyn Fn(&MpvPlaybackState) + Send + Sync>;
-pub type MpvFullscreenCallback = Arc<dyn Fn() + Send + Sync>;
-pub type MpvConvertToTabCallback = Arc<dyn Fn() + Send + Sync>;
-
-/// The message mpv sends when its window is clicked (a plain left click: the Multiview selects the tile; never a pause).
-const CLICK_MESSAGE: &str = "rustview-click";
 
 /// The players that exist now (Settings > Debug, Runtime).
 static LIVE_PLAYERS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
@@ -39,32 +34,23 @@ pub fn live_players() -> usize {
     LIVE_PLAYERS.load(Ordering::Relaxed)
 }
 
-fn bind_click(mpv: &Mpv) {
-    let _ = mpv.command("keybind", &["MBTN_LEFT", &format!("script-message {CLICK_MESSAGE}")]);
-}
-
-/// Called from the observer thread when the player's window was clicked.
-pub type MpvClickCallback = Arc<dyn Fn() + Send + Sync>;
 /// Called from the observer thread when the mute state changed (a hotkey, the on-screen controller or `set_mute`).
 pub type MpvMuteCallback = Arc<dyn Fn(bool) + Send + Sync>;
 /// Called from the observer thread when the user's pause state changed (`true` = paused). A pause that only comes from
 /// the view being hidden is not the user's and is not reported.
 pub type MpvPauseCallback = Arc<dyn Fn(bool) + Send + Sync>;
 
-/// Central thread-safe MPV player engine wrapping `libmpv2` with native OSC, plugins, custom config files, and property observation.
+/// Central thread-safe MPV player engine wrapping `libmpv2` with plugins, custom config files and property observation. The video
+/// is drawn through mpv's render API into textures that Slint shows (`viewer::video_surface`); mpv has no window of its own.
 pub struct MpvPlayer {
     mpv: Arc<Mpv>,
     state: Arc<RwLock<MpvPlaybackState>>,
     current_file_path: Arc<RwLock<Option<PathBuf>>>,
-    attached_wid: Arc<RwLock<Option<u64>>>,
     is_view_active: Arc<AtomicBool>,
     is_user_paused: Arc<AtomicBool>,
     is_tab_grid_mode: Arc<AtomicBool>,
     observer_running: Arc<AtomicBool>,
     callbacks: Arc<RwLock<Vec<MpvEventCallback>>>,
-    fullscreen_callbacks: Arc<RwLock<Vec<MpvFullscreenCallback>>>,
-    convert_to_tab_callbacks: Arc<RwLock<Vec<MpvConvertToTabCallback>>>,
-    click_callbacks: Arc<RwLock<Vec<MpvClickCallback>>>,
     mute_callbacks: Arc<RwLock<Vec<MpvMuteCallback>>>,
     pause_callbacks: Arc<RwLock<Vec<MpvPauseCallback>>>,
     /// What the player knows about the mpv script `ab_repeat.lua` (`viewer::ab_repeat`), and who listens to its changes.
@@ -76,18 +62,15 @@ pub struct MpvPlayer {
 }
 
 impl MpvPlayer {
-    /// Initializes a high-performance MPV player instance configured for native X11 embedding with full user config, plugins, and double-click/middle-click trapping.
+    /// Creates a player with the user's mpv configuration and scripts. Its video output is `libmpv`: nothing is shown until a
+    /// video surface created its render context (`viewer::video_surface`), and a file must not be loaded before that.
     pub fn new() -> Result<Self, ViewerError> {
         let t0 = Instant::now();
 
         let mpv_instance = Mpv::with_initializer(|init| {
-            // 1. Hardware acceleration & rendering
-            let _ = init.set_property("vo", "null");
-            let _ = init.set_property("force-window", "no");
+            // 1. Hardware acceleration & rendering: mpv's render API (the video surface's render thread draws every frame)
+            let _ = init.set_property("vo", "libmpv");
             let _ = init.set_property("hwdec", "auto-safe");
-            // Without it `vo=gpu` refuses a software GL renderer (llvmpipe, e.g. in a VM) and the video stays black; on a real GPU
-            // the flag changes nothing.
-            let _ = init.set_property("gpu-sw", "yes");
 
             // 2. Audio & playback lifecycle
             let _ = init.set_property("keep-open", "yes");
@@ -101,11 +84,9 @@ impl MpvPlayer {
             // 4. Configure OSC behavior: Disable top deadzone so HUD triggers across 100% of video height
             let _ = init.set_property("script-opts", ab_repeat::script_opts().as_str());
 
-            // 5. Native input handling
+            // 5. Input: mpv has no window, so it never sees a key or the mouse; RustView handles both over a video
+            // (`docs/hotkeys.md`). Scripts may still bind keys for their own commands (`ab_repeat.lua`).
             let _ = init.set_property("input-default-bindings", "yes");
-            // mpv never takes the keyboard: a key pressed over a video reaches the RustView window under it, which handles every
-            // key itself (`docs/hotkeys.md`).
-            let _ = init.set_property("input-vo-keyboard", "no");
 
             // 6. Enable loading of user config files (mpv.conf, input.conf, script-opts, etc.)
             let _ = init.set_property("config", "yes");
@@ -150,50 +131,17 @@ impl MpvPlayer {
             }
         }
 
-        // Ensure window states are clean
-        let _ = mpv_instance.set_property("window-maximized", false);
-        let _ = mpv_instance.set_property("ontop", false);
-        let _ = mpv_instance.set_property("border", true);
-
-        // A single left click never pauses the video; it is reported, so the Multiview can select the tile
-        bind_click(&mpv_instance);
-
-        // Bind double-click and middle-click in MPV to cycle fullscreen (mpv takes no keys at all, see above)
-        let _ = mpv_instance.command("keybind", &["MBTN_LEFT_DBL", "cycle fullscreen"]);
-        let _ = mpv_instance.command("keybind", &["MBTN_MID", "cycle fullscreen"]);
-
-        // Bind Ctrl+Click and Ctrl+DoubleClick in MPV to toggle window-maximized
-        let convert_keys = [
-            "Ctrl+MBTN_LEFT",
-            "ctrl+MBTN_LEFT",
-            "Ctrl+mbtn_left",
-            "ctrl+mbtn_left",
-            "Ctrl+MBTN_LEFT_DBL",
-            "ctrl+MBTN_LEFT_DBL",
-            "Ctrl+mbtn_left_dbl",
-            "ctrl+mbtn_left_dbl",
-            "Ctrl+MBTN_LEFT_HOLD",
-            "ctrl+MBTN_LEFT_HOLD",
-        ];
-        for k in convert_keys {
-            let _ = mpv_instance.command("keybind", &[k, "no-osd cycle window-maximized"]);
-        }
-
         // mpv's warnings and errors go into the log (everything into mpv.log while it is switched on)
         messages::request(&mpv_instance);
 
         let mpv_arc = Arc::new(mpv_instance);
         let state = Arc::new(RwLock::new(MpvPlaybackState::default()));
         let current_file_path = Arc::new(RwLock::new(None));
-        let attached_wid = Arc::new(RwLock::new(None));
         let is_view_active = Arc::new(AtomicBool::new(true));
         let is_user_paused = Arc::new(AtomicBool::new(false));
         let is_tab_grid_mode = Arc::new(AtomicBool::new(false));
         let observer_running = Arc::new(AtomicBool::new(true));
         let callbacks: Arc<RwLock<Vec<MpvEventCallback>>> = Arc::new(RwLock::new(Vec::new()));
-        let fullscreen_callbacks: Arc<RwLock<Vec<MpvFullscreenCallback>>> = Arc::new(RwLock::new(Vec::new()));
-        let convert_to_tab_callbacks: Arc<RwLock<Vec<MpvConvertToTabCallback>>> = Arc::new(RwLock::new(Vec::new()));
-        let click_callbacks: Arc<RwLock<Vec<MpvClickCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let mute_callbacks: Arc<RwLock<Vec<MpvMuteCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let pause_callbacks: Arc<RwLock<Vec<MpvPauseCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let ab = Arc::new(RwLock::new(ab_repeat::AbSnapshot::default()));
@@ -205,15 +153,11 @@ impl MpvPlayer {
             mpv: mpv_arc.clone(),
             state: state.clone(),
             current_file_path: current_file_path.clone(),
-            attached_wid: attached_wid.clone(),
             is_view_active: is_view_active.clone(),
             is_user_paused: is_user_paused.clone(),
             is_tab_grid_mode: is_tab_grid_mode.clone(),
             observer_running: observer_running.clone(),
             callbacks: callbacks.clone(),
-            fullscreen_callbacks: fullscreen_callbacks.clone(),
-            convert_to_tab_callbacks: convert_to_tab_callbacks.clone(),
-            click_callbacks: click_callbacks.clone(),
             mute_callbacks: mute_callbacks.clone(),
             pause_callbacks: pause_callbacks.clone(),
             ab,
@@ -227,51 +171,10 @@ impl MpvPlayer {
 
         tracing::info!(
             elapsed_us = t0.elapsed().as_micros(),
-            "[MpvPlayer: Init] Native libmpv2 player engine initialized with unreserved mouse wheel pass-through and the keys of the keymap"
+            "[MpvPlayer: Init] libmpv2 player engine initialized (video output: render API)"
         );
 
         Ok(player)
-    }
-
-    /// Attaches the MPV video render output to the specified X11 window ID (`wid`) and activates GPU video output.
-    pub fn attach_to_window(&self, wid: u64) -> Result<(), ViewerError> {
-        let t0 = Instant::now();
-        self.mpv
-            .set_property("wid", wid.saturating_as::<i64>())
-            .map_err(|e| ViewerError::Mpv(format!("Failed to set MPV 'wid' property: {e:?}")))?;
-
-        self.use_x11_gpu_contexts();
-        if let Err(e) = self.mpv.set_property("vo", "gpu") {
-            tracing::warn!(wid, error = ?e, "[MpvPlayer: Attach] Failed to switch the video output to 'gpu'");
-        }
-        *self.attached_wid.write() = Some(wid);
-
-        tracing::info!(
-            wid,
-            elapsed_us = t0.elapsed().as_micros(),
-            "[MpvPlayer: Attach] Attached MPV video output to X11 subwindow and enabled GPU rendering"
-        );
-
-        Ok(())
-    }
-
-    /// Limits mpv to its X11 GPU contexts before the video output starts: the video is embedded into an X11 window, also in a
-    /// Wayland session (`XWayland`), where mpv would otherwise open a Wayland window of its own (`gpu_context`).
-    fn use_x11_gpu_contexts(&self) {
-        let current = self.mpv.get_property::<String>("gpu-context").unwrap_or_default();
-        let Some(contexts) = gpu_context::x11_gpu_contexts(&current) else {
-            return;
-        };
-        match self.mpv.set_property("gpu-context", contexts.as_str()) {
-            Ok(()) => tracing::debug!(
-                configured = %current,
-                used = %contexts,
-                "[MpvPlayer: Attach] GPU contexts limited to the X11 ones (the video is embedded into an X11 window)"
-            ),
-            Err(e) => {
-                tracing::warn!(error = ?e, "[MpvPlayer: Attach] Failed to limit the GPU contexts to the X11 ones");
-            }
-        }
     }
 
     /// Marks the player as shown in the tab grid (or not). The flag keeps a pause the grid causes from counting as the user's;

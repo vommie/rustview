@@ -11,8 +11,8 @@ use std::sync::atomic::Ordering;
 use std::time::Instant;
 
 impl ViewerTabManager {
-    /// Puts the tiles of the tabs in `tab_ids` side by side in one new Multiview tab. Nothing is restarted: the video windows with
-    /// their running players move into the new Multiview, images keep their pixels. The new tab takes the place of the first of
+    /// Puts the tiles of the tabs in `tab_ids` side by side in one new Multiview tab. Nothing is restarted: the videos with
+    /// their running players and surfaces move into the new Multiview, images keep their pixels. The new tab takes the place of the first of
     /// the tabs, the merged tabs are closed (they are empty by then) and the new tab becomes the active one when `activate` is
     /// set or when the active tab was one of the merged. Refused, and nothing changed, when fewer than two tabs are given, the
     /// tiles would not fit (`MULTIVIEW_MAX_TILES`) or a tab is shown in the fullscreen window.
@@ -302,7 +302,7 @@ mod tests {
         tab.multiview
             .instance
             .lock()
-            .set_host(&HostSurface::fullscreen(0, 1920, 1080, 1.0));
+            .set_host(&HostSurface::fullscreen(0, 0, 1920, 1080, 1.0));
         assert_eq!(
             fx.manager.merge_tabs(&[ta, tb], true),
             Err(MergeError::ShownInFullscreen)

@@ -10,7 +10,7 @@ use crate::viewer::multiview::model::TileKind;
 use crate::viewer::multiview::view::{
     GutterView, HostedView, MediaActionView, Navigation, PrimaryActionView, TileView, ZoomContentView,
 };
-use rustview_core::util::cast::{Az, FloatToInt};
+use rustview_core::util::cast::{Az, FloatToInt, SaturatingAs};
 use slint::{Model, VecModel};
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -117,6 +117,10 @@ fn tile_view(tile: &TileView, dpi: f32, images: &mut ImageCache) -> MultiviewTil
     let crop_pic = crop.map_or((0.0, 0.0, 0.0, 0.0), |c| c.picture);
     let crop_rect = crop.map_or((0.0, 0.0, 0.0, 0.0), |c| c.rect);
     let focus_view = tile.focus.map_or(Rect::default(), |f| f.view);
+    let video_row = tile.video.map_or(-1, |v| v.row.saturating_as::<i32>());
+    let (video_frame, video_clip) = tile
+        .video
+        .map_or((Rect::default(), Rect::default()), |v| (v.frame, v.clip));
     MultiviewTileView {
         x: logical(x, dpi),
         y: logical(y, dpi),
@@ -124,6 +128,15 @@ fn tile_view(tile: &TileView, dpi: f32, images: &mut ImageCache) -> MultiviewTil
         height: logical(h, dpi),
         kind,
         image,
+        video_row,
+        video_frame_x: logical(video_frame.x, dpi),
+        video_frame_y: logical(video_frame.y, dpi),
+        video_frame_width: logical(video_frame.w, dpi),
+        video_frame_height: logical(video_frame.h, dpi),
+        video_clip_x: logical(video_clip.x, dpi),
+        video_clip_y: logical(video_clip.y, dpi),
+        video_clip_width: logical(video_clip.w, dpi),
+        video_clip_height: logical(video_clip.h, dpi),
         is_loading: tile.is_loading,
         error_text: tile.error.clone().unwrap_or_default().into(),
         zoomed,

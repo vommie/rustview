@@ -145,7 +145,7 @@ export component DebugToolsCard inherits DebugCard {
                 title: "Video self-test";
                 description: DebugUi.self-test-running
                     ? "A small mpv window shows the test picture for three seconds..."
-                    : "Plays a three-second test picture that mpv makes itself (no file is read) in a small window and reports how it was drawn.";
+                    : "Renders a three-second test picture that mpv makes itself (no file is read) the way videos are drawn, without showing it, and reports how it was drawn.";
                 clicked => { DebugUi.run-self-test(); }
             }
 

@@ -37,6 +37,12 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   show none.
 
 ### Changed
+- **Videos are drawn by RustView itself** (branch video-in-slint, first step): mpv renders every video on a thread of its own into
+  textures that the RustView window shows like a picture, instead of a native mpv window over it. Context menus and tooltips of the
+  main window now simply lie over a video (no more holes cut into the video), and moving a video between a tab and the fullscreen
+  keeps it playing. mpv itself, your mpv.conf and your scripts are unchanged; the control bars still float in windows of their own
+  for now. Settings > Debug: the video self-test renders through the same path (no test window opens any more) and says how videos
+  are drawn and whether the picture had content.
 - **The settings page "Fullscreen" is now called "Multiview"** and starts with a short explanation of what the Multiview is (the
   view of one to four media, in the fullscreen and in tabs). Everything about the video player lives there now, because videos play
   only in the Multiview: the jump distances of the jump keys moved from Settings > Viewer > Videos to the new card Multiview > Jump

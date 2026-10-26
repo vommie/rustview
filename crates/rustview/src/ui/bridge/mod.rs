@@ -360,7 +360,7 @@ impl UiBridge {
                 w.set_is_tab_grid_active(origin_mode == 2);
 
                 if origin_mode == 2 {
-                    tm.set_all_videos_view_active(false);
+                    tm.deactivate_all_tabs();
                     BridgeViewerTabs::sync_ui(&w, &tm, &lib, &set, &st);
                     BridgeTabGrid::sync_tab_grid_ui(&w, &tm, &lib, &set, &st);
                 } else if origin_mode == 1 {

@@ -1,8 +1,8 @@
-//! Where the media canvas of a tab-grid item is in the window. One definition for the native video windows and the Multiview
-//! tiles, so both sit exactly where the Slint item leaves room for them.
+//! Where the media canvas of a tab-grid item is in the window, so the Multiview tiles sit exactly where the Slint item leaves room
+//! for them.
 
 use super::geometry::MasonryRect;
-use crate::viewer::ViewportBounds;
+use crate::viewer::multiview::layout::Rect;
 use rustview_core::settings::schema::{
     TAB_GRID_CONTENT_TOP_LOGICAL_PX, TAB_GRID_ITEM_HEADER_LOGICAL_PX, TAB_GRID_MIN_CANVAS_LOGICAL_PX,
     TAB_GRID_STATUS_BAR_LOGICAL_PX,
@@ -30,16 +30,16 @@ pub fn canvas_rect(item: &MasonryRect, padding_h: f32, padding_v: f32, scroll_y:
 }
 
 /// The visible part of the grid in physical window pixels (both sidebars are hidden in the grid).
-pub fn viewport_bounds(window_width: u32, window_height: u32, scale: f32) -> ViewportBounds {
+pub fn visible_grid(window_width: u32, window_height: u32, scale: f32) -> Rect {
     let viewport_w = (window_width.az::<f32>() / scale).max(100.0);
     let content_top = TAB_GRID_CONTENT_TOP_LOGICAL_PX;
-    ViewportBounds {
-        x: 0,
-        y: (content_top * scale).round().to_int::<i32>(),
-        width: (viewport_w * scale).round().max(16.0).to_int::<u32>(),
-        height: ((((window_height.az::<f32>() / scale) - (content_top + TAB_GRID_STATUS_BAR_LOGICAL_PX)) * scale)
+    Rect::new(
+        0,
+        (content_top * scale).round().to_int::<i32>(),
+        (viewport_w * scale).round().max(16.0).to_int::<i32>(),
+        ((((window_height.az::<f32>() / scale) - (content_top + TAB_GRID_STATUS_BAR_LOGICAL_PX)) * scale)
             .round()
             .max(16.0))
-        .to_int::<u32>(),
-    }
+        .to_int::<i32>(),
+    )
 }

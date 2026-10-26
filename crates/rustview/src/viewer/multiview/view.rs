@@ -36,6 +36,20 @@ pub struct TileView {
     pub dirty: bool,
     /// The marks of the selected medium, while this tile is the selected one of several.
     pub focus: Option<FocusMarkView>,
+    /// The picture of a video, once its surface draws into the host's window.
+    pub video: Option<VideoFrameView>,
+}
+
+/// Where the canvas draws the texture of a video (physical pixels).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VideoFrameView {
+    /// The row of the window's `video-frames` that holds the video's newest texture.
+    pub row: usize,
+    /// The frame mpv draws into (the size of the texture), relative to the tile: the room of the tile in the fullscreen and the
+    /// tab view (mpv letterboxes into it), else the tile.
+    pub frame: Rect,
+    /// The part of the frame that shows (the medium's place, or the whole room while the video is zoomed), relative to the tile.
+    pub clip: Rect,
 }
 
 /// The marks of the selected medium (physical pixels). The host brightens the view and draws the corner marks in its corners;

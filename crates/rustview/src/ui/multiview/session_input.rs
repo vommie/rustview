@@ -16,6 +16,7 @@ use crate::viewer::multiview::media_actions::{BarClick, MediaActionId};
 use crate::viewer::multiview::primary_actions::PrimaryActionId;
 use crate::viewer::multiview::route::{HostMode, OriginKind, RoutedEvent, UiAction, route};
 use crate::viewer::multiview::tile::TileSeed;
+use crate::viewer::video_surface::FULLSCREEN_WINDOW;
 use rustview_core::library::models::MediaId;
 use rustview_core::util::cast::SaturatingAs;
 use slint::ComponentHandle;
@@ -33,6 +34,7 @@ impl Session {
         let size = win.window().size();
         let scale = win.window().scale_factor().max(0.5);
         Some(HostSurface::fullscreen(
+            FULLSCREEN_WINDOW,
             self.fs_xid,
             size.width.max(1).saturating_as::<i32>(),
             size.height.max(1).saturating_as::<i32>(),
@@ -221,7 +223,7 @@ impl Session {
     }
 
     /// Locks the fullscreen while a dialog is open (its own or one of the main window): the overlay of the window takes every
-    /// click and key, and the video windows let the pointer through to it.
+    /// click and key.
     fn sync_modal_lock(&self, win: &MultiviewFullscreenWindow, locked: bool) {
         if win.get_is_modal_locked() == locked {
             return;

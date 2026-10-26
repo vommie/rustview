@@ -21,6 +21,7 @@ use crate::viewer::multiview::instance::{MultiviewInstance, SharedInstance, Weak
 use crate::viewer::multiview::media_actions::{BarClick, MediaActionId};
 use crate::viewer::multiview::primary_actions::PrimaryActionId;
 use crate::viewer::multiview::route::{HostMode, OriginKind, RoutedEvent, UiAction, route};
+use crate::viewer::video_surface::MAIN_WINDOW;
 use crate::viewer::{PointerProbe, ViewerTabManager, get_slint_window_xid};
 use rustview_core::library::models::MediaId;
 use rustview_core::settings::schema::MULTIVIEW_TICK_MS;
@@ -422,17 +423,15 @@ fn run(action: UiAction) {
     }
 }
 
-/// Places the instance of the active tab in the viewer area and shows it. Called whenever the area, the tab or the
-/// cutouts of menus and tooltips may have changed; the instance ignores a surface it already has.
-pub fn sync(window: &MainWindow, tab_manager: &ViewerTabManager, instance: &SharedInstance) {
-    let Some(main_xid) = get_slint_window_xid(window.window()) else {
-        return;
-    };
+/// Places the instance of the active tab in the viewer area and shows it. Called whenever the area or the tab may have changed;
+/// the instance ignores a surface it already has.
+pub fn sync(window: &MainWindow, instance: &SharedInstance) {
+    // The hint and the bar windows are placed relative to the X11 window (0 on Wayland, where they have no place yet).
+    let main_xid = get_slint_window_xid(window.window()).unwrap_or(0);
     let scale = window.window().scale_factor();
     let area = window.invoke_multiview_viewport();
     let rect = views::physical_rect(area.x, area.y, area.width, area.height, scale);
-    let cutouts = tab_manager.get_combined_cutouts();
-    let surface = HostSurface::tab_view(main_xid, rect, scale, cutouts);
+    let surface = HostSurface::tab_view(MAIN_WINDOW, main_xid, rect, scale);
     instance.lock().set_host(&surface);
     with_host(|h| {
         h.window = Some(window.as_weak());

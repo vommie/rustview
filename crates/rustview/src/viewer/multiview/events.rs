@@ -16,20 +16,10 @@ use std::sync::Arc;
 pub type DecodedImage = Result<(u32, u32, SharedPixelBuffer<Rgb8Pixel>), String>;
 
 pub enum PlayerEvent {
-    ToggleFullscreen,
-    /// A plain left click on the video of this tile (it becomes the selected tile).
-    Clicked(TileKey),
     /// The mute state of the player of this tile changed (a hotkey or the on-screen controller of mpv, or us).
-    MuteChanged {
-        tile: TileKey,
-        muted: bool,
-    },
+    MuteChanged { tile: TileKey, muted: bool },
     /// The user's pause state of the player of this tile changed.
-    PauseChanged {
-        tile: TileKey,
-        paused: bool,
-    },
-    CtrlClick,
+    PauseChanged { tile: TileKey, paused: bool },
     /// The mpv script `ab_repeat.lua` in the player of this tile published a change (its support, A-B or saved repeats).
     AbRepeat {
         tile: TileKey,
@@ -58,10 +48,7 @@ pub enum PlayerEvent {
         result: Result<SharedPixelBuffer<Rgb8Pixel>, String>,
     },
     /// A zoomed picture was resampled.
-    ZoomRendered {
-        tile: TileKey,
-        done: RenderDone,
-    },
+    ZoomRendered { tile: TileKey, done: RenderDone },
 }
 
 pub trait MultiviewEventSink: Send + Sync {

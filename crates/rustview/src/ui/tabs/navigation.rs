@@ -81,16 +81,16 @@ impl BridgeViewerTabs {
         }
     }
 
-    /// Puts the active tab's Multiview in the viewer area (or lets go of it in the Browse view and the tab grid) and hides the
-    /// native video windows of every other tab.
+    /// Puts the active tab's Multiview in the viewer area (or lets go of it in the Browse view and the tab grid) and pauses the
+    /// Multiview of every other tab.
     pub fn sync_video_embedding(
         window: &MainWindow,
         tab_manager: &Arc<ViewerTabManager>,
         fullscreen: &MultiviewHandle,
         _settings: &Arc<SettingsManager>,
     ) {
-        // Only a fullscreen that is isolated from the Browse view (it shows a tab's own Multiview) owns the video windows; a
-        // Multiview that follows the Browse selection leaves the embedding of tab videos alone.
+        // Only a fullscreen that is isolated from the Browse view (it shows a tab's own Multiview) owns the tab's videos; a
+        // Multiview that follows the Browse selection leaves the tab videos alone.
         if fullscreen.is_isolated_open() {
             return;
         }
@@ -99,7 +99,7 @@ impl BridgeViewerTabs {
 
         if view_mode == 0 {
             tab_host::suspend();
-            tab_manager.hide_all_video_subwindows();
+            tab_manager.deactivate_all_tabs();
             return;
         }
 
@@ -110,9 +110,9 @@ impl BridgeViewerTabs {
 
         // Tab view: every tab is a Multiview (one tile for a tab of one medium); the active one is placed in the viewer area.
         let active_tab = tab_manager.get_active_tab();
-        tab_manager.hide_video_subwindows_except(active_tab.as_ref().map(|t| t.id));
+        tab_manager.deactivate_tabs_except(active_tab.as_ref().map(|t| t.id));
         match active_tab {
-            Some(tab) => tab_host::sync(window, tab_manager, &tab.multiview.instance),
+            Some(tab) => tab_host::sync(window, &tab.multiview.instance),
             None => tab_host::suspend(),
         }
     }

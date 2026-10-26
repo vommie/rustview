@@ -1,6 +1,6 @@
 //! Subscriber callbacks and the mpv event observer thread.
 
-use super::{CLICK_MESSAGE, MpvPlayer, ab_repeat};
+use super::{MpvPlayer, ab_repeat};
 use crate::viewer::types::MpvPlaybackState;
 use rustview_core::settings::schema::{MPV_OBSERVER_ACTIVE_POLL_MS, MPV_OBSERVER_IDLE_POLL_MS};
 use rustview_core::util::cast::Az;
@@ -16,25 +16,6 @@ impl MpvPlayer {
         F: Fn(&MpvPlaybackState) + Send + Sync + 'static,
     {
         self.callbacks.write().push(Arc::new(callback));
-    }
-
-    pub fn on_toggle_fullscreen<F>(&self, callback: F)
-    where
-        F: Fn() + Send + Sync + 'static,
-    {
-        let mut cbs = self.fullscreen_callbacks.write();
-        cbs.clear();
-        cbs.push(Arc::new(callback));
-    }
-
-    /// A plain left click on the player's window (outside the tab grid, whose clicks have their own callbacks).
-    pub fn on_clicked<F>(&self, callback: F)
-    where
-        F: Fn() + Send + Sync + 'static,
-    {
-        let mut cbs = self.click_callbacks.write();
-        cbs.clear();
-        cbs.push(Arc::new(callback));
     }
 
     /// Reports every mute change, whatever caused it (the single place that watches mpv for it).
@@ -57,15 +38,6 @@ impl MpvPlayer {
         cbs.push(Arc::new(callback));
     }
 
-    pub fn on_convert_to_background_tab<F>(&self, callback: F)
-    where
-        F: Fn() + Send + Sync + 'static,
-    {
-        let mut cbs = self.convert_to_tab_callbacks.write();
-        cbs.clear();
-        cbs.push(Arc::new(callback));
-    }
-
     pub(super) fn notify_subscribers(&self) {
         let snapshot = self.state.read().clone();
         let callbacks = self.callbacks.read().clone();
@@ -83,9 +55,6 @@ impl MpvPlayer {
         let is_user_paused = self.is_user_paused.clone();
         let is_tab_grid_mode = self.is_tab_grid_mode.clone();
         let callbacks = self.callbacks.clone();
-        let fs_callbacks = self.fullscreen_callbacks.clone();
-        let convert_callbacks = self.convert_to_tab_callbacks.clone();
-        let click_callbacks = self.click_callbacks.clone();
         let mute_callbacks = self.mute_callbacks.clone();
         let pause_callbacks = self.pause_callbacks.clone();
         let current_file = self.current_file_path.clone();
@@ -99,7 +68,6 @@ impl MpvPlayer {
 
                 let mut last_mute: Option<bool> = None;
                 let mut last_user_paused: Option<bool> = None;
-                let mut gpu_context_known = false;
 
                 while running.load(Ordering::Relaxed) {
                     // A player that is neither shown nor in the tab grid has nobody to react to: poll it less often.
@@ -117,11 +85,6 @@ impl MpvPlayer {
                         };
                         timeout = 0.0;
                         match event {
-                            Ok(libmpv2::events::Event::ClientMessage(args)) if args.first() == Some(&CLICK_MESSAGE) => {
-                                for cb in click_callbacks.read().clone() {
-                                    cb();
-                                }
-                            }
                             Ok(libmpv2::events::Event::PropertyChange {
                                 change: libmpv2::events::PropertyData::Str(json),
                                 reply_userdata,
@@ -150,36 +113,7 @@ impl MpvPlayer {
                         }
                     }
 
-                    // The GPU context mpv chose, for Settings > Debug (read until the first video has one).
-                    if !gpu_context_known
-                        && let Ok(context) = mpv.get_property::<String>("current-gpu-context")
-                        && !context.is_empty()
-                    {
-                        crate::system::diagnostics::graphics::record_mpv_context(&context);
-                        gpu_context_known = true;
-                    }
-
-                    // 1. Intercept double-click / middle-click Fullscreen triggers from MPV
-                    let fs_requested = mpv.get_property::<bool>("fullscreen").unwrap_or(false);
-                    if fs_requested {
-                        let _ = mpv.set_property("fullscreen", false);
-                        let fs_cbs = fs_callbacks.read().clone();
-                        for cb in fs_cbs {
-                            cb();
-                        }
-                    }
-
-                    // 2. Intercept Ctrl+Click / Ctrl+DoubleClick in Fullscreen to convert the fullscreen Multiview to a background tab
-                    let convert_requested = mpv.get_property::<bool>("window-maximized").unwrap_or(false);
-                    if convert_requested {
-                        let _ = mpv.set_property("window-maximized", false);
-                        let convert_cbs = convert_callbacks.read().clone();
-                        for cb in convert_cbs {
-                            cb();
-                        }
-                    }
-
-                    // 3. Sync live playback properties
+                    // Sync live playback properties
                     let pos = mpv.get_property::<f64>("time-pos").unwrap_or(0.0);
                     let dur = mpv.get_property::<f64>("duration").unwrap_or(0.0);
                     // The pause state counts as the user's choice only if the view stayed active while it was read.

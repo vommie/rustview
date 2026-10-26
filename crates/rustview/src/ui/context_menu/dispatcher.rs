@@ -40,7 +40,7 @@ impl BridgeContextMenu {
 
         window.on_context_menu_item_clicked(move |action_id| {
             CtxMenuPresenter::dismiss(&win);
-            tab_mgr.clear_menu_cutouts();
+            tab_mgr.set_menu_open(false);
             let action_u64 = action_id.wrapping_as::<u64>();
 
             // 1. Favorites Action Handling (5000..6000)

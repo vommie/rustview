@@ -3,8 +3,8 @@ import { AppIdentity } from "app_identity.slint";
 import { MultiviewTileView, MultiviewGutterView } from "multiview_types.slint";
 import { MultiviewCanvas } from "multiview_canvas.slint";
 
-/// Frameless fullscreen window showing one to four media (Multiview). Video tiles are native mpv windows placed on top
-/// of this scene by Rust; everything else (background, images, gutters) is drawn by the shared `MultiviewCanvas`. The
+/// Frameless fullscreen window showing one to four media (Multiview), drawn by the shared `MultiviewCanvas` (videos are the
+/// textures of their render threads, `video-frames`). The
 /// action bar floats above this window in a window of its own (`MultiviewBarWindow`). A single image of a Multiview opened from
 /// Browse can be browsed with the keys of the keymap and the mouse wheel (`navigation`); a video keeps them for mpv.
 export component MultiviewFullscreenWindow inherits Window {
@@ -14,6 +14,8 @@ export component MultiviewFullscreenWindow inherits Window {
 
     in property <[MultiviewTileView]> tiles;
     in property <[MultiviewGutterView]> gutters;
+    // The newest picture of every video drawn in this window (`video_surface::hosts`).
+    in property <[image]> video-frames;
     in property <int> navigation: 0; // 0 = off, 1 = previous/next allowed, 2 = refused (sticky single image)
     in property <int> background-mode: 0; // 0 = Dark Theme (#11111b), 1 = Deep Black (#000000), 2 = Checkerboard
     // Where the background comes from: 0 = the theme, 1 = `background-mode` (the viewer setting), 2 = `custom-fill`.
@@ -104,6 +106,7 @@ export component MultiviewFullscreenWindow inherits Window {
 
         tiles: root.tiles;
         gutters: root.gutters;
+        video-frames: root.video-frames;
         wheel-navigation: root.navigation != 0;
         screen: { x: 0px, y: 0px, width: root.width, height: root.height };
         background-mode: root.background-mode;
@@ -162,9 +165,8 @@ export component MultiviewFullscreenWindow inherits Window {
         }
     }
 
-    // Above everything: while a dialog is open no click, wheel or drag reaches the Multiview (the native video windows let the
-    // pointer through meanwhile), and a click brings the dialog to the front. Dimmed like the locked main window (a compositor
-    // with KWin's "Dialog Parent" effect also dims the native video windows; Slint cannot draw over them).
+    // Above everything: while a dialog is open no click, wheel or drag reaches the Multiview, and a click brings the dialog to the
+    // front. Dimmed like the locked main window.
     if root.is-modal-locked : Rectangle {
         width: 100%;
         height: 100%;

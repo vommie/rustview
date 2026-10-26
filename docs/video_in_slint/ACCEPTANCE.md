@@ -22,7 +22,7 @@ also offered as a German questionnaire with a tick and a note field per item.
 ## A. The picture
 
 - [ ] **A1** A video plays in the tab view, in the fullscreen and (paused) in the tab grid, sharp and in the right
-  shape. — *Test:* open `full_hd_h264.mp4`, `portrait_1080x1920.mp4` and `anamorphic_720x480.mp4` in each of the three.
+  shape. — *Test:* open `full_hd_h264.mp4`, `portrait_1080x1920.mp4` and `anamorphic_720x480.mp4` in each of the three. *Checked in M1: tab view and fullscreen with `vid_landscape.mp4` (VirGL VM, femtovg/GLX); the grid and the other clips in M6.*
 - [ ] **A2** A lone video in a tab fills the whole tab area; mpv adds the black bars itself where the shape differs. —
   *Test:* open `cinemascope_2560x1072.mp4` in a tab, make the window narrower and wider.
 - [ ] **A3** 2, 3 and 4 media are arranged as before (a row, or a 2x2 grid for four wide media); the gutters can be dragged,
@@ -136,7 +136,7 @@ also offered as a German questionnaire with a tick and a note field per item.
 
 - [ ] **G1** A context menu of the main window (right click on a tab of the tab bar, on the sidebar, the tag panel) shows
   completely over a video, nothing is cut or hidden; a click anywhere closes it and goes on to what is below (KDE style). —
-  *Test:* a video tab, right click a tab title so the menu hangs over the video.
+  *Test:* a video tab, right click a tab title so the menu hangs over the video. *Checked in M1: the tab bar's context menu lies completely over a playing video, no cutout.*
 - [ ] **G2** Tooltips show over a video. — *Test:* hover a toolbar button whose tooltip lies over the video.
 - [ ] **G3** Dialogs (F2 rename, Delete, Save As) open centered over their window, the window behind is locked (dimmed by
   KWin), a click on it brings the dialog to the front; no bar is shown or usable while it is open. — *Test:* F2 on a video in
@@ -231,7 +231,7 @@ also offered as a German questionnaire with a tick and a note field per item.
 ## O. Handover between windows
 
 - [ ] **O1** Tab → fullscreen → back: position, pause state, volume, zoom and A-B stay; no visible gap or black frame. —
-  *Test:* play a tab to 0:30, F11, Esc.
+  *Test:* play a tab to 0:30, F11, Esc. *Checked in M1: tab → fullscreen → tab: position and pause kept, a new render context in each window (`[VideoSurface: Render]` epochs 1, 3, 5); the gap of 1-3 frames is covered in M6.*
 - [ ] **O2** Fullscreen → background tab (Ctrl + double click or "Send to tab"): the videos run on in the tab. — *Test:*
   both ways.
 - [ ] **O3** Merging tabs (Ctrl+click two tabs > Merge, or Merge With Left/Right) keeps every video running with its

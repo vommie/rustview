@@ -1,6 +1,5 @@
 //! Registering the context menu handlers of every kind of menu.
 
-use super::calculate_all_active_menu_cutouts;
 use super::{BridgeContextMenu, FolderMenuContext, MediaMenuContext};
 use crate::ui::MainWindow;
 use crate::ui::browse_folders::{BrowseFolders, FolderRowRef};
@@ -226,22 +225,21 @@ impl BridgeContextMenu {
                 m_idx.saturating_as::<usize>(),
             );
 
-            let all_cutouts = calculate_all_active_menu_cutouts(&win);
-            tm_sub.set_menu_cutouts(all_cutouts);
+            tm_sub.set_menu_open(true);
         });
 
         let win = window.clone_strong();
         let tm = tab_manager.clone();
         window.on_context_menu_dismissed(move || {
             CtxMenuPresenter::dismiss(&win);
-            tm.clear_menu_cutouts();
+            tm.set_menu_open(false);
         });
 
         let win = window.clone_strong();
         let tm = tab_manager.clone();
         window.on_context_menu_outside_clicked(move |x, y, button| {
             CtxMenuPresenter::dismiss(&win);
-            tm.clear_menu_cutouts();
+            tm.set_menu_open(false);
             super::outside_click::replay(&win, x, y, button);
         });
     }

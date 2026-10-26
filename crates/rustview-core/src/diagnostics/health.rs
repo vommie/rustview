@@ -77,8 +77,8 @@ pub struct DisplayFacts {
     /// `None` = not known (the command line has no window).
     pub gl_renderer: Option<String>,
     pub gl_version: Option<String>,
-    /// mpv's GPU context of the last video (`None` = no video played yet).
-    pub mpv_context: Option<String>,
+    /// How videos are drawn (mpv's render API and the windowing GL API; `None` = not known yet).
+    pub video_path: Option<String>,
     /// Whether the facts come from the running app (otherwise graphics and mpv are not known).
     pub in_app: bool,
     /// The mpv script `ab_repeat.lua` as the players found it (`None`: its support is switched off).
@@ -164,14 +164,14 @@ pub fn in_memory(display: &DisplayFacts, memory: Option<MemoryFacts>) -> Vec<Che
     let mut checks = vec![window_system_check(display)];
     if display.in_app {
         checks.push(graphics_check(display));
-        checks.push(match &display.mpv_context {
-            Some(context) => health(
+        checks.push(match &display.video_path {
+            Some(path) => health(
                 "videos",
                 Status::Ok,
-                format!("Videos draw with {context}"),
-                "mpv's GPU context of the last video",
+                format!("Videos draw with {path}"),
+                "into textures of the window that shows them",
             ),
-            None => health("videos", Status::Info, "Videos", "no video was played yet"),
+            None => health("videos", Status::Info, "Videos", "the main window has not drawn yet"),
         });
     }
     if display.in_app
@@ -478,7 +478,7 @@ mod tests {
             window_system: WindowSystemKind::X11Session,
             gl_renderer: Some("AMD Radeon RX 6600 (radeonsi)".into()),
             gl_version: Some("4.6".into()),
-            mpv_context: Some("x11egl".into()),
+            video_path: Some("mpv's render API, GLX".into()),
             in_app: true,
             ..DisplayFacts::default()
         }

@@ -27,7 +27,7 @@ pub enum ViewerError {
     #[error("MPV player error: {0}")]
     Mpv(String),
 
-    #[error("X11 subwindow error: {0}")]
+    #[error("X11 error: {0}")]
     X11(String),
 
     #[error("This action needs a tab that shows exactly one medium")]

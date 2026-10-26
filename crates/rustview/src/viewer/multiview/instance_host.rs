@@ -1,70 +1,73 @@
-//! Where a Multiview is shown: the host surface, the projection of the virtual container into it, the placement of the
-//! video windows and the description a host draws.
+//! Where a Multiview is shown: the host surface, the projection of the virtual container into it, the size and window of the
+//! video surfaces and the description a host draws.
 //!
-//! `set_host` is the only place that decides where windows go and which flags the players get; every host (the fullscreen
-//! window, a viewer tab, a tab-grid tile) just hands in its rectangle.
+//! `set_host` is the only place that decides which window draws the videos and which flags the players get; every host (the
+//! fullscreen window, a viewer tab, a tab-grid tile) just hands in its window and rectangle.
 
 use super::container::{Container, Projection, gutter_floor, lone_medium_fills_host};
 use super::instance::MultiviewInstance;
 use super::instance_layout::layout_params;
-use super::instance_video_zoom::{note_placement, place_video_window};
+use super::instance_video_zoom::note_placement;
 use super::layout::{GutterKind, LayoutParams, Rect};
 use super::route::HostMode;
 use super::video_placement::VideoPlacement;
-use super::view::{GutterView, HostedView, TileView};
-use crate::viewer::{SubwindowGeometry, ViewportBounds, XRectangle};
+use super::view::{GutterView, HostedView, TileView, VideoFrameView};
+use crate::viewer::video_surface::HostWindowId;
 use rustview_core::settings::schema::{MULTIVIEW_GUTTER_LOGICAL_PX, MULTIVIEW_MIN_VIDEO_WINDOW_PX};
 use rustview_core::util::cast::{FloatToInt, SaturatingAs};
 use std::time::Instant;
 
-/// The rectangle a host gives to a Multiview, in physical pixels of the window `parent_xid`.
+/// The rectangle a host gives to a Multiview, in physical pixels of the Slint window `window` (whose canvas draws the videos).
 #[derive(Debug, Clone, PartialEq)]
 pub struct HostSurface {
     pub mode: HostMode,
+    /// The window that draws the videos (`video_surface::hosts`; 0 = none).
+    pub window: HostWindowId,
+    /// The X11 window of the host (0 on Wayland): only the hint window is placed relative to it (it goes in M3 of
+    /// `docs/video_in_slint/HANDOFF.md`).
     pub parent_xid: u64,
     pub rect: Rect,
     /// Scale factor of the host window.
     pub dpi: f32,
-    /// Visible part of the parent (the tab-grid viewport): video windows are clipped to it. `None` clips nothing.
+    /// The visible part of the tab grid (window pixels): the small bar windows of the grid stay inside it (they go in M6 of
+    /// `docs/video_in_slint/HANDOFF.md`). `None` outside the grid.
     pub clip: Option<Rect>,
-    /// Areas of the parent that must stay free of video (context menus, tooltips), in parent coordinates.
-    pub overlay_cutouts: Vec<XRectangle>,
 }
 
 impl HostSurface {
     /// A frameless fullscreen window of `width` x `height` physical pixels.
-    pub fn fullscreen(parent_xid: u64, width: i32, height: i32, dpi: f32) -> Self {
+    pub fn fullscreen(window: HostWindowId, parent_xid: u64, width: i32, height: i32, dpi: f32) -> Self {
         Self {
             mode: HostMode::Fullscreen,
+            window,
             parent_xid,
             rect: Rect::new(0, 0, width.max(1), height.max(1)),
             dpi,
             clip: None,
-            overlay_cutouts: Vec::new(),
         }
     }
 
     /// The media area of the active viewer tab inside the main window.
-    pub fn tab_view(parent_xid: u64, rect: Rect, dpi: f32, overlay_cutouts: Vec<XRectangle>) -> Self {
+    pub fn tab_view(window: HostWindowId, parent_xid: u64, rect: Rect, dpi: f32) -> Self {
         Self {
             mode: HostMode::TabView,
+            window,
             parent_xid,
             rect,
             dpi,
             clip: None,
-            overlay_cutouts,
         }
     }
 
-    /// The canvas of a tab-grid item; `clip` is the visible part of the grid.
-    pub fn tab_grid(parent_xid: u64, rect: Rect, dpi: f32, clip: Rect, overlay_cutouts: Vec<XRectangle>) -> Self {
+    /// The canvas of a tab-grid item (Slint clips and scrolls the videos with the grid); `clip` is the visible part of the grid.
+    pub fn tab_grid(window: HostWindowId, parent_xid: u64, rect: Rect, dpi: f32, clip: Rect) -> Self {
         Self {
             mode: HostMode::TabGrid,
+            window,
             parent_xid,
             rect,
             dpi,
             clip: Some(clip),
-            overlay_cutouts,
         }
     }
 
@@ -74,6 +77,7 @@ impl HostSurface {
     )]
     fn same_geometry(&self, other: &Self) -> bool {
         self.mode == other.mode
+            && self.window == other.window
             && self.parent_xid == other.parent_xid
             && self.rect == other.rect
             && self.dpi == other.dpi
@@ -86,9 +90,9 @@ pub(super) struct HostState {
     pub projection: Projection,
     /// The mode the player flags were last applied for.
     pub flags_mode: Option<HostMode>,
-    /// A menu of the application is open: the video windows let the pointer through.
+    /// A menu of the application is open (no bars meanwhile).
     pub menu_open: bool,
-    /// A dialog is open over the host: the video windows let the pointer through.
+    /// A dialog is open over the host (no bars meanwhile).
     pub modal_locked: bool,
 }
 
@@ -97,11 +101,11 @@ impl HostState {
         Self {
             surface: HostSurface {
                 mode: HostMode::Hidden,
+                window: 0,
                 parent_xid: 0,
                 rect: container.rect(),
                 dpi: container.dpi,
                 clip: None,
-                overlay_cutouts: Vec::new(),
             },
             projection: Projection::identity(container),
             flags_mode: None,
@@ -116,9 +120,7 @@ impl MultiviewInstance {
     /// display the Multiview was last shown on); every other host scales that container into its rectangle.
     pub fn set_host(&mut self, surface: &HostSurface) -> bool {
         if self.host.surface.same_geometry(surface) {
-            let changed = self.host.surface.overlay_cutouts != surface.overlay_cutouts;
-            self.set_overlay_cutouts(&surface.overlay_cutouts);
-            return changed;
+            return false;
         }
         if surface.mode == HostMode::Fullscreen {
             self.container = Container::new(surface.rect.w, surface.rect.h, surface.dpi);
@@ -145,7 +147,7 @@ impl MultiviewInstance {
             relayout,
             "[Multiview: Layout] Window geometry changed"
         );
-        self.reparent_windows();
+        self.attach_surfaces();
         if relayout {
             self.apply_layout();
         } else {
@@ -153,7 +155,7 @@ impl MultiviewInstance {
         }
         self.apply_player_flags();
         // A Multiview that was never shown (a tab opened in the background) starts with the first host that shows it. The
-        // fullscreen starts its tiles itself, once its native window exists.
+        // fullscreen starts its tiles itself, once its window exists.
         if surface.mode != HostMode::Fullscreen {
             self.start_all();
         }
@@ -202,44 +204,17 @@ impl MultiviewInstance {
         gutter_floor(host_gutter, projection.scale())
     }
 
-    /// Replaces the context menu and tooltip cutouts of the host and applies them to every visible video window.
-    pub fn set_overlay_cutouts(&mut self, cutouts: &[XRectangle]) {
-        if self.host.surface.overlay_cutouts == cutouts {
-            return;
-        }
-        self.host.surface.overlay_cutouts = cutouts.to_vec();
-        self.apply_all_cutouts();
-    }
-
-    /// A menu of the application is open (or closed again): the video windows let the pointer through to the main window while
-    /// it is, so that a click anywhere closes the menu (see `X11VideoSubwindow::set_input_passthrough`).
+    /// A menu of the application is open (or closed again): no bar is shown meanwhile.
     pub fn set_menu_open(&mut self, open: bool) {
         self.host.menu_open = open;
-        self.apply_pointer_passthrough();
     }
 
-    /// A dialog is open over the host (or closed again): the video windows let the pointer through to the host window, whose
-    /// lock answers the click (the dialog comes to the front) instead of mpv (a double click would toggle the fullscreen).
+    /// A dialog is open over the host (or closed again): no bar is shown meanwhile.
     pub fn set_modal_locked(&mut self, locked: bool) {
-        if self.host.modal_locked == locked {
-            return;
-        }
         self.host.modal_locked = locked;
-        self.apply_pointer_passthrough();
     }
 
-    /// The video windows take no pointer input wherever the Multiview is shown: `RustView` handles the mouse over a video
-    /// itself (its control bar, clicks, the wheel; in the tab grid the grid item does, like over a picture). Called on every
-    /// tick and every change of the host, so a video that starts later gets it too (the windows change nothing when the
-    /// state is the same).
-    pub(super) fn apply_pointer_passthrough(&mut self) {
-        let through = self.host.surface.mode != HostMode::Hidden || self.host.menu_open || self.host.modal_locked;
-        for video in self.tiles.iter_mut().filter_map(|t| t.video.as_mut()) {
-            video.window.set_input_passthrough(through);
-        }
-    }
-
-    /// The host rectangle of the video window of tile `index`.
+    /// The host rectangle of the medium of tile `index`.
     pub(super) fn host_content(&self, index: usize) -> Option<Rect> {
         self.layout
             .tiles
@@ -247,60 +222,41 @@ impl MultiviewInstance {
             .map(|t| self.host.projection.rect(t.content))
     }
 
-    /// Re-places everything after the layout or the projection changed. The shape of a video window is relative to the
-    /// window, so it is reset before any window moves and applied again afterwards.
+    /// Re-places everything after the layout or the projection changed.
     pub(super) fn reproject(&mut self) {
         self.sync_zoom_frames();
-        self.place_windows();
-        self.apply_all_cutouts();
+        self.size_surfaces();
         self.sync_feedback_overlays(Instant::now());
         self.sync_focus_overlays();
         self.bump();
     }
 
-    /// Moves windows that live below another parent (for example after the fullscreen window went away) below the parent
-    /// of the host. The shape is reset first because it is relative to the window and would clip at a stale place.
-    fn reparent_windows(&mut self) {
-        let parent = self.host.surface.parent_xid;
-        let projection = self.host.projection;
-        for (tile, placed) in self.tiles.iter_mut().zip(&self.layout.tiles) {
+    /// Lets every video draw into the window of the host. A video that drew into another window (the fullscreen and the main
+    /// window have GL contexts of their own) gets a new render context there; it keeps playing meanwhile.
+    fn attach_surfaces(&mut self) {
+        let window = self.host.surface.window;
+        if window == 0 {
+            return;
+        }
+        for tile in &mut self.tiles {
             let Some(video) = tile.video.as_mut() else {
                 continue;
             };
-            if video.window.parent_xid() == parent {
-                continue;
-            }
-            let r = projection.rect(placed.content);
-            video.window.reset_clip_shape();
-            let moved = video.window.reparent(
-                parent,
-                r.x,
-                r.y,
-                r.w.max(MULTIVIEW_MIN_VIDEO_WINDOW_PX).saturating_as::<u32>(),
-                r.h.max(MULTIVIEW_MIN_VIDEO_WINDOW_PX).saturating_as::<u32>(),
-            );
-            match moved {
-                Ok(()) => tracing::debug!(
+            if video.surface.host() != Some(window) {
+                video.surface.attach(window, &video.player);
+                tracing::debug!(
                     media_id = tile.media_id,
-                    parent,
-                    "[Multiview: Host] Video window moved to the new parent"
-                ),
-                Err(e) => tracing::warn!(
-                    media_id = tile.media_id,
-                    error = %e,
-                    "[Multiview: Host] Video window could not be moved to the new parent"
-                ),
+                    window,
+                    "[Multiview: Host] Video draws in the window of the new host"
+                );
             }
         }
     }
 
-    /// Moves every video window to the projection of its tile; windows that would become too small are hidden. In the
-    /// tab grid the windows are also clipped to the visible part of the grid.
-    fn place_windows(&mut self) {
+    /// Gives every video surface the size of the frame its video is drawn into (the room of the tile in the fullscreen and the
+    /// tab view, else the medium's place); a frame that would be too small draws nothing.
+    fn size_surfaces(&mut self) {
         let projection = self.host.projection;
-        let (mode, clip) = (self.host.surface.mode, self.host.surface.clip);
-        // A video in the fullscreen or the tab view draws into the room of its tile and shows its place, or all of the room
-        // while zoomed (`instance_video_zoom`).
         let placements: Vec<Option<VideoPlacement>> = (0..self.tiles.len()).map(|i| self.video_placement(i)).collect();
         for ((tile, placed), placement) in self.tiles.iter_mut().zip(&self.layout.tiles).zip(placements) {
             let Some(video) = tile.video.as_mut() else {
@@ -310,48 +266,16 @@ impl MultiviewInstance {
                 let r = projection.rect(placed.content);
                 VideoPlacement::new(r, r)
             });
-            let r = placement.window;
-            if r.w < MULTIVIEW_MIN_VIDEO_WINDOW_PX || r.h < MULTIVIEW_MIN_VIDEO_WINDOW_PX {
-                video.window.hide();
+            let frame = placement.frame;
+            if placement.window.w < MULTIVIEW_MIN_VIDEO_WINDOW_PX || placement.window.h < MULTIVIEW_MIN_VIDEO_WINDOW_PX
+            {
+                video.surface.set_size(0, 0);
                 continue;
             }
-            if let (HostMode::TabGrid, Some(clip)) = (mode, clip) {
-                note_placement(video, placement);
-                video.window.update_geometry_and_clip(
-                    SubwindowGeometry {
-                        x: r.x,
-                        y: r.y,
-                        width: r.w.saturating_as::<u32>(),
-                        height: r.h.saturating_as::<u32>(),
-                    },
-                    ViewportBounds {
-                        x: clip.x,
-                        y: clip.y,
-                        width: clip.w.max(1).saturating_as::<u32>(),
-                        height: clip.h.max(1).saturating_as::<u32>(),
-                    },
-                );
-            } else {
-                video.window.show();
-                place_video_window(video, placement);
-            }
-        }
-    }
-
-    /// Cuts the overlays of the host (menus, tooltips) out of the video window of tile `index`. The action bar is not one
-    /// of them: it floats in a window of its own above the Multiview and is blended with the video by the compositor.
-    pub(super) fn apply_cutouts(&mut self, index: usize) {
-        let mut rects = self.host.surface.overlay_cutouts.clone();
-        if let Some(video) = self.tiles.get_mut(index).and_then(|t| t.video.as_mut()) {
-            // The minimap of a zoomed video (and the slider bubble on it), drawn by the canvas below the window.
-            rects.extend_from_slice(&video.minimap_cut);
-            video.window.clip_cutout_rectangles(&rects);
-        }
-    }
-
-    fn apply_all_cutouts(&mut self) {
-        for index in 0..self.tiles.len() {
-            self.apply_cutouts(index);
+            video
+                .surface
+                .set_size(frame.w.saturating_as::<u32>(), frame.h.saturating_as::<u32>());
+            note_placement(video, placement);
         }
     }
 
@@ -373,7 +297,6 @@ impl MultiviewInstance {
             video.player.set_view_active(active);
         }
         self.apply_video_background();
-        self.apply_pointer_passthrough();
         if mode != HostMode::TabGrid {
             self.sync_time_badges(&[]);
         }
@@ -412,48 +335,37 @@ impl MultiviewInstance {
         );
     }
 
-    /// Moves every video window below `parent_xid`, hidden and paused, so the Multiview can live on as a background tab
-    /// after its fullscreen window is gone. The host becomes `Hidden`; the next `set_host` places and resumes everything.
-    pub fn park(&mut self, parent_xid: u64, rect: Rect) -> Result<(), String> {
+    /// Lets every video draw into `window` (the main window), paused, so the Multiview can live on as a background tab after its
+    /// fullscreen window is gone. The host becomes `Hidden`; the next `set_host` places and resumes everything.
+    pub fn park(&mut self, window: HostWindowId, parent_xid: u64, rect: Rect) {
         self.clear_hover();
-        let (width, height) = (
-            rect.w.max(MULTIVIEW_MIN_VIDEO_WINDOW_PX).saturating_as::<u32>(),
-            rect.h.max(MULTIVIEW_MIN_VIDEO_WINDOW_PX).saturating_as::<u32>(),
-        );
-        let mut failed = None;
         for tile in &mut self.tiles {
             let Some(video) = tile.video.as_mut() else {
                 continue;
             };
-            video.window.reset_clip_shape();
-            if let Err(e) = video.window.reparent(parent_xid, rect.x, rect.y, width, height) {
-                failed = Some(e.to_string());
-            }
-            video.window.hide();
+            video.surface.attach(window, &video.player);
             video.player.set_view_active(false);
             video.player.set_tab_grid_mode(false);
         }
         self.host.surface = HostSurface {
             mode: HostMode::Hidden,
+            window,
             parent_xid,
             rect,
             dpi: self.host.surface.dpi,
             clip: None,
-            overlay_cutouts: Vec::new(),
         };
         self.host.flags_mode = None;
         self.bump();
         tracing::info!(
             instance = self.id,
             players = self.tiles.iter().filter(|t| t.video.is_some()).count(),
-            ok = failed.is_none(),
-            "[Multiview: Host] Parked below the main window"
+            "[Multiview: Host] Parked in the main window"
         );
-        failed.map_or(Ok(()), Err)
     }
 
-    /// Hides the windows and pauses the players because another tab (or the Browse view) took over. The user's pause
-    /// state is kept; `set_host` brings everything back.
+    /// Pauses the players because another tab (or the Browse view) took over. The user's pause state is kept; `set_host` brings
+    /// everything back.
     pub fn deactivate(&mut self) {
         if self.host.surface.mode == HostMode::Hidden {
             return;
@@ -461,7 +373,6 @@ impl MultiviewInstance {
         self.clear_feedback();
         self.clear_hover();
         for video in self.tiles.iter_mut().filter_map(|t| t.video.as_mut()) {
-            video.window.hide();
             video.player.set_view_active(false);
         }
         self.host.surface.mode = HostMode::Hidden;
@@ -469,17 +380,29 @@ impl MultiviewInstance {
         self.bump();
     }
 
-    /// Stops playback and hides the windows because the tab was closed. The instance is destroyed by its last owner.
+    /// Stops playback because the tab was closed. The instance is destroyed by its last owner.
     pub fn stop_and_hide(&mut self) {
         self.clear_feedback();
         self.clear_hover();
         for video in self.tiles.iter_mut().filter_map(|t| t.video.as_mut()) {
             video.player.stop();
-            video.window.hide();
         }
         self.host.surface.mode = HostMode::Hidden;
         self.host.flags_mode = None;
         self.bump();
+    }
+
+    /// Where the canvas draws the texture of the video of tile `index`, whose medium is at `rect` (host pixels).
+    fn video_frame_view(&self, index: usize, rect: Rect) -> Option<VideoFrameView> {
+        let video = self.tiles.get(index)?.video.as_ref()?;
+        let row = video.surface.row_in(self.host.surface.window)?;
+        let placement = video.placement.unwrap_or_else(|| VideoPlacement::new(rect, rect));
+        let relative = |r: Rect| Rect::new(r.x - rect.x, r.y - rect.y, r.w, r.h);
+        Some(VideoFrameView {
+            row,
+            frame: relative(placement.frame),
+            clip: relative(placement.window),
+        })
     }
 
     /// What the host has to draw, with rectangles relative to the host rectangle.
@@ -495,10 +418,11 @@ impl MultiviewInstance {
             .enumerate()
             .map(|(index, (tile, placed))| {
                 let (zoom, minimap, pannable) = self.zoom_views(index);
+                let rect = projection.rect(placed.content);
                 TileView {
                     key: tile.key,
                     media_id: tile.media_id,
-                    rect: relative(projection.rect(placed.content)),
+                    rect: relative(rect),
                     kind: tile.kind,
                     pixels: tile.pixels.clone(),
                     is_loading: tile.is_loading && tile.pixels.is_none(),
@@ -510,6 +434,7 @@ impl MultiviewInstance {
                     crop: self.crop_view(index),
                     dirty: self.tile_is_dirty(index),
                     focus: self.focus_view(index),
+                    video: self.video_frame_view(index, rect),
                 }
             })
             .collect();

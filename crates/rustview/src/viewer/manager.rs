@@ -4,17 +4,17 @@ use super::multiview::instance::{SharedInstance, WeakInstance};
 use super::tab_item::TabCollection;
 use super::tab_ui_gate::TabUiGate;
 use super::types::{MediaTabSession, TabId};
-use super::x11::XRectangle;
+
 use parking_lot::{Mutex, RwLock};
 use rustview_core::library::Library;
 use std::sync::Arc;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 
 mod close;
-mod cutouts;
 mod merge;
 mod open;
 mod ordering;
+mod playback;
 mod query;
 
 /// High-level workspace coordinator managing open tabs, player lifecycles, and window embedding (SRP/OCP).
@@ -24,8 +24,8 @@ pub struct ViewerTabManager {
     tab_counter: AtomicU64,
     library: Arc<Library>,
     cached_viewport_rect: RwLock<(i32, i32, u32, u32)>,
-    active_menu_cutouts: RwLock<Vec<XRectangle>>,
-    active_tooltip_cutouts: RwLock<Vec<XRectangle>>,
+    /// A context menu of the main window is open (no bars meanwhile).
+    menu_open: AtomicBool,
     /// Multiviews that no tab owns (the fullscreen one that follows the Browse selection) but whose media may be renamed,
     /// deleted or refreshed while it is open.
     observed_instances: Mutex<Vec<WeakInstance>>,
@@ -48,8 +48,7 @@ impl ViewerTabManager {
             tab_counter: AtomicU64::new(1),
             library,
             cached_viewport_rect: RwLock::new((0, 64, 800, 600)),
-            active_menu_cutouts: RwLock::new(Vec::new()),
-            active_tooltip_cutouts: RwLock::new(Vec::new()),
+            menu_open: AtomicBool::new(false),
             observed_instances: Mutex::new(Vec::new()),
             tab_ui_gate: TabUiGate::default(),
             tabs_changed_hook: Mutex::new(None),
@@ -109,18 +108,6 @@ impl ViewerTabManager {
 
     pub fn get_viewport_rect(&self) -> (i32, i32, u32, u32) {
         *self.cached_viewport_rect.read()
-    }
-
-    // =========================================================================
-    // Active Player & Subwindow Queries & Centralized Overlay Clipping
-    // =========================================================================
-
-    /// Hides native X11 video subwindows across all video tabs and auto-pauses playback without modifying user pause state.
-    pub fn hide_all_video_subwindows(&self) {
-        let tabs = self.tabs.read();
-        for tab in tabs.all() {
-            tab.deactivate_native();
-        }
     }
 
     // =========================================================================

@@ -1,21 +1,19 @@
-//! Where the native window of a video goes (pure). In the fullscreen and the tab view mpv's own window (the frame) always covers
-//! the whole room of its tile, and the container window only clips it to what shows: the medium's place, or the whole room while
-//! the video is zoomed. So a zoom that leaves 100 % or comes back to it changes only the clip and mpv's view, never the size of
-//! mpv's window. A new size would show one stale frame: mpv follows the size of the window it is embedded in only after the X
-//! server told it (`ConfigureNotify` in mpv's `video/out/x11_common.c`), so for a moment the old picture sits at the wrong place
-//! or in a window of the wrong size, and the view meant for the new size is drawn into the old one.
+//! Where a video goes (pure). In the fullscreen and the tab view mpv's frame (the texture it renders into) always covers the whole
+//! room of its tile, and the canvas only clips it to what shows: the medium's place, or the whole room while the video is zoomed.
+//! So a zoom that leaves 100 % or comes back to it changes only the clip and mpv's view, never the size of the texture (a new size
+//! would show one frame rendered for the old size, stretched). M5 of `docs/video_in_slint/HANDOFF.md` revisits this.
 
 use super::layout::Rect;
 use crate::viewer::zoom::geometry::RectF;
 use crate::viewer::zoom::mpv_view::{self, MpvView};
 use rustview_core::util::cast::{Az, SaturatingAs};
 
-/// The two rectangles of a video window, in host pixels.
+/// The two rectangles of a video, in host pixels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VideoPlacement {
-    /// mpv's own window (the room of the tile in the fullscreen and the tab view, else the medium's place).
+    /// mpv's frame, the size of its texture (the room of the tile in the fullscreen and the tab view, else the medium's place).
     pub frame: Rect,
-    /// The part of the frame that shows (the container clips the frame to it); always inside the frame.
+    /// The part of the frame that shows (the canvas clips the frame to it); always inside the frame.
     pub window: Rect,
 }
 

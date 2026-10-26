@@ -224,14 +224,27 @@ pub(super) fn self_test_checks(outcome: &SelfTestOutcome) -> Vec<Check> {
             "mpv could not draw the test picture (its errors are below and in the log)".to_owned(),
         ),
     });
-    if let Some(context) = &outcome.gpu_context {
-        let output = outcome.video_output.as_deref().unwrap_or("?");
+    if let Some(path) = &outcome.render_path {
+        let gl = outcome.gl_renderer.as_deref().unwrap_or("?");
+        let decoding = outcome
+            .decoding
+            .as_deref()
+            .map_or_else(String::new, |d| format!(", decoder {d}"));
         rows.push(row(
             "drawn_with",
             Status::Ok,
-            format!("Drawn with {context}"),
-            format!("video output {output}"),
+            format!("Drawn with {path}"),
+            format!("{gl}{decoding}"),
         ));
+    }
+    match outcome.picture_ok {
+        Some(true) | None => {}
+        Some(false) => rows.push(row(
+            "picture",
+            Status::Problem,
+            "The picture stayed empty".to_owned(),
+            "mpv rendered frames, but they hold one color only (a black video)".to_owned(),
+        )),
     }
     if outcome.first_frame_ms.is_some() {
         rows.push(if outcome.dropped > 0 {
@@ -266,18 +279,12 @@ pub(super) fn self_test_checks(outcome: &SelfTestOutcome) -> Vec<Check> {
     rows
 }
 
-/// Plays the test picture in a window over the settings window and shows what happened.
+/// Plays the test picture through mpv's render API (in the share group of the main window, not shown) and shows what happened.
 fn run_self_test(page: &Rc<DebugPageController>) {
     if page.shared.self_test.swap(true, Ordering::AcqRel) {
         return;
     }
-    let top_left = page.window().map(|window| {
-        let (position, size) = (window.window().position(), window.window().size());
-        (
-            position.x + (i32::try_from(size.width).unwrap_or(0) - self_test::WINDOW_WIDTH) / 2,
-            position.y + (i32::try_from(size.height).unwrap_or(0) - self_test::WINDOW_HEIGHT) / 2,
-        )
-    });
+    let group = crate::viewer::video_surface::hosts::share_group(crate::viewer::video_surface::MAIN_WINDOW);
     if let Some(window) = page.window() {
         let ui = window.global::<DebugUi>();
         ui.set_self_test_running(true);
@@ -289,9 +296,9 @@ fn run_self_test(page: &Rc<DebugPageController>) {
     let spawned = std::thread::Builder::new()
         .name("debug-self-test".into())
         .spawn(move || {
-            let outcome = self_test::run(top_left);
-            if let Some(context) = &outcome.gpu_context {
-                diagnostics::graphics::record_mpv_context(context);
+            let outcome = self_test::run(group);
+            if let (Some(path), Some(decoding)) = (&outcome.render_path, &outcome.decoding) {
+                diagnostics::graphics::record_video_path(&format!("{path}, decoder {decoding}"));
             }
             shared.self_test.store(false, Ordering::Release);
             let _ = slint::invoke_from_event_loop(move || {
@@ -321,8 +328,9 @@ mod tests {
     fn the_self_test_outcome_becomes_rows() {
         let good = SelfTestOutcome {
             first_frame_ms: Some(180),
-            gpu_context: Some("x11egl".into()),
-            video_output: Some("gpu".into()),
+            render_path: Some("mpv's render API, GLX".into()),
+            video_output: Some("libmpv".into()),
+            picture_ok: Some(true),
             frames: 90,
             ..SelfTestOutcome::default()
         };

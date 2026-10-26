@@ -11,7 +11,7 @@ use super::cursor;
 use super::eligibility::OpenPlan;
 use super::handle::{self, MultiviewHandle, Pace};
 use super::router::{UiEventSink, execute};
-use super::session_convert::park_below_main_window;
+use super::session_convert::park_in_main_window;
 use super::tab_host;
 use super::views::{self, ImageCache, ViewModels};
 use crate::system::{MonitorInfo, SystemDisplayService};
@@ -21,6 +21,7 @@ use crate::ui::state::UiState;
 use crate::viewer::multiview::command::{MultiviewCommand, ZoomKey};
 use crate::viewer::multiview::instance::{MultiviewInstance, SharedInstance};
 use crate::viewer::multiview::route::UiAction;
+use crate::viewer::video_surface::FULLSCREEN_WINDOW;
 use crate::viewer::{PointerProbe, force_x11_fullscreen_on_monitor, get_raw_window_xid};
 use crate::viewer::{TabId, ViewerTabManager};
 use parking_lot::RwLock;
@@ -204,6 +205,8 @@ pub(super) fn refresh_settings(settings: &SettingsManager) {
 fn create_window() -> Result<MultiviewFullscreenWindow, slint::PlatformError> {
     let win = MultiviewFullscreenWindow::new()?;
     crate::ui::dialog_parent::register_parent(&win, crate::ui::dialog_parent::Role::Fullscreen);
+    super::video_host::register(&win, FULLSCREEN_WINDOW, MultiviewFullscreenWindow::set_video_frames);
+    super::video_host::install_notifier(&win, FULLSCREEN_WINDOW);
     win.on_request_close(|| {
         close_by_user();
     });
@@ -494,10 +497,9 @@ pub(super) fn close(notify: bool) {
 }
 
 /// The application exits: the fullscreen closes whatever the user pinned. The close handler does not run (the main window is
-/// closing, so there is no view left to re-sync). The window is only hidden, never dropped here: the video windows of the tiles
-/// are its children, and destroying it while a teardown thread still shuts their players down would end the process (libmpv's
-/// Xlib error handler). Slint destroys hidden windows when the event loop ends, after `ViewerTabManager::shutdown` has waited
-/// for the teardown threads. UI thread only.
+/// closing, so there is no view left to re-sync). The window is only hidden, never dropped here: Slint destroys hidden windows
+/// when the event loop ends, after `ViewerTabManager::shutdown` has waited for the teardown threads (their render threads still
+/// free mpv's render contexts in the window's share group). UI thread only.
 pub(super) fn shutdown() {
     match take_session() {
         Ok(Some(session)) => finish_close(session, false),
@@ -534,9 +536,9 @@ pub(super) fn finish_close(session: Session, notify: bool) {
     let handle = session.handle.clone();
     let tab_return = session.tab_return;
     if tab_return.is_some()
-        && let Err(reason) = park_below_main_window(&session)
+        && let Err(reason) = park_in_main_window(&session)
     {
-        tracing::warn!(reason, "[Multiview: Close] The windows could not return to the tab");
+        tracing::warn!(reason, "[Multiview: Close] The videos could not return to the tab");
     }
     // The placeholders stay until the main window has shown the tab again (`notify_closed`); without that notification (another
     // fullscreen replaces this one, which sets the id itself) nothing would clear them.
