@@ -249,6 +249,7 @@ impl Session {
         bar_overlay::close_menu(BarKind::Media);
         let (click, origin) = {
             let mut instance = self.instance.lock();
+            instance.close_ab_popups();
             (instance.register_click(is_ctrl), instance.origin())
         };
         if click == ClickKind::None {

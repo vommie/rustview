@@ -398,7 +398,11 @@ fn on_click(is_ctrl: bool) {
     let Some(instance) = current_instance() else {
         return;
     };
-    let click = instance.lock().register_click(is_ctrl);
+    let click = {
+        let mut guard = instance.lock();
+        guard.close_ab_popups();
+        guard.register_click(is_ctrl)
+    };
     drop(instance);
     if click == ClickKind::None {
         return;

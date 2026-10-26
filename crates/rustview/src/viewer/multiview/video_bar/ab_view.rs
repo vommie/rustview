@@ -154,6 +154,7 @@ pub fn view(
     }
     let (hours, ms) = clock;
     let time = |secs: f64| time_text::clock(secs, hours, ms);
+    let length = |secs: f64| time_text::length(secs, hours, ms);
     let share = |secs: f64| {
         if duration > 0.0 {
             (secs / duration).clamp(0.0, 1.0).az::<f32>()
@@ -205,7 +206,7 @@ pub fn view(
                 "{}-{} ({})",
                 time(range.a_point),
                 time(range.b_point),
-                time(range.length())
+                length(range.length())
             ));
         }
         (!parts.is_empty()).then(|| (at, parts.join("  ")))
@@ -254,7 +255,14 @@ pub fn view(
             Some(AbPopup::Load { query, page, renaming }) => {
                 let current = script.a.zip(script.b).filter(|_| script.valid);
                 let page = ab_menu::page(list, &palette, query, current, prefs.paging, prefs.page_size, *page);
-                Some(menu_view(&page, query, renaming.clone(), prefs, &time, &share))
+                Some(menu_view(
+                    &page,
+                    query,
+                    renaming.clone(),
+                    prefs,
+                    (&time, &length),
+                    &share,
+                ))
             }
             _ => None,
         },
@@ -292,7 +300,7 @@ fn menu_view(
     query: &str,
     renaming: Option<Renaming>,
     prefs: &AbRepeatPrefs,
-    time: &dyn Fn(f64) -> String,
+    (time, length): (&dyn Fn(f64) -> String, &dyn Fn(f64) -> String),
     share: &dyn Fn(f64) -> f32,
 ) -> MenuView {
     let scroll = prefs.paging == MenuPaging::Scroll;
@@ -306,7 +314,7 @@ fn menu_view(
                 number: row.number,
                 name: row.name.clone(),
                 times: format!("{} - {}", time(row.from), time(row.to)),
-                length: time((row.to - row.from).max(0.0)),
+                length: length((row.to - row.from).max(0.0)),
                 from: share(row.from),
                 to: share(row.to),
                 color: row.color,

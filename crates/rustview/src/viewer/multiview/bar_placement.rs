@@ -101,35 +101,6 @@ pub fn xrectangle(rect: Rect) -> XRectangle {
     }
 }
 
-/// The tab of saved A-B repeats above a control bar (`ui/multiview_video_bar_window.slint`, the strip's `Path`) as rectangles for
-/// the X shape extension, one per pixel row: `rect` is the box of the path (its bottom row touches the bar), `flank` how far the
-/// concave flank at each side reaches out into the bar, `corner` the radius of the top corners. The curves are the path's own
-/// quadratic curves, so the shape matches what is drawn.
-pub fn tab_region(rect: Rect, flank: i32, corner: i32) -> Vec<XRectangle> {
-    let rows = rect.h.max(1);
-    let reach = f64::from(flank.clamp(0, rect.w / 4));
-    // The path: the flank from (0, height) over (reach, height) to (reach, round), the corner on to (reach + round, 0).
-    let round = f64::from(corner.clamp(0, rows - 1));
-    let height = f64::from(rows);
-    (0..rows)
-        .filter_map(|row| {
-            let mid = f64::from(row) + 0.5;
-            // Where the tab starts at this height (the right side is the mirror image).
-            let inset = if mid < round {
-                // The top corner: from (reach, round) over (reach, 0) to (reach + round, 0).
-                reach + round * (1.0 - (mid / round).sqrt()).powi(2)
-            } else {
-                // The flank: from (0, height) over (reach, height) to (reach, round).
-                let along = ((height - mid) / (height - round).max(1.0)).clamp(0.0, 1.0).sqrt();
-                reach * (1.0 - (1.0 - along).powi(2))
-            };
-            let inset = inset.round().to_int::<i32>();
-            let width = rect.w - 2 * inset;
-            (width > 0).then(|| xrectangle(Rect::new(rect.x + inset, rect.y + row, width, 1)))
-        })
-        .collect()
-}
-
 /// `rect` with rounded corners as the list of rectangles the X shape extension wants (one per pixel row of the corners,
 /// plus the straight middle). Used when no compositing manager blends the window: the corners must not show as black.
 pub fn rounded_region(rect: Rect, radius: i32) -> Vec<XRectangle> {
@@ -162,20 +133,31 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_tab_flares_out_at_the_bottom_and_rounds_at_the_top() {
-        let rows = tab_region(Rect::new(10, 0, 200, 12), 12, 6);
-        assert_eq!(rows.len(), 12);
+    fn rounded_corners_cut_only_the_corner_rows() {
+        let rows = rounded_region(Rect::new(10, 20, 100, 30), 6);
         let width = |r: &XRectangle| i32::from(r.width);
-        // Top row: inside the flanks and corners; bottom row: the flanks reach out half way in their last pixel row.
-        assert!(width(&rows[0]) < 200 - 2 * 12);
-        assert!(width(&rows[11]) >= 200 - 12);
+        // Per corner row a top and a bottom rectangle, then the middle as one: the outermost rows are the narrowest.
+        assert_eq!(rows.len(), 2 * 6 + 1);
+        assert!(width(&rows[0]) < 100 && width(&rows[0]) == width(&rows[1]));
         assert!(
-            rows.windows(2).all(|pair| width(&pair[0]) <= width(&pair[1])),
-            "it only grows downward"
+            rows[..12].chunks(2).map(|pair| width(&pair[0])).is_sorted(),
+            "the corner widens toward the middle"
         );
+        let middle = rows.last().copied().unwrap_or(XRectangle {
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+        });
+        assert_eq!((middle.x, middle.y, middle.width, middle.height), (10, 26, 100, 18));
         assert!(
-            rows.iter().all(|r| i32::from(r.x) - 10 == (200 - width(r)) / 2),
+            rows.iter().all(|r| i32::from(r.x) - 10 == (100 - width(r)) / 2),
             "symmetric"
+        );
+        assert_eq!(
+            rounded_region(Rect::new(0, 0, 40, 10), 0).len(),
+            1,
+            "no radius: the plain rectangle"
         );
     }
 }

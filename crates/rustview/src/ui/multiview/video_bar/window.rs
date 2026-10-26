@@ -4,7 +4,7 @@ use super::{InputHandler, VideoBarHost};
 use crate::ui::multiview::bar_overlay::{self, BarOwner};
 use crate::ui::multiview::views::sync_model;
 use crate::ui::{AbMenuRowView, AbRegionView, AbStripSegmentView, MultiviewVideoBarWindow, VideoBarSpanView};
-use crate::viewer::multiview::bar_placement::{rounded_region, tab_region, xrectangle};
+use crate::viewer::multiview::bar_placement::{rounded_region, xrectangle};
 use crate::viewer::multiview::follow::TileKey;
 use crate::viewer::multiview::layout::Rect;
 use crate::viewer::multiview::video_bar::ab_state::AbPoint;
@@ -41,10 +41,9 @@ struct XState {
     bar: Option<Rect>,
     /// The time bubble above the bar, physical pixels relative to the window.
     bubble: Option<Rect>,
-    /// The tab of the A-B group above the bar (physical pixels relative to the window) and the reach of its flanks, shaped like
-    /// the strip's path.
+    /// The tab of the A-B group above the bar, physical pixels relative to the window (without a compositing manager a plain
+    /// rectangle over the progress bar).
     ab_strip: Option<Rect>,
-    ab_flank: i32,
     /// What else the A-B group draws above the bar: its flags, label and open popup.
     ab_parts: Vec<Rect>,
     /// A tooltip of the A-B group.
@@ -72,15 +71,12 @@ impl XState {
         for extra in [self.bubble, self.tooltip].into_iter().flatten() {
             region.extend(rounded_region(extra, self.bubble_radius));
         }
-        if let Some(strip) = self.ab_strip {
-            // The corners are half the strip high, like the path's.
-            region.extend(tab_region(strip, self.ab_flank, strip.h / 2));
-        }
-        region.extend(self.ab_parts.iter().map(|r| xrectangle(*r)));
+        region.extend(self.ab_strip.iter().chain(&self.ab_parts).map(|r| xrectangle(*r)));
         server.set_bounding_region(xid, Some(&region));
     }
 
-    /// Whether the screen point (`x`, `y`) is on a part of the window that takes the pointer (`origin` = the window's place).
+    /// Whether the screen point (`x`, `y`) is on a part of the window that takes the pointer (`origin` = where this window is on
+    /// the screen: the parts are relative to it, not to the host window).
     fn takes_pointer_at(&self, origin: (i32, i32), x: i32, y: i32) -> bool {
         let (x, y) = (x - origin.0, y - origin.1);
         self.bar.is_some_and(|r| r.contains(x, y))
@@ -193,13 +189,13 @@ impl VideoBarWindow {
         }
         self.adopt_native_window();
         self.window.set_revealed(target.phase == Phase::Shown);
-        self.follow_popup(host, origin);
+        self.follow_popup(host);
         true
     }
 
     /// A popup of the A-B group that opened gets the keyboard (its window is override-redirect, so the window manager never
     /// gives it the focus), one that closed gives it back to the host; a press outside the window's parts closes it.
-    fn follow_popup(&mut self, host: &VideoBarHost, origin: (i32, i32)) {
+    fn follow_popup(&mut self, host: &VideoBarHost) {
         let open = self.window.get_ab_popup();
         let state = self.shared.x.borrow();
         let (Some(server), Some(xid)) = (state.server.as_ref(), state.xid) else {
@@ -216,6 +212,8 @@ impl VideoBarWindow {
             server.focus(top);
             tracing::debug!("[Multiview: VideoBar] Keyboard back to the host window");
         }
+        // The parts of the window are relative to the window itself, so the press is too (not to the host window).
+        let origin = self.placed.map_or((0, 0), |placed| (placed.window.x, placed.window.y));
         let pressed_outside = open != 0
             && server
                 .pointer_and_buttons()
@@ -594,7 +592,6 @@ fn connect(window: &MultiviewVideoBarWindow, shared: &Rc<Shared>) {
             true,
             (region.strip_x, region.strip_y, region.strip_w, region.strip_h),
         );
-        state.ab_flank = (region.strip_flank * scale.max(0.5)).round().to_int::<i32>();
         state.ab_parts = [
             (region.a_x, region.a_y, region.a_w, region.a_h),
             (region.b_x, region.b_y, region.b_w, region.b_h),
@@ -668,4 +665,30 @@ fn connect_ab(window: &MultiviewVideoBarWindow, send: &Rc<impl Fn(VideoBarInput)
             ab(AbInput::Flag { point, share, phase });
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_press_counts_against_the_parts_of_the_bar_window_where_it_is_on_the_screen() {
+        // A bar window at (665, 473) on the screen: its bar at the bottom, a menu at the top of the window.
+        let state = XState {
+            bar: Some(Rect::new(0, 147, 649, 30)),
+            ab_parts: vec![Rect::new(125, 0, 520, 103)],
+            ..XState::default()
+        };
+        let origin = (665, 473);
+        assert!(
+            state.takes_pointer_at(origin, 665 + 590, 473 + 50),
+            "a press on a row of the menu is inside"
+        );
+        assert!(state.takes_pointer_at(origin, 665 + 10, 473 + 160), "on the bar");
+        assert!(
+            !state.takes_pointer_at(origin, 665 + 590, 473 + 120),
+            "between the menu and the bar: on the video"
+        );
+        assert!(!state.takes_pointer_at(origin, 300, 100), "elsewhere on the screen");
+    }
 }

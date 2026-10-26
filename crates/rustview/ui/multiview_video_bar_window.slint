@@ -13,7 +13,6 @@ export struct AbRegionView {
     strip-y: length,
     strip-w: length,
     strip-h: length,
-    strip-flank: length,
     a-x: length,
     a-y: length,
     a-w: length,
@@ -182,11 +181,10 @@ export component MultiviewVideoBarWindow inherits Window {
     in property <int> ab-menu-renaming: -1;
     in-out property <string> ab-menu-rename-text;
     out property <AbRegionView> ab-region: {
-        strip-x: root.track-x - root.ab-strip-flank,
+        strip-x: root.track-x - root.ab-tab-flank,
         strip-y: root.ab-strip-top,
-        strip-w: root.ab-shown ? root.track-w + 2 * root.ab-strip-flank : 0px,
+        strip-w: root.ab-strip-shown ? root.track-w + 2 * root.ab-tab-flank : 0px,
         strip-h: root.ab-strip-height,
-        strip-flank: root.ab-strip-flank,
         a-x: root.ab-a-left,
         a-y: root.ab-flag-row-y,
         a-w: root.ab-shown && root.ab-a-flag-shown ? root.ab-a-w : 0px,
@@ -263,6 +261,10 @@ export component MultiviewVideoBarWindow inherits Window {
     property <length> ab-group-width: root.ab-shown && !root.mini ? 5 * root.ab-button-size + 2 * Math.round(3 * root.pt / 1px) * 1px : 0px;
     property <length> bar-top: root.height - root.bar-height;
     property <length> ab-strip-top: root.bar-top - root.ab-strip-height;
+    // The strip only shows while it has something to show: saved repeats, the current A-B or one of its points.
+    property <bool> ab-strip-shown: root.ab-shown && (root.ab-strip.length > 0 || root.ab-span-shown || root.ab-a-flag-shown || root.ab-b-flag-shown);
+    // Without a compositing manager the window is solid: the tab is a plain rectangle over the progress bar then, without flanks.
+    property <length> ab-tab-flank: root.translucent ? root.ab-strip-flank : 0px;
     property <length> ab-flag-row-y: root.ab-strip-top - root.ab-row-height;
     property <length> ab-label-row-y: root.ab-flag-row-y - root.ab-row-height;
     property <length> track-x: progress.absolute-position.x;
@@ -527,17 +529,18 @@ export component MultiviewVideoBarWindow inherits Window {
 
         // ---- The A-B repeat group above the progress bar (only while `ab-shown`).
 
-        // The strip of saved repeats: a tab that grows out of the bar over the progress bar, its flanks curving into the bar.
+        // The strip of saved repeats: a tab that grows out of the bar over the progress bar, its flanks curving into the bar. It
+        // ends exactly on the bar: an overlap would show as a darker seam where the two translucent fills lie on each other.
         Path {
-            visible: root.ab-shown;
-            property <float> h: (root.ab-strip-height + 1px) / 1px;
+            visible: root.ab-strip-shown && root.translucent;
+            property <float> h: root.ab-strip-height / 1px;
             property <float> f: root.ab-strip-flank / 1px;
             property <float> c: root.ab-strip-height / 2 / 1px;
             property <float> w: (root.track-w + 2 * root.ab-strip-flank) / 1px;
             x: root.track-x - root.ab-strip-flank;
             y: root.ab-strip-top;
             width: Math.max(1px, root.track-w + 2 * root.ab-strip-flank);
-            height: root.ab-strip-height + 1px;
+            height: root.ab-strip-height;
             viewbox-width: Math.max(1, self.w);
             viewbox-height: self.h;
             // From the bottom left: the concave flank up to the top corner, the corner, the top, the other corner and flank.
@@ -546,6 +549,15 @@ export component MultiviewVideoBarWindow inherits Window {
                 + " L " + (self.w - self.f - self.c) + " 0 Q " + (self.w - self.f) + " 0 " + (self.w - self.f) + " " + self.c
                 + " Q " + (self.w - self.f) + " " + self.h + " " + self.w + " " + self.h + " Z";
             fill: root.bar-fill;
+        }
+
+        Rectangle {
+            visible: root.ab-strip-shown && !root.translucent;
+            x: root.track-x;
+            y: root.ab-strip-top;
+            width: root.track-w;
+            height: root.ab-strip-height;
+            background: root.bar-fill;
         }
 
         // Saved repeats: one thin row, every repeat slightly translucent, so overlapping ones show as stronger color.
@@ -571,7 +583,7 @@ export component MultiviewVideoBarWindow inherits Window {
         }
 
         strip-touch := TouchArea {
-            visible: root.ab-shown;
+            visible: root.ab-strip-shown;
             x: root.track-x;
             y: root.ab-strip-top;
             width: root.track-w;
@@ -762,7 +774,7 @@ export component MultiviewVideoBarWindow inherits Window {
             width: bubble-text.preferred-width + 2 * Math.round(6 * root.pt / 1px) * 1px;
             height: root.bubble-height - Math.round(4 * root.pt / 1px) * 1px;
             x: Math.round(Math.clamp(self.pointer-x - self.width / 2, 0px, Math.max(0px, root.width - self.width)) / 1px) * 1px;
-            y: (root.ab-shown ? root.ab-strip-top : root.bar-top) - root.bubble-height;
+            y: (root.ab-strip-shown ? root.ab-strip-top : root.bar-top) - root.bubble-height;
             border-radius: Math.round(4 * root.pt / 1px) * 1px;
             background: root.translucent ? root.panel.with-alpha(Math.max(root.bar-opacity, 0.85)) : root.panel;
 

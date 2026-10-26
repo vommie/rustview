@@ -102,6 +102,26 @@ never writes it). The script's OSD texts stay as in mpv unless "Show the script'
 `ab_repeat-osd_messages=no` for RustView's players). Not covered: renamed folders (their files keep their old keys) and paths
 through symbolic links (the script keys them as given).
 
+## Checked with a compositing manager (0.5.6, 2026-10-26)
+
+KWin compositing is on in the VM since 2026-10-26, so the translucent bar was checked as on the user's PCs (MCP build, two tiles of
+`Videos/Clips/hd_720_mkv.mkv` in one tab through Duplicate, the real `~/.config/mpv`):
+
+| Check | Result |
+|---|---|
+| Save in the left player | the right one shows it at once: Load enabled with badge 1, the segment in the tab; its A and B stay unset |
+| Rename in the right player's menu | the left menu shows the new name at once, same color |
+| Delete in the left menu (holding) | the right player: Load disabled, no badge, no tab |
+| Save again | both enabled again; a new color, the old ones are not reshuffled |
+| Name under the pointer | the label follows the pointer over the segment |
+| Click on a menu row, hold to delete | works with the real mouse since 0.5.6 (a press inside the popup was tested against the host's coordinates and closed it) |
+| Short click on the video | closes the menu (the view's own click, not only the 50 ms poll) |
+| Tab and bar | no seam any more; the tab shows only with a saved repeat, A or B |
+| Without a compositor (KWin's "Suspend Compositing" for the check) | solid bar, the tab a plain rectangle over the progress bar, menu fine |
+
+The sync needs no timer: the player that wrote publishes `ranges` with cause `write`, its observer thread sends `reload` to every
+other player of the file, their scripts publish again (`reload_others` in `viewer/mpv_engine/ab_repeat.rs`).
+
 ## The script (as found, 1.x)
 
 - Client name `ab_repeat` (from the file name). Bindings (all `mp.add_key_binding`, i.e. weak: `input.conf` beats them, mpv's

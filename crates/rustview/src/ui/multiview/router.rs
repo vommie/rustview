@@ -122,6 +122,7 @@ fn route_event(handle: &MultiviewHandle, weak: &WeakInstance, event: PlayerEvent
             super::bar_overlay::close_menu(super::bar_overlay::BarKind::Media);
             let mode = {
                 let mut guard = instance.lock();
+                guard.close_ab_popups();
                 guard.select_tile(tile);
                 guard.host_mode()
             };

@@ -57,8 +57,10 @@ fullscreen and the tab view). The tab grid still leaves the pointer to mpv (its 
 While the user's mpv script ab_repeat.lua runs in a video's player (Settings > Multiview), the bar gets an A-B group in
 a capsule between the remaining time and the sound: A, B, AB (a click switches the loop on and off, holding it clears A and B),
 Save (a name bubble) and Load (the menu of saved repeats, with a badge of their number). Above the progress bar a tab grows out
-of the bar (same color, curved flanks like a Chrome tab, a third of the bar high and at least 12 px; without a compositing
-manager the window is cut to its outline, `bar_placement::tab_region`): one thin row of the saved repeats in translucent colors
+of the bar as soon as it has something to show (a saved repeat, A or B): same color, curved flanks like a Chrome tab, a third of
+the bar high and at least 12 px, ending exactly on the bar (an overlap of the two translucent fills showed as a darker seam);
+without a compositing manager the solid window shows it as a plain rectangle over the progress bar. In it: one thin row of the
+saved repeats in translucent colors
 (overlaps show stronger), the current A-B in yellow (blue while its loop is off), the flags of A and B with their times (labels
 pushed apart when they would touch, dashed when the script set the point itself) and the name (and times) of the repeat under
 the pointer. While a repeat loops, the progress bar outside A-B is darker. Everything the user does is a command of the script

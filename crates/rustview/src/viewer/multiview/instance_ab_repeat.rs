@@ -39,6 +39,19 @@ impl MultiviewInstance {
             .is_some_and(|v| v.player.ab_repeat().active())
     }
 
+    /// A click on the Multiview itself closes every open A-B popup (save bubble, load menu), like the menus of the media bars:
+    /// the pointer poll of the control bar can miss a very short click outside the popup. Returns whether one was open.
+    pub fn close_ab_popups(&mut self) -> bool {
+        let mut closed = false;
+        for video in self.tiles.iter_mut().filter_map(|tile| tile.video.as_mut()) {
+            closed |= video.bar.ab.popup.take().is_some();
+        }
+        if closed {
+            tracing::debug!("[Multiview: AbRepeat] A click on the view closed the open popup");
+        }
+        closed
+    }
+
     /// The user did something in the A-B group of the bar of tile `index`. Returns whether the view has to be refreshed.
     pub(super) fn ab_input(&mut self, index: usize, input: AbInput) -> bool {
         let prefs = ab_prefs::current();

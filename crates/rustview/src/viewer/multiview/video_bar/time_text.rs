@@ -27,6 +27,21 @@ pub fn clock(secs: f64, hours: bool, ms: bool) -> String {
     } else {
         0
     };
+    clock_ms(total_ms, hours, ms)
+}
+
+/// A length of `secs` seconds like [`clock`], but rounded to the unit it shows (a whole second, or a millisecond with `ms`)
+/// instead of cut off: a repeat from 2.6 s to 4.5 s is "0:02" long, not "0:01".
+pub fn length(secs: f64, hours: bool, ms: bool) -> String {
+    let total_ms = match (secs.is_finite() && secs > 0.0, ms) {
+        (false, _) => 0,
+        (true, true) => (secs * 1000.0).round().to_int::<u64>(),
+        (true, false) => secs.round().to_int::<u64>().saturating_mul(1000),
+    };
+    clock_ms(total_ms, hours, ms)
+}
+
+fn clock_ms(total_ms: u64, hours: bool, ms: bool) -> String {
     let (whole, millis) = (total_ms / 1000, total_ms % 1000);
     let (h, m, s) = (whole / 3600, whole / 60 % 60, whole % 60);
     let mut text = if hours {
@@ -114,6 +129,14 @@ mod tests {
         assert_eq!(start.remaining, "-2:09");
         assert_eq!(texts(128.4, 128.4, false).remaining, "-0:00");
         assert_eq!(texts(83.25, 128.5, true).remaining, "-0:45.250");
+    }
+
+    #[test]
+    fn lengths_are_rounded_not_cut_off() {
+        assert_eq!(length(1.933, false, false), "0:02");
+        assert_eq!(length(1.4, false, false), "0:01");
+        assert_eq!(length(1.9336, false, true), "0:01.934");
+        assert_eq!(length(f64::NAN, false, false), "0:00");
     }
 
     #[test]

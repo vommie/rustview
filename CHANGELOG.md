@@ -43,8 +43,17 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   Keys, and the card "mpv script ab_repeat.lua" sits next to Player and Sound. Settings > Viewer keeps how images and videos open
   from the media view, the rating badge of tabs and the tab background. Only the place in the settings window changed: your settings
   are kept as they are (no migration).
+- **The A-B tab above the progress bar only shows when it has something in it** (a saved repeat, A or B); without them the bar
+  looks like any other. Without a compositing manager the tab is now a plain rectangle over the progress bar instead of a window
+  cut to the curved outline.
 
 ### Fixed
+- **The menu of saved A-B repeats and the save bubble work with the mouse**: a press inside them was taken for a press outside
+  and closed them, so a click on an entry could get lost and deleting by holding never worked; a click on the video now closes
+  them reliably, also a very short one.
+- **No darker line between the A-B tab and the control bar** (the two translucent fills overlapped by one pixel).
+- **The length of a saved A-B repeat is rounded** in the menu and the label under the pointer (a repeat of 1.9 s reads "0:02",
+  not "0:01").
 - **Settings > Multiview no longer says that only pictures zoom**: the Image Zoom card and the tooltip of the Zoom button now name videos
   too, which zoom the same way.
 - **mpv's own on-screen controller no longer runs inside RustView's players** when the user's `mpv.conf` switches it on (`osc=yes`): the
