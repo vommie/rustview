@@ -7,8 +7,13 @@ use crate::viewer::mpv_engine::MpvPlayer;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread::JoinHandle;
+use std::time::Duration;
 
 static NEXT_SURFACE: AtomicU64 = AtomicU64::new(1);
+
+/// How long a move to another window waits for the render thread to keep the last picture: mpv may hold the thread up to one
+/// frame's display time; without the still the new window shows black until its first frame.
+const STILL_WAIT: Duration = Duration::from_millis(150);
 
 /// Draws one player into textures of the window it is attached to. Attach, detach and the actions run on the UI thread; the
 /// surface may be dropped anywhere (its render thread is ended and joined), but the host should detach it on the UI thread first
@@ -57,14 +62,25 @@ impl VideoSurface {
 
     /// Draws into `host` from now on (UI thread). A surface that moves from another window gets a new render context there; mpv
     /// disables its video track when the old one goes, so the track is selected again once the new one exists. Position, pause,
-    /// volume and everything else of the player stay as they are.
+    /// volume and everything else of the player stay as they are. Until the first frame of the new render context the new window
+    /// shows the last picture of the old one (the render thread reads it back before it leaves; this waits for that, at most
+    /// `STILL_WAIT`).
     pub fn attach(&mut self, host: HostWindowId, player: &Arc<MpvPlayer>) {
         if self.host == Some(host) {
             return;
         }
         let track = self.host.is_some().then(|| player.video_track());
         if let Some(old) = self.host.take() {
-            hosts::detach(old, self.id);
+            self.channel.lock().keep_still = true;
+            let epoch = hosts::detach(old, self.id);
+            let started = std::time::Instant::now();
+            let in_time = epoch.is_none_or(|epoch| self.channel.wait_left(epoch, STILL_WAIT));
+            tracing::debug!(
+                surface = self.id,
+                in_time,
+                waited_us = started.elapsed().as_micros(),
+                "[VideoSurface: Still] Old window left"
+            );
         }
         self.row = hosts::attach(host, self.id, &self.channel);
         self.host = Some(host);

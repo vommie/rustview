@@ -97,6 +97,26 @@ impl VideoTarget {
         pixels.iter().any(|pixel| Some(pixel) != pixels.first())
     }
 
+    /// Reads the whole texture into `rgba` (`width * height * 4` bytes, row 0 of the texture first; the context is current). Once
+    /// per move of a video to another window, never per frame.
+    pub fn read_into(&self, gl: &glow::Context, rgba: &mut [u8]) {
+        // SAFETY: the context is current; the framebuffer is complete and `rgba` holds the whole RGBA texture.
+        unsafe {
+            gl.bind_framebuffer(glow::READ_FRAMEBUFFER, Some(self.framebuffer));
+            gl.pixel_store_i32(glow::PACK_ALIGNMENT, 1);
+            gl.read_pixels(
+                0,
+                0,
+                self.width.saturating_as::<i32>(),
+                self.height.saturating_as::<i32>(),
+                glow::RGBA,
+                glow::UNSIGNED_BYTE,
+                glow::PixelPackData::Slice(Some(rgba)),
+            );
+            gl.bind_framebuffer(glow::READ_FRAMEBUFFER, None);
+        }
+    }
+
     pub fn delete(self, gl: &glow::Context) {
         // SAFETY: the objects were created on this context or one of its share group, which is current.
         unsafe {

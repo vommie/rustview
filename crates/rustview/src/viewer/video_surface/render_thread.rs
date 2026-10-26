@@ -1,7 +1,8 @@
 //! The render thread of one video: it owns mpv's render context and the textures of the video, in a GL context that shares
 //! them with the Slint window that shows the video. When the video moves to another window (the fullscreen and the main window
 //! have contexts of their own) the thread frees its render context and textures and creates new ones in the other window's
-//! share group; mpv keeps playing meanwhile.
+//! share group; mpv keeps playing meanwhile. Before it frees the textures of a window the video leaves it reads the last picture
+//! back (one read per move), and the new window shows that still until the first frame of the new render context.
 //!
 //! The thread calls no libmpv function but `mpv_render_*` (render.h, "Threading"): loading a file or selecting the video track
 //! again happens on the UI thread, as `ReadyAction`s the thread posts once its render context exists.
@@ -13,6 +14,7 @@ use super::target::{INTERNAL_FORMAT, VideoTarget};
 use crate::viewer::mpv_engine::{MpvRenderContext, RenderCore};
 use glow::HasContext as _;
 use rustview_core::util::cast::SaturatingAs;
+use slint::{Rgba8Pixel, SharedPixelBuffer};
 use std::sync::Arc;
 
 /// The render context of one binding and everything made in its GL context.
@@ -26,6 +28,8 @@ struct Bound {
     /// Slots that can be rendered into, each with the fence the UI attached when it gave it back.
     free: Vec<(usize, Option<Fence>)>,
     rendered_size: (u32, u32),
+    /// The slot of the newest rendered picture.
+    newest: Option<usize>,
     redraw: Arc<dyn Fn() + Send + Sync>,
 }
 
@@ -45,11 +49,15 @@ pub fn run(surface: u64, core: &RenderCore, channel: &Arc<Channel>) {
             tried = epoch;
             let binding = state.binding.clone();
             let stale = (state.ready.take(), std::mem::take(&mut state.released));
+            let keep_still = std::mem::take(&mut state.keep_still);
             state.ready_epoch = 0;
             drop(state);
-            if let Some(old) = bound.take() {
+            let still = bound.take().and_then(|old| {
+                let still = keep_still.then(|| old.read_still(surface)).flatten();
                 old.unbind(stale.0, stale.1);
-            }
+                still
+            });
+            channel.mark_left(epoch, still);
             if let Some(binding) = binding {
                 bound = bind(surface, core, channel, epoch, binding);
                 forced = true;
@@ -130,6 +138,7 @@ fn bind(surface: u64, core: &RenderCore, channel: &Arc<Channel>, epoch: u64, bin
         slots: [None, None, None],
         free: (0..SLOTS).map(|i| (i, None)).collect(),
         rendered_size: (0, 0),
+        newest: None,
         redraw: binding.redraw,
     })
 }
@@ -192,6 +201,7 @@ impl Bound {
             return;
         }
         self.rendered_size = size;
+        self.newest = Some(slot);
         // SAFETY: this thread's context is current; the fence follows mpv's commands and is flushed so another context of the
         // share group can wait for it.
         let fence = unsafe {
@@ -228,6 +238,22 @@ impl Bound {
             self.free.push((old.slot, None));
         }
         (self.redraw)();
+    }
+
+    /// The newest picture in memory (top row first, like the texture Slint shows), or `None` when nothing was rendered.
+    fn read_still(&self, surface: u64) -> Option<SharedPixelBuffer<Rgba8Pixel>> {
+        let target = self.slots[self.newest?].as_ref()?;
+        let (width, height) = target.size();
+        let mut still = SharedPixelBuffer::<Rgba8Pixel>::new(width, height);
+        target.read_into(&self.gl, still.make_mut_bytes());
+        tracing::debug!(
+            surface,
+            epoch = self.epoch,
+            width,
+            height,
+            "[VideoSurface: Render] Last picture kept as a still for the next window"
+        );
+        Some(still)
     }
 
     /// Frees mpv's render context (mpv disables the video track then) and everything of this GL context, then the context.

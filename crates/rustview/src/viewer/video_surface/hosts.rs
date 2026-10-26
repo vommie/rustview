@@ -232,6 +232,13 @@ fn take_frames(id: HostWindowId) {
             let Some(frame) = state.ready.take() else {
                 continue;
             };
+            if state.still.take().is_some() {
+                tracing::debug!(
+                    window = id,
+                    surface = attached.surface,
+                    "[VideoSurface: Still] First frame in the new window replaces the still"
+                );
+            }
             // SAFETY: Slint's context is current; the fence belongs to its share group and is waited on and deleted once.
             unsafe {
                 gl.wait_sync(frame.fence.0, 0, glow::TIMEOUT_IGNORED);
@@ -263,8 +270,9 @@ fn take_frames(id: HostWindowId) {
     });
 }
 
-/// Attaches a surface to a window: returns the row of `video-frames` that shows it. The surface gets the window's binding now
-/// or, when the window has not rendered yet, at its `RenderingSetup`.
+/// Attaches a surface to a window: returns the row of `video-frames` that shows it (the still of a video that comes from another
+/// window until its first frame here). The surface gets the window's binding now or, when the window has not rendered yet, at its
+/// `RenderingSetup`.
 pub(super) fn attach(id: HostWindowId, surface: u64, channel: &Arc<Channel>) -> Option<usize> {
     HOSTS.with_borrow_mut(|hosts| {
         let Some(window) = hosts.get_mut(&id) else {
@@ -279,7 +287,11 @@ pub(super) fn attach(id: HostWindowId, surface: u64, channel: &Arc<Channel>) -> 
                 window.frames.push(slint::Image::default());
                 window.frames.row_count() - 1
             });
-        window.frames.set_row_data(row, slint::Image::default());
+        let still = channel.lock().still.clone();
+        let shows_still = still.is_some();
+        window
+            .frames
+            .set_row_data(row, still.map(slint::Image::from_rgba8).unwrap_or_default());
         let epoch = rebind(channel, binding_of(window));
         window.attached.push(Attached {
             surface,
@@ -288,23 +300,27 @@ pub(super) fn attach(id: HostWindowId, surface: u64, channel: &Arc<Channel>) -> 
             shown: None,
             epoch,
         });
-        tracing::debug!(window = id, surface, row, "[VideoSurface: Host] Surface attached");
+        tracing::debug!(
+            window = id,
+            surface,
+            row,
+            shows_still,
+            "[VideoSurface: Host] Surface attached"
+        );
         Some(row)
     })
 }
 
-/// Detaches a surface from a window: its row shows nothing from now on and the surface loses its render context.
-pub(super) fn detach(id: HostWindowId, surface: u64) {
+/// Detaches a surface from a window: its row shows nothing from now on and the surface loses its render context. Returns the
+/// epoch of that change (`None` when the surface was not attached there).
+pub(super) fn detach(id: HostWindowId, surface: u64) -> Option<u64> {
     HOSTS.with_borrow_mut(|hosts| {
-        let Some(window) = hosts.get_mut(&id) else {
-            return;
-        };
-        let Some(index) = window.attached.iter().position(|a| a.surface == surface) else {
-            return;
-        };
+        let window = hosts.get_mut(&id)?;
+        let index = window.attached.iter().position(|a| a.surface == surface)?;
         let attached = window.attached.swap_remove(index);
         window.frames.set_row_data(attached.row, slint::Image::default());
-        rebind(&attached.channel, None);
+        let epoch = rebind(&attached.channel, None);
         tracing::debug!(window = id, surface, "[VideoSurface: Host] Surface detached");
-    });
+        Some(epoch)
+    })
 }

@@ -1,5 +1,6 @@
 //! What the UI thread and the render thread of one video hand each other: the wanted size and window, finished frames (a
-//! texture plus a GL fence) and the textures the UI no longer shows (with the fence after which it no longer reads them).
+//! texture plus a GL fence), the textures the UI no longer shows (with the fence after which it no longer reads them) and the
+//! still of a video that moves to another window.
 //!
 //! Three textures per video: one shown by Slint, one being rendered, one waiting. The UI never waits for the render thread: it
 //! takes the newest frame if there is one, makes the GPU wait for its fence (`glWaitSync`, no CPU stall) and gives the texture it
@@ -8,7 +9,9 @@
 use super::share_group::ShareGroup;
 use crate::viewer::mpv_engine::NativeDisplay;
 use parking_lot::{Condvar, Mutex, MutexGuard};
+use slint::{Rgba8Pixel, SharedPixelBuffer};
 use std::sync::Arc;
+use std::time::Duration;
 
 /// Textures per video.
 pub const SLOTS: usize = 3;
@@ -65,11 +68,21 @@ pub struct Exchange {
     pub released: Vec<(usize, Option<Fence>)>,
     /// Why the last render context could not be created (shown in the log and Settings > Debug).
     pub error: Option<String>,
+    /// Asks the render thread to read the last picture back when it leaves its current binding (the video moves to another
+    /// window, whose share group cannot see the old textures).
+    pub keep_still: bool,
+    /// The last picture of the window the video left, in memory: the new window shows it until its first frame, so the move
+    /// shows no black picture. Dropped with that frame.
+    pub still: Option<SharedPixelBuffer<Rgba8Pixel>>,
+    /// The newest epoch for which the render thread has left its old binding (a move waits for it to have the still).
+    pub left_epoch: u64,
 }
 
 pub struct Channel {
     state: Mutex<Exchange>,
     wake: Condvar,
+    /// Signals `left_epoch` to the UI thread.
+    left: Condvar,
 }
 
 impl Default for Channel {
@@ -77,6 +90,7 @@ impl Default for Channel {
         Self {
             state: Mutex::new(Exchange::default()),
             wake: Condvar::new(),
+            left: Condvar::new(),
         }
     }
 }
@@ -97,6 +111,30 @@ impl Channel {
         guard.wake = true;
         drop(guard);
         self.wake.notify_one();
+    }
+
+    /// The render thread left its binding of an epoch before `epoch` (and kept the still if it was asked to).
+    pub fn mark_left(&self, epoch: u64, still: Option<SharedPixelBuffer<Rgba8Pixel>>) {
+        let mut state = self.lock();
+        if still.is_some() {
+            state.still = still;
+        }
+        state.left_epoch = state.left_epoch.max(epoch);
+        drop(state);
+        self.left.notify_all();
+    }
+
+    /// Waits (UI thread, at most `timeout`) until the render thread has left the binding it had before `epoch`. Returns whether
+    /// it did in time; mpv may hold the thread up to one frame's display time.
+    pub fn wait_left(&self, epoch: u64, timeout: Duration) -> bool {
+        let mut state = self.lock();
+        let deadline = std::time::Instant::now() + timeout;
+        while state.left_epoch < epoch && !state.quit {
+            if self.left.wait_until(&mut state, deadline).timed_out() {
+                return state.left_epoch >= epoch;
+            }
+        }
+        true
     }
 
     /// Blocks until there is something to do; returns the state locked.
