@@ -26,6 +26,7 @@ export component SidebarRight inherits Rectangle {
     in-out property <string> tag-filter-text: "";
     in-out property <bool> tag-filter-is-regex: false;
     in property <[TagColumnView]> tag-columns: [];
+    in property <bool> tag-tree-compact: false;
 
     // Tag History properties
     in property <[TagHistoryRowModel]> tag-history-rows: [];
@@ -93,6 +94,7 @@ export component SidebarRight inherits Rectangle {
                 filter-text <=> root.tag-filter-text;
                 tag-filter-is-regex <=> root.tag-filter-is-regex;
                 tag-columns: root.tag-columns;
+                compact-tree: root.tag-tree-compact;
 
                 // Forward Tag History properties
                 tag-history-rows: root.tag-history-rows;

@@ -1,11 +1,30 @@
 import { Slider } from "std-widgets.slint";
 import { Theme } from "styles.slint";
 import { SettingsCard } from "settings_card.slint";
+import { ToggleSwitch } from "toggle_switch.slint";
+
+/// The switch of a row (the tree's mode).
+component TreeSwitch inherits Rectangle {
+    in-out property <bool> checked;
+
+    width: 36px;
+    height: 20px;
+
+    ToggleSwitch {
+        checked: root.checked;
+    }
+
+    TouchArea {
+        mouse-cursor: MouseCursor.pointer;
+        clicked => { root.checked = !root.checked; }
+    }
+}
 
 export component SettingsPageTagsRatings inherits VerticalLayout {
     spacing: 12px;
 
     in-out property <int> max-history-tags: 20;
+    in-out property <bool> compact-tree: false;
 
     SettingsCard {
         title: "Hierarchical Categorization Defaults";
@@ -43,6 +62,36 @@ export component SettingsPageTagsRatings inherits VerticalLayout {
 
         Text {
             text: "Tags are automatically added to the history whenever they are assigned. If the limit is decreased, the oldest entries are trimmed upon saving.";
+            font-size: 11px;
+            color: Theme.text-muted;
+            wrap: word-wrap;
+        }
+    }
+
+    SettingsCard {
+        title: "Tag Tree Appearance";
+        description: "How dense the tag tree in the sidebar is.";
+
+        HorizontalLayout {
+            spacing: 12px;
+
+            Text {
+                text: "Compact tag tree";
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+
+            VerticalLayout {
+                alignment: center;
+                TreeSwitch {
+                    checked <=> root.compact-tree;
+                }
+            }
+        }
+
+        Text {
+            text: "Dense rows that share one line, in a smaller font (Compact Mode). The tree's context menu (a right click on its free space) switches it too.";
             font-size: 11px;
             color: Theme.text-muted;
             wrap: word-wrap;

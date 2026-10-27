@@ -242,6 +242,7 @@ export component SettingsWindow inherits Window {
 
     // Tags & Ratings options
     in-out property <int> max-history-tags: 20;
+    in-out property <bool> tag-tree-compact: false;
 
     // API options
     in-out property <bool> auto-complete-external-stubs: true;
@@ -509,6 +510,7 @@ export component SettingsWindow inherits Window {
 
                         if root.active-category == 8 : SettingsPageTagsRatings {
                             max-history-tags <=> root.max-history-tags;
+                            compact-tree <=> root.tag-tree-compact;
                         }
 
                         if root.active-category == 9 : SettingsPageHotkeys { }

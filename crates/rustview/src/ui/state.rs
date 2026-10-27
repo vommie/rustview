@@ -56,6 +56,8 @@ pub const CTX_TAG_ADD_ROOT: CtxMenuActionId = 2001;
 pub const CTX_TAG_EXPAND_ALL: CtxMenuActionId = 2002;
 pub const CTX_TAG_COLLAPSE_ALL: CtxMenuActionId = 2003;
 pub const CTX_TAG_REFRESH: CtxMenuActionId = 2004;
+pub const CTX_TAG_COMPACT_MODE: CtxMenuActionId = 2005;
+pub const CTX_TAG_NORMAL_MODE: CtxMenuActionId = 2006;
 
 pub const CTX_TAG_ADD_CHILD: CtxMenuActionId = 2010;
 pub const CTX_TAG_RENAME: CtxMenuActionId = 2011;

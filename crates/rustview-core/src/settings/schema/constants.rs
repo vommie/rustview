@@ -333,6 +333,8 @@ pub const MAX_MAX_HISTORY_TAGS: usize = 100;
 pub const DEFAULT_IS_TAG_HISTORY_COLLAPSED: bool = false;
 
 pub const DEFAULT_TAG_HISTORY_HEIGHT: f32 = 96.0;
+/// The tag tree starts in Normal Mode (Compact Mode is the user's choice, kept in `tags.compact_tree`).
+pub const DEFAULT_TAG_TREE_COMPACT: bool = false;
 
 pub const MIN_TAG_HISTORY_HEIGHT: f32 = 40.0;
 

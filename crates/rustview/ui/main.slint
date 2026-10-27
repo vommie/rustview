@@ -312,6 +312,8 @@ export component MainWindow inherits Window {
     in property <[FolderNodeView]> folders: [];
     in property <[FavoriteItemView]> favorites: [];
     in property <[TagColumnView]> tag-columns: [];
+    // The tag tree's Compact Mode (`tags.compact_tree`).
+    in property <bool> tag-tree-compact: false;
 
     // Metadata Inspector properties
     in property <string> info-filename: "-";
@@ -1105,6 +1107,7 @@ export component MainWindow inherits Window {
                 sidebar-width: (root.active-view-mode != 2) ? root.sidebar-right-width : 0px;
                 visible: root.active-view-mode != 2;
                 tag-columns: root.tag-columns;
+                tag-tree-compact: root.tag-tree-compact;
                 is-assign-mode <=> root.tag-is-assign-mode;
                 match-mode-idx <=> root.tag-match-mode-idx;
                 scope-mode-idx <=> root.tag-scope-mode-idx;

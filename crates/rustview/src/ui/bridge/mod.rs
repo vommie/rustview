@@ -277,6 +277,7 @@ impl UiBridge {
         crate::viewer::edit::prefs::apply(&app_settings.image_edit);
         window.set_show_hidden_folders(app_settings.folders.show_hidden_folders);
 
+        window.set_tag_tree_compact(app_settings.tags.compact_tree);
         window.set_tag_history_height(initial_state.tag_history_height);
         window.set_tag_history_is_collapsed(initial_state.is_tag_history_collapsed);
 

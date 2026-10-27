@@ -175,6 +175,9 @@ pub struct TagSettings {
     pub max_history_tags: usize,
     pub is_history_collapsed: bool,
     pub history_height: f32,
+    /// The tag tree's Compact Mode: dense rows that share one line (Settings > Tags & Ratings > Tag Tree Appearance and
+    /// the tree's context menu).
+    pub compact_tree: bool,
 }
 
 impl Default for TagSettings {
@@ -187,6 +190,7 @@ impl Default for TagSettings {
             max_history_tags: DEFAULT_MAX_HISTORY_TAGS,
             is_history_collapsed: DEFAULT_IS_TAG_HISTORY_COLLAPSED,
             history_height: DEFAULT_TAG_HISTORY_HEIGHT,
+            compact_tree: DEFAULT_TAG_TREE_COMPACT,
         }
     }
 }
@@ -267,4 +271,27 @@ pub struct AppSettings {
     /// JSON values so a hand-edited entry never breaks loading; the app validates them (`ui::keymap`).
     #[serde(default)]
     pub hotkeys: std::collections::BTreeMap<String, serde_json::Value>,
+}
+
+#[cfg(test)]
+mod tag_tree_tests {
+    use super::{AppSettings, TagSettings};
+    use crate::settings::SettingsDiff;
+
+    #[test]
+    fn old_tag_settings_load_in_normal_mode_and_the_switch_is_a_change() {
+        // A file of 0.6.5 has no `compact_tree`: Normal Mode, nothing else changes.
+        let old: TagSettings = serde_json::from_str(r#"{"max_history_tags": 30, "expanded_tag_ids": [3]}"#).unwrap();
+        assert!(!old.compact_tree);
+        assert_eq!((old.max_history_tags, old.expanded_tag_ids.as_slice()), (30, &[3][..]));
+
+        let before = AppSettings::default();
+        let mut after = before.clone();
+        after.tags.compact_tree = true;
+        let diff = SettingsDiff::compute(&before, &after);
+        assert!(diff.has_changes && diff.tag_tree_appearance_changed);
+        assert!(!diff.tags_settings_changed, "the history is not touched");
+        let back: AppSettings = serde_json::from_str(&serde_json::to_string(&after).unwrap()).unwrap();
+        assert!(back.tags.compact_tree);
+    }
 }

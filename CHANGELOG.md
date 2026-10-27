@@ -9,6 +9,16 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ## [Unreleased]
 
+## [0.6.6] - 2026-10-27
+
+### Added
+- **Compact Mode for the tag tree**: dense rows that share one line, in a smaller font, with the same marks,
+  expand buttons and indentation, a slightly darker row background and a lighter hover; text, lines and symbols sit on
+  whole pixels and stay sharp. Right-click the tree's free space and choose "Compact Mode" ("Normal Mode" switches back),
+  or use Settings > Tags & Ratings > Tag Tree Appearance > Compact tag tree. The choice is kept (new setting
+  `tags.compact_tree`, off by default; older settings files load unchanged, no migration). Normal Mode looks exactly as
+  before. The same mode exists in RustCut 0.0.71.
+
 ## [0.6.5] - 2026-10-26
 
 ### Changed
@@ -998,7 +1008,8 @@ First usable version: the application skeleton grew into a working media browser
 ### Added
 - Initial commit of the project.
 
-[Unreleased]: https://github.com/vommie/rustview/compare/v0.6.5...HEAD
+[Unreleased]: https://github.com/vommie/rustview/compare/v0.6.6...HEAD
+[0.6.6]: https://github.com/vommie/rustview/compare/v0.6.5...v0.6.6
 [0.6.5]: https://github.com/vommie/rustview/compare/v0.6.0...v0.6.5
 [0.6.0]: https://github.com/vommie/rustview/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/vommie/rustview/compare/v0.5.0...v0.5.1

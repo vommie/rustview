@@ -11,6 +11,7 @@ use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::tabs::BridgeViewerTabs;
 use crate::ui::tabs::grid_bridge::BridgeTabGrid;
+use crate::ui::tags::BridgeTags;
 use crate::ui::tags::history_bridge::BridgeTagHistory;
 use crate::ui::thumbnail_badges::ThumbnailBadgeBridge;
 use crate::ui::type_ahead::{self};
@@ -174,6 +175,12 @@ impl UiBridge {
                     window.set_tag_history_height(new_clone.tags.history_height);
                     window.set_tag_history_is_collapsed(new_clone.tags.is_history_collapsed);
                     BridgeTagHistory::sync_ui(&window, &library, &state);
+                }
+
+                if diff_clone.tag_tree_appearance_changed {
+                    tracing::info!(compact = new_clone.tags.compact_tree, "[TagTree] Mode switched");
+                    window.set_tag_tree_compact(new_clone.tags.compact_tree);
+                    BridgeTags::reload_tags(&window, &library, &state);
                 }
 
                 BridgeSidebarPanelTabs::sync_ui(&window, &settings, &state);

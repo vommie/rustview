@@ -2,8 +2,9 @@ use crate::ctx_menu::{CtxMenu, CtxMenuActionId, CtxMenuBuilder, CtxMenuItem};
 use crate::icons::Icon;
 use crate::ui::MainWindow;
 use crate::ui::state::{
-    CTX_TAG_ADD_CHILD, CTX_TAG_ADD_ROOT, CTX_TAG_COLLAPSE_ALL, CTX_TAG_DELETE, CTX_TAG_EXPAND_ALL,
-    CTX_TAG_MOVE_TARGET_BASE, CTX_TAG_MOVE_TO_ROOT, CTX_TAG_REFRESH, CTX_TAG_RENAME, UiState,
+    CTX_TAG_ADD_CHILD, CTX_TAG_ADD_ROOT, CTX_TAG_COLLAPSE_ALL, CTX_TAG_COMPACT_MODE, CTX_TAG_DELETE,
+    CTX_TAG_EXPAND_ALL, CTX_TAG_MOVE_TARGET_BASE, CTX_TAG_MOVE_TO_ROOT, CTX_TAG_NORMAL_MODE, CTX_TAG_REFRESH,
+    CTX_TAG_RENAME, UiState,
 };
 use crate::ui::tags::{BridgeTags, TagActionDialogs};
 use parking_lot::RwLock;
@@ -18,8 +19,14 @@ use std::sync::Arc;
 pub struct TagContextMenu;
 
 impl TagContextMenu {
-    /// Builds root tag tree context menu.
-    pub fn build_root_menu() -> CtxMenu {
+    /// Builds root tag tree context menu; its last entry switches the tree to Compact Mode, or back to Normal Mode while
+    /// `compact` (`tags.compact_tree`).
+    pub fn build_root_menu(compact: bool) -> CtxMenu {
+        let (mode_id, mode_title, mode_icon) = if compact {
+            (CTX_TAG_NORMAL_MODE, "Normal Mode", Icon::TreeNormal)
+        } else {
+            (CTX_TAG_COMPACT_MODE, "Compact Mode", Icon::TreeCompact)
+        };
         CtxMenuBuilder::new()
             .header("Tags Root")
             .action(CTX_TAG_ADD_ROOT, "Add Root Tag...", None, Some(Icon::Plus), true)
@@ -34,6 +41,8 @@ impl TagContextMenu {
             )
             .separator()
             .action(CTX_TAG_REFRESH, "Refresh Tag Tree", None, Some(Icon::Refresh), true)
+            .separator()
+            .action(mode_id, mode_title, None, Some(mode_icon), true)
             .build()
     }
 
@@ -176,6 +185,14 @@ impl TagContextMenu {
             CTX_TAG_EXPAND_ALL => BridgeTags::expand_all(window, library, settings, state),
             CTX_TAG_COLLAPSE_ALL => BridgeTags::collapse_all(window, library, settings, state),
             CTX_TAG_REFRESH => BridgeTags::reload_tags(window, library, state),
+            CTX_TAG_COMPACT_MODE | CTX_TAG_NORMAL_MODE => {
+                // The setting is the one place: the settings subscriber switches the tree (`tag_tree_appearance_changed`).
+                let compact = action_id == CTX_TAG_COMPACT_MODE;
+                tracing::info!(compact, "[TagAction] Tag tree mode switched from the context menu");
+                let mut current = settings.get();
+                current.tags.compact_tree = compact;
+                settings.update(&current);
+            }
             id if id >= CTX_TAG_MOVE_TARGET_BASE => {
                 let dest_parent = (id - CTX_TAG_MOVE_TARGET_BASE).wrapping_as::<TagId>();
                 if let Some(tid) = target_id {
@@ -218,7 +235,8 @@ mod tests {
             tag(3, None, "People"),
         ];
         let menus = [
-            TagContextMenu::build_root_menu(),
+            TagContextMenu::build_root_menu(false),
+            TagContextMenu::build_root_menu(true),
             TagContextMenu::build_tag_menu(&all[2], &all, &HashSet::new()),
         ];
         for menu in menus {

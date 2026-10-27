@@ -44,6 +44,8 @@ pub struct SettingsDiff {
     // Tags Subsystem
     pub tags_settings_changed: bool,
     pub tag_expansion_changed: bool,
+    /// The tag tree's Compact Mode (`tags.compact_tree`).
+    pub tag_tree_appearance_changed: bool,
 
     // API Subsystem
     pub api_settings_changed: bool,
@@ -142,6 +144,7 @@ impl SettingsDiff {
             || old.tags.history_tag_ids != new.tags.history_tag_ids
             || (old.tags.history_height - new.tags.history_height).abs() > 0.05;
         let tag_expansion_changed = old.tags.expanded_tag_ids != new.tags.expanded_tag_ids;
+        let tag_tree_appearance_changed = old.tags.compact_tree != new.tags.compact_tree;
         let api_settings_changed = old.api != new.api;
         let debug_settings_changed = old.debug != new.debug;
         let image_edit_changed = old.image_edit != new.image_edit;
@@ -166,6 +169,7 @@ impl SettingsDiff {
             || fullscreen_settings_changed
             || tags_settings_changed
             || tag_expansion_changed
+            || tag_tree_appearance_changed
             || api_settings_changed
             || debug_settings_changed
             || image_edit_changed
@@ -193,6 +197,7 @@ impl SettingsDiff {
             fullscreen_settings_changed,
             tags_settings_changed,
             tag_expansion_changed,
+            tag_tree_appearance_changed,
             api_settings_changed,
             debug_settings_changed,
             image_edit_changed,
@@ -665,6 +670,13 @@ impl SettingsDiff {
             changes.push(format!(
                 "Fullscreen background: source: '{}', color: '{}'",
                 new.fullscreen.background.source, new.fullscreen.background.color
+            ));
+        }
+
+        if old.tags.compact_tree != new.tags.compact_tree {
+            changes.push(format!(
+                "Tags: compact_tree ({} -> {})",
+                old.tags.compact_tree, new.tags.compact_tree
             ));
         }
 

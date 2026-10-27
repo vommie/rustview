@@ -5,6 +5,7 @@ import { TagNodeView, TagColumnView, TagHistoryRowModel } from "types.slint";
 import { RatingBar } from "rating_bar.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
 import { NodeButton } from "node_button.slint";
+import { CompactTagTreeList } from "tag_tree_compact.slint";
 import { TagPanelToolbar } from "tag_panel_toolbar.slint";
 import { TagSearchFilter } from "tag_search_filter.slint";
 import { TagHistoryPanel } from "tag_history_panel.slint";
@@ -213,6 +214,8 @@ export component TagPanel inherits VerticalLayout {
     in-out property <string> filter-text: "";
     in-out property <bool> tag-filter-is-regex: false;
     in property <[TagColumnView]> tag-columns: [];
+    // Compact Mode of the tree (`tags.compact_tree`): dense rows sharing one line (tag_tree_compact.slint).
+    in property <bool> compact-tree: false;
 
     // Tag History properties
     in property <[TagHistoryRowModel]> tag-history-rows: [];
@@ -283,17 +286,35 @@ export component TagPanel inherits VerticalLayout {
         escape-pressed => { root.tag-filter-escape-pressed(); }
     }
 
-    // d. Tags Tree: Hierarchical Tree View (stretches vertically to fill main panel area)
-    tree-list := TagTreeList {
+    // d. Tags Tree: Hierarchical Tree View (stretches vertically to fill main panel area); Normal Mode or Compact Mode
+    tree-area := Rectangle {
         vertical-stretch: 1;
-        columns: root.tag-columns;
-        is-assign-mode: root.is-tab-view ? true : root.is-assign-mode;
-        has-selection: root.has-selection;
-        tree-geometry-changed(h) => { root.tree-geometry-changed(h); }
-        tag-clicked(id) => { root.tag-clicked(id); }
-        tag-toggle-expand(id) => { root.tag-toggle-expand(id); }
-        tag-context-menu(id, x, y) => { root.tag-context-menu(id, tree-list.x + x, tree-list.y + y); }
-        root-context-menu(x, y) => { root.root-context-menu(tree-list.x + x, tree-list.y + y); }
+
+        if !root.compact-tree: TagTreeList {
+            width: 100%;
+            height: 100%;
+            columns: root.tag-columns;
+            is-assign-mode: root.is-tab-view ? true : root.is-assign-mode;
+            has-selection: root.has-selection;
+            tree-geometry-changed(h) => { root.tree-geometry-changed(h); }
+            tag-clicked(id) => { root.tag-clicked(id); }
+            tag-toggle-expand(id) => { root.tag-toggle-expand(id); }
+            tag-context-menu(id, x, y) => { root.tag-context-menu(id, tree-area.x + x, tree-area.y + y); }
+            root-context-menu(x, y) => { root.root-context-menu(tree-area.x + x, tree-area.y + y); }
+        }
+
+        if root.compact-tree: CompactTagTreeList {
+            width: 100%;
+            height: 100%;
+            columns: root.tag-columns;
+            is-assign-mode: root.is-tab-view ? true : root.is-assign-mode;
+            has-selection: root.has-selection;
+            tree-geometry-changed(h) => { root.tree-geometry-changed(h); }
+            tag-clicked(id) => { root.tag-clicked(id); }
+            tag-toggle-expand(id) => { root.tag-toggle-expand(id); }
+            tag-context-menu(id, x, y) => { root.tag-context-menu(id, tree-area.x + x, tree-area.y + y); }
+            root-context-menu(x, y) => { root.root-context-menu(tree-area.x + x, tree-area.y + y); }
+        }
     }
 
     // Horizontal Resizer Bar positioned between Tag Tree and Tag History

@@ -297,6 +297,7 @@ impl SettingsDialogController {
 
         // Tags & Ratings properties
         window.set_max_history_tags(settings.tags.max_history_tags.saturating_as::<i32>());
+        window.set_tag_tree_compact(settings.tags.compact_tree);
 
         // API settings
         window.set_auto_complete_external_stubs(settings.api.auto_complete_external_stubs);
@@ -727,6 +728,7 @@ impl SettingsDialogController {
                     .clamp(MIN_MAX_HISTORY_TAGS, MAX_MAX_HISTORY_TAGS);
                 current.tags.max_history_tags = new_max_history;
                 current.tags.history_tag_ids.truncate(new_max_history);
+                current.tags.compact_tree = w.get_tag_tree_compact();
 
                 // Save API Parameters
                 current.api.auto_complete_external_stubs = w.get_auto_complete_external_stubs();

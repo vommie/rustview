@@ -148,6 +148,8 @@ tab_close_others = { tabler = "circle-x", doc = "Close all other tabs" }
 tab_merge = { tabler = "arrows-join-2", doc = "Merge the selected tabs into one Multiview tab" }
 expand_all = { tabler = "chevrons-down", doc = "Expand all tree nodes" }
 collapse_all = { tabler = "chevrons-up", doc = "Collapse all tree nodes" }
+tree_compact = { tabler = "baseline-density-small", doc = "The tag tree's menu: switch to Compact Mode" }
+tree_normal = { tabler = "baseline-density-medium", doc = "The tag tree's menu: switch back to Normal Mode" }
 favorite_add = { tabler = "star", doc = "Add to favorites" }
 favorite_remove = { tabler = "star-off", doc = "Remove from favorites" }
 tag = { tabler = "tag", doc = "Tag marker (outline)" }

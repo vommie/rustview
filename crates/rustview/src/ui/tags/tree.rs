@@ -1,7 +1,7 @@
 //! The tag tree: building the hierarchy, flattening it into columns of tag items and syncing the Slint model in place.
 
 use super::TagSelectionStats;
-use super::{TAG_ITEM_HEIGHT, TAG_PADDING_V, TAG_ROW_SPACING};
+use super::{COMPACT_ITEM_HEIGHT, COMPACT_LINE, COMPACT_PADDING_V, TAG_ITEM_HEIGHT, TAG_PADDING_V, TAG_ROW_SPACING};
 use crate::ui::state::UiState;
 use crate::ui::tags::history_bridge::BridgeTagHistory;
 use crate::ui::{MainWindow, TagColumnView, TagNodeView};
@@ -124,6 +124,27 @@ impl TagTreeBuilder {
         }
 
         any_match_in_branch
+    }
+
+    /// `chunk_into_columns` for Compact Mode's rows: n rows take n * (row + line) + line inside the padding.
+    pub fn chunk_into_compact_columns(nodes: &[TagNodeView], available_height: f32) -> (Vec<TagColumnView>, usize) {
+        let rows_per_col = Self::rows_per_compact_column(available_height);
+        let columns = nodes
+            .chunks(rows_per_col)
+            .map(|chunk| TagColumnView {
+                tags: ModelRc::new(VecModel::from(chunk.to_vec())),
+            })
+            .collect();
+        (columns, rows_per_col)
+    }
+
+    /// How many Compact Mode rows fit into one column of `available_height` (at least one).
+    pub fn rows_per_compact_column(available_height: f32) -> usize {
+        let usable_h = available_height - (COMPACT_PADDING_V * 2.0) - COMPACT_LINE;
+        (usable_h / (COMPACT_ITEM_HEIGHT + COMPACT_LINE))
+            .floor()
+            .max(1.0)
+            .to_int::<usize>()
     }
 
     pub fn chunk_into_columns(nodes: &[TagNodeView], available_height: f32) -> (Vec<TagColumnView>, usize) {
@@ -288,5 +309,22 @@ impl TagTreeSync {
 
         // Keep Assigned Tags History panel synchronized in-place
         BridgeTagHistory::sync_ui(window, library, state);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TagTreeBuilder;
+
+    #[test]
+    fn compact_columns_hold_more_rows_than_normal_ones() {
+        // n compact rows take n * 16 + 1 inside the padding of 4 + 4: 80 px hold 4, the 613 px of the PyCutRv
+        // screenshot the mode was designed on hold 37 (Normal Mode: 25).
+        assert_eq!(TagTreeBuilder::rows_per_compact_column(80.0), 4);
+        assert_eq!(TagTreeBuilder::rows_per_compact_column(613.0), 37);
+        assert_eq!(TagTreeBuilder::rows_per_compact_column(0.0), 1);
+        let (columns, per) = TagTreeBuilder::chunk_into_compact_columns(&[], 613.0);
+        assert_eq!(columns.len(), 0);
+        assert_eq!(per, 37);
     }
 }

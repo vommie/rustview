@@ -36,6 +36,12 @@ pub const TAG_COLUMN_SPACING: f32 = 6.0;
 pub const TAG_PADDING_H: f32 = 4.0;
 pub const TAG_PADDING_V: f32 = 4.0;
 
+/// Compact Mode (`CompactTreeMetrics` in `ui/tag_tree_compact.slint`): a row without its line, the one line neighbors
+/// share, and the list's padding.
+pub const COMPACT_ITEM_HEIGHT: f32 = 15.0;
+pub const COMPACT_LINE: f32 = 1.0;
+pub const COMPACT_PADDING_V: f32 = 4.0;
+
 /// Grouped dependencies bundle for tag and rating actions.
 pub struct TagActionContext<'a> {
     pub window: &'a MainWindow,
@@ -126,7 +132,11 @@ impl BridgeTags {
         let mut visual_nodes = Vec::new();
         TagTreeBuilder::flatten(&tree, 0, &ctx, &mut visual_nodes);
 
-        let (tag_columns, rows_per_col) = TagTreeBuilder::chunk_into_columns(&visual_nodes, available_h);
+        let (tag_columns, rows_per_col) = if window.get_tag_tree_compact() {
+            TagTreeBuilder::chunk_into_compact_columns(&visual_nodes, available_h)
+        } else {
+            TagTreeBuilder::chunk_into_columns(&visual_nodes, available_h)
+        };
         {
             let mut st = state.write();
             st.tag_tree_rows_per_column = rows_per_col;
@@ -217,7 +227,7 @@ impl BridgeTags {
         y: f32,
     ) {
         state.write().active_tag_dialog_target = None;
-        let menu = TagContextMenu::build_root_menu();
+        let menu = TagContextMenu::build_root_menu(window.get_tag_tree_compact());
         BridgeContextMenu::open_custom_menu(window, state, tab_manager, menu, x, y);
     }
 
