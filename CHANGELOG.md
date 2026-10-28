@@ -9,6 +9,8 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ## [Unreleased]
 
+## [0.6.7] - 2026-10-28
+
 ### Changed
 - **Rating buttons in the Tag & Rate panel have a new look**, the same as in RustCut 0.0.75: a dark button with a thin
   border in the rating's color; under the pointer it fills with its color and the digit turns dark. The chosen rating
@@ -1014,7 +1016,8 @@ First usable version: the application skeleton grew into a working media browser
 ### Added
 - Initial commit of the project.
 
-[Unreleased]: https://github.com/vommie/rustview/compare/v0.6.6...HEAD
+[Unreleased]: https://github.com/vommie/rustview/compare/v0.6.7...HEAD
+[0.6.7]: https://github.com/vommie/rustview/compare/v0.6.6...v0.6.7
 [0.6.6]: https://github.com/vommie/rustview/compare/v0.6.5...v0.6.6
 [0.6.5]: https://github.com/vommie/rustview/compare/v0.6.0...v0.6.5
 [0.6.0]: https://github.com/vommie/rustview/compare/v0.5.1...v0.6.0
