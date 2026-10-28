@@ -7,13 +7,23 @@ export component RatingButton inherits Rectangle {
     in property <bool> is-enabled: true;
     callback clicked();
 
-    border-width: root.is-selected ? 2px : (root.is-partial ? 2px : 1px);
-    border-color: root.is-selected ? #ffffff : (root.is-partial ? Theme.primary : Theme.border);
-    background: Theme.rating-color(root.rating);
+    // Dark with the rating's color as its border; hovered or chosen it is filled with the color and the digit turns dark
+    // (the look of RustCut 0.0.75, user decision 2026-10-27). The chosen one is all its color, a little lighter under the
+    // pointer; a press darkens the fill (click feedback). A partial rating is filled faintly.
+    property <bool> hovered: touch.has-hover && root.is-enabled;
+    property <bool> pressed: touch.pressed && root.is-enabled;
+    property <bool> filled: root.is-selected || root.hovered;
+    property <color> tint: Theme.rating-color(root.rating);
+    property <color> fill: root.pressed ? root.tint.darker(0.2)
+        : root.is-selected && root.hovered ? root.tint.brighter(0.15) : root.tint;
+
+    border-width: 1px;
+    border-color: root.filled ? root.fill : root.tint;
+    background: root.filled ? root.fill : root.is-partial ? root.tint.with-alpha(0.35) : Theme.background;
     border-radius: 3px;
     opacity: root.is-enabled ? 1.0 : 0.38;
 
-    TouchArea {
+    touch := TouchArea {
         enabled: root.is-enabled;
         mouse-cursor: root.is-enabled ? pointer : default;
         clicked => { root.clicked(); }
@@ -21,7 +31,7 @@ export component RatingButton inherits Rectangle {
 
     Text {
         text: root.rating;
-        color: #000000;
+        color: root.filled ? #000000 : Theme.text;
         font-weight: 700;
         font-size: 11px;
         horizontal-alignment: center;
@@ -31,7 +41,7 @@ export component RatingButton inherits Rectangle {
 
 export component RatingBar inherits HorizontalLayout {
     spacing: 4px;
-    height: 28px;
+    height: 20px;
 
     in-out property <int> selected-rating: 0;
     in property <bool> is-assign-mode: false;

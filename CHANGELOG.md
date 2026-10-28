@@ -9,6 +9,12 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ## [Unreleased]
 
+### Changed
+- **Rating buttons in the Tag & Rate panel have a new look**, the same as in RustCut 0.0.75: a dark button with a thin
+  border in the rating's color; under the pointer it fills with its color and the digit turns dark. The chosen rating
+  is filled completely (no white border any more) and gets a little lighter under the pointer; a press darkens it
+  briefly. A rating that only some of the selected media have is filled faintly. The bar is lower (20 px instead of 28 px).
+
 ## [0.6.6] - 2026-10-27
 
 ### Added
