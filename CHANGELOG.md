@@ -9,6 +9,17 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ## [Unreleased]
 
+### Added
+
+- `ATTRIBUTION.md` and `LICENSES/` hold the notices the licenses of the bundled crates, libraries and icons require when a built
+  RustView is passed on; the package installs them to `/usr/share/licenses/rustview/`.
+
+### Changed
+
+- License: RustView's own source code stays MIT, the built program as a whole is under the GPL-3.0-only, because it links the
+  system's libmpv and FFmpeg libraries, which Arch and Manjaro build under the GPL; Slint is now used under its GPL-3.0 option. The
+  package says `MIT GPL-3.0-only`, the About card in Settings > General and the README say so and point to the notices.
+
 ## [0.6.7] - 2026-10-28
 
 ### Changed

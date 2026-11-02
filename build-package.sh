@@ -9,7 +9,7 @@
 # and namcap, and leaves dist/rustview-<version>-1-x86_64.pkg.tar.zst (install with `sudo pacman -U`).
 #
 #   rustview/
-#   ├── Cargo.toml, Cargo.lock, LICENSE, README.md, CHANGELOG.md
+#   ├── Cargo.toml, Cargo.lock, LICENSE, ATTRIBUTION.md, LICENSES/, README.md, CHANGELOG.md
 #   ├── target/release/rustview        (built by this script)
 #   └── packaging/
 #       ├── PKGBUILD
@@ -37,6 +37,8 @@ for file in \
     "${CARGO_TOML}" \
     "${PROJECT_ROOT}/Cargo.lock" \
     "${PROJECT_ROOT}/LICENSE" \
+    "${PROJECT_ROOT}/ATTRIBUTION.md" \
+    "${PROJECT_ROOT}/LICENSES/GPL-3.0-only.txt" \
     "${PROJECT_ROOT}/README.md" \
     "${PROJECT_ROOT}/CHANGELOG.md" \
     "${PKGBUILD}" \
@@ -181,6 +183,15 @@ if command -v namcap >/dev/null 2>&1; then
     echo "[+] Checking generated package with namcap..."
     namcap "${FINAL_PKG}"
 fi
+
+content="$(bsdtar -tf "${FINAL_PKG}")"
+for want in usr/share/licenses/rustview/LICENSE usr/share/licenses/rustview/ATTRIBUTION.md \
+    usr/share/licenses/rustview/GPL-3.0-only.txt; do
+    if ! grep -qx "${want}" <<<"${content}"; then
+        echo "[-] Error: the package lacks ${want}" >&2
+        exit 1
+    fi
+done
 
 # ---------------------------------------------------------------------------
 # 10. Done

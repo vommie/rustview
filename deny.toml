@@ -35,7 +35,7 @@ allow = [
     "MPL-2.0",
     "0BSD",
     "Unlicense",
-    # Slint is used under its royalty-free desktop license (attribution required, see README and Settings > General > About).
+    # Slint offers three licenses; the built program uses GPL-3.0-only (about.toml), this one stays allowed (attribution, see the About page).
     "LicenseRef-Slint-Royalty-free-2.0",
 ]
 # Narrow exceptions: only these crates may use these licenses.

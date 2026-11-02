@@ -56,6 +56,9 @@ fi
 if needs cargo-audit cargo-audit "Vulnerability scan (cargo audit)"; then
   step "Vulnerability scan (cargo audit)" cargo audit
 fi
+if needs cargo-about cargo-about "ATTRIBUTION.md is up to date"; then
+  step "ATTRIBUTION.md is up to date" scripts/attribution.py --check
+fi
 if needs cargo-machete cargo-machete "Unused dependencies (cargo machete)"; then
   step "Unused dependencies (cargo machete)" cargo machete
 fi

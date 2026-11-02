@@ -29,3 +29,6 @@ packaging/pkg/
 packaging/src/
 packaging/*.pkg.tar.zst
 *.py
+# Tracked despite the patterns above: the license notices and their generator.
+!/LICENSES/*.txt
+!/scripts/attribution.py

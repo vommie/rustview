@@ -93,11 +93,15 @@ version are in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
-RustView is released under the [MIT License](LICENSE).
+RustView's own source code is released under the [MIT License](LICENSE).
+
+The built program as a whole is under the GPL-3.0: it links the system's libmpv and FFmpeg libraries, which are usually built under the
+GPL (Arch and Manjaro do), and it uses Slint under its GPL-3.0 option. [ATTRIBUTION.md](ATTRIBUTION.md) and `LICENSES/` hold the notices
+the licenses require; the package installs them to `/usr/share/licenses/rustview/`.
 
 ### Built with
 
-- **[Slint](https://slint.dev)**, used under the Slint Royalty-free License 2.0. RustView is made with Slint (<https://slint.dev>).
+- **[Slint](https://slint.dev)** by SixtyFPS GmbH, used under the GPL-3.0. RustView is made with Slint (<https://slint.dev>).
 - [mpv](https://mpv.io) (libmpv) for video playback and [FFmpeg](https://ffmpeg.org) for decoding.
 - [Tabler Icons](https://tabler.io/icons) (MIT) for the interface icons; the app icon is built from two of them (the grid and the eye).
 - [LMDB](https://www.symas.com/lmdb) through [heed](https://github.com/meilisearch/heed), [image](https://github.com/image-rs/image),
