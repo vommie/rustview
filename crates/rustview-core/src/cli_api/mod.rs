@@ -2,6 +2,7 @@ pub mod commands;
 pub mod error;
 pub mod handlers;
 pub mod models;
+mod move_media;
 
 pub use commands::{ApiCommand, ApiSubcommand};
 pub use error::ApiError;
@@ -42,5 +43,11 @@ pub fn run_api_with_library(cmd: ApiCommand, library: &Library) -> Result<i32, A
         ApiCommand::CheckHash { hash, json } => ApiHandler::check_hash(library, &hash, json),
         ApiCommand::CheckHashes { hashes, json } => ApiHandler::check_hashes(library, &hashes, json),
         ApiCommand::InsertHash { hash, json } => ApiHandler::insert_hash(library, &hash, json),
+        ApiCommand::MoveMedia {
+            from,
+            to,
+            replace,
+            json,
+        } => ApiHandler::move_media(library, &from, &to, replace, json),
     }
 }

@@ -81,6 +81,7 @@ rustview api tag-tree --json
 rustview api get-media --path /media/clip.mp4 --json
 rustview api set-media --path /media/clip.mp4 --rating 5 --tags 1,4,7 --source MyTool --json
 rustview api check-hashes --hashes-file hashes.txt --json
+rustview api move-media --from /out/clip.mkv --to /videos/clip.mkv --json   # the record follows a moved file
 rustview --migrate-xnview ~/.config/xnviewmp/XnView.db --yes      # import an XnView MP database
 rustview api --help
 ```

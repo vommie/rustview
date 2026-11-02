@@ -42,6 +42,12 @@ pub enum ApiCommand {
         hash: String,
         json: bool,
     },
+    MoveMedia {
+        from: PathBuf,
+        to: PathBuf,
+        replace: bool,
+        json: bool,
+    },
 }
 
 /// The commands of the API as they are typed on the command line.
@@ -68,6 +74,9 @@ pub enum ApiSubcommand {
     /// Register a new checksum in the external hashes table
     #[command(alias = "hash-insert")]
     InsertHash(HashArgs),
+    /// Move a media record to the new path of its file (the file was moved already); keeps its tags, rating, hash and source
+    #[command(aliases = ["move", "relink"])]
+    MoveMedia(MoveMediaArgs),
 }
 
 #[derive(Debug, Clone, Args)]
@@ -105,6 +114,21 @@ pub struct SetMediaArgs {
     /// Application identifier creating this entry (default: 'CLI-API')
     #[arg(short, long, alias = "source-app", value_name = "APP_NAME")]
     pub source: Option<String>,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct MoveMediaArgs {
+    /// The path the record has now (where the file was)
+    #[arg(long, value_name = "PATH")]
+    pub from: PathBuf,
+    /// The file's new path
+    #[arg(long, value_name = "PATH")]
+    pub to: PathBuf,
+    /// Remove a different record at the new path (its file was overwritten) instead of refusing
+    #[arg(long)]
+    pub replace: bool,
+    #[command(flatten)]
+    pub output: OutputArgs,
 }
 
 #[derive(Debug, Clone, Args)]
@@ -209,6 +233,12 @@ impl ApiSubcommand {
             }),
             Self::InsertHash(args) => Ok(ApiCommand::InsertHash {
                 hash: required_hash(args.hash, args.positional_hash)?,
+                json: args.output.json,
+            }),
+            Self::MoveMedia(args) => Ok(ApiCommand::MoveMedia {
+                from: args.from,
+                to: args.to,
+                replace: args.replace,
                 json: args.output.json,
             }),
             Self::CheckHashes(args) => {
@@ -400,6 +430,33 @@ mod tests {
                 .unwrap_err()
                 .contains("At least one MD5 hash string")
         );
+    }
+
+    #[test]
+    fn move_media_parses_with_its_aliases() {
+        let expected = Ok(ApiCommand::MoveMedia {
+            from: "/out/a.mkv".into(),
+            to: "/videos/a.mkv".into(),
+            replace: false,
+            json: true,
+        });
+        assert_eq!(
+            parse(&["move-media", "--from", "/out/a.mkv", "--to", "/videos/a.mkv", "--json"]),
+            expected
+        );
+        assert_eq!(
+            parse(&["move", "--from=/out/a.mkv", "--to=/videos/a.mkv", "--json"]),
+            expected
+        );
+        assert!(matches!(
+            parse(&["relink", "--from", "/a", "--to", "/b", "--replace"]),
+            Ok(ApiCommand::MoveMedia {
+                replace: true,
+                json: false,
+                ..
+            })
+        ));
+        assert!(parse(&["move-media", "--from", "/a"]).is_err());
     }
 
     #[test]

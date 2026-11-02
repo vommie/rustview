@@ -5,8 +5,9 @@ use super::models::{
 };
 use crate::library::Library;
 use crate::library::folders::normalize_path;
-use crate::library::models::{ExternalHashRecord, MediaRecord, TagId};
+use crate::library::models::{ExternalHashRecord, MediaId, MediaRecord, TagId};
 use crate::library::schema::{SEQ_EXTERNAL_HASH_ID, SEQ_MEDIA_ID};
+use crate::media::FileHash;
 use crate::media::{MediaFormat, MediaHasher, MetadataExtractor};
 use crate::util::cast::SaturatingAs;
 use std::collections::{HashMap, HashSet};
@@ -424,25 +425,7 @@ impl ApiHandler {
             if let Some((mid, hash)) = found_id {
                 deleted_id = Some(mid);
 
-                lib.raw_db()
-                    .update_media_hash_index(&mut wtxn, mid, Some(&hash), None)?;
-                lib.raw_db().media.delete(&mut wtxn, &mid)?;
-                lib.raw_db().thumbnails.delete(&mut wtxn, &mid)?;
-                lib.raw_db().video_previews.delete(&mut wtxn, &mid)?;
-
-                if let Some(tags) = lib.raw_db().tags_by_media.get(&wtxn, &mid)? {
-                    for tag_id in tags {
-                        if let Some(mut t_media) = lib.raw_db().media_by_tag.get(&wtxn, &tag_id)? {
-                            t_media.retain(|&id| id != mid);
-                            if t_media.is_empty() {
-                                lib.raw_db().media_by_tag.delete(&mut wtxn, &tag_id)?;
-                            } else {
-                                lib.raw_db().media_by_tag.put(&mut wtxn, &tag_id, &t_media)?;
-                            }
-                        }
-                    }
-                    lib.raw_db().tags_by_media.delete(&mut wtxn, &mid)?;
-                }
+                purge_record_txn(lib, &mut wtxn, mid, &hash)?;
 
                 media_ids.retain(|&id| id != mid);
                 lib.raw_db().media_by_folder.put(&mut wtxn, &folder.id, &media_ids)?;
@@ -700,7 +683,35 @@ impl ApiHandler {
     }
 }
 
-fn split_folder_and_filename(path: &Path) -> Result<(std::path::PathBuf, String), ApiError> {
+/// Removes a media record with its hash index entry, thumbnail, video preview and tag links (not its folder list entry).
+pub(super) fn purge_record_txn(
+    lib: &Library,
+    wtxn: &mut heed::RwTxn,
+    mid: MediaId,
+    hash: &FileHash,
+) -> Result<(), ApiError> {
+    lib.raw_db().update_media_hash_index(wtxn, mid, Some(hash), None)?;
+    lib.raw_db().media.delete(wtxn, &mid)?;
+    lib.raw_db().thumbnails.delete(wtxn, &mid)?;
+    lib.raw_db().video_previews.delete(wtxn, &mid)?;
+
+    if let Some(tags) = lib.raw_db().tags_by_media.get(wtxn, &mid)? {
+        for tag_id in tags {
+            if let Some(mut t_media) = lib.raw_db().media_by_tag.get(wtxn, &tag_id)? {
+                t_media.retain(|&id| id != mid);
+                if t_media.is_empty() {
+                    lib.raw_db().media_by_tag.delete(wtxn, &tag_id)?;
+                } else {
+                    lib.raw_db().media_by_tag.put(wtxn, &tag_id, &t_media)?;
+                }
+            }
+        }
+        lib.raw_db().tags_by_media.delete(wtxn, &mid)?;
+    }
+    Ok(())
+}
+
+pub(super) fn split_folder_and_filename(path: &Path) -> Result<(std::path::PathBuf, String), ApiError> {
     let normalized = normalize_path(path);
     let filename = normalized
         .file_name()

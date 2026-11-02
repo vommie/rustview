@@ -71,6 +71,27 @@ pub struct ApiDeleteMediaResponse {
     pub message: String,
 }
 
+/// The answer of `move-media`: `action` is `moved`, `already_moved`, `unchanged` or `not_found`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiMoveMediaResponse {
+    pub success: bool,
+    pub action: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub media_id: Option<u64>,
+    pub from: String,
+    pub to: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replaced_media_id: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rating: Option<u8>,
+    pub tags: Vec<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    pub message: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiHashCheckResponse {
     pub success: bool,

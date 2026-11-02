@@ -11,6 +11,10 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ### Added
 
+- `rustview api move-media --from OLD --to NEW` moves a media record to the new path of its file, after another program (RustCut)
+  moved the file: the record keeps its tags, rating, hash, source, thumbnail and video preview. A different record at the new path
+  is refused unless `--replace` is given (its file was overwritten). A second call reports `already_moved`; aliases `move`, `relink`.
+
 - `ATTRIBUTION.md` and `LICENSES/` hold the notices the licenses of the bundled crates, libraries and icons require when a built
   RustView is passed on; the package installs them to `/usr/share/licenses/rustview/`.
 
