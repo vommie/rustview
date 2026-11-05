@@ -9,7 +9,7 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ## [Unreleased]
 
-## [0.6.11] - 2026-11-05
+## [0.6.11] - 2026-11-06
 
 ### Added
 
