@@ -9,6 +9,8 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ## [Unreleased]
 
+## [0.6.11] - 2026-11-05
+
 ### Added
 
 - The control bar of a video adapts to narrow tiles (several videos in the Multiview): step by step the volume slider becomes a
@@ -1049,7 +1051,8 @@ First usable version: the application skeleton grew into a working media browser
 ### Added
 - Initial commit of the project.
 
-[Unreleased]: https://github.com/vommie/rustview/compare/v0.6.9...HEAD
+[Unreleased]: https://github.com/vommie/rustview/compare/v0.6.11...HEAD
+[0.6.11]: https://github.com/vommie/rustview/compare/v0.6.9...v0.6.11
 [0.6.9]: https://github.com/vommie/rustview/compare/v0.6.7...v0.6.9
 [0.6.7]: https://github.com/vommie/rustview/compare/v0.6.6...v0.6.7
 [0.6.6]: https://github.com/vommie/rustview/compare/v0.6.5...v0.6.6
