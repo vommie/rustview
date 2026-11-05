@@ -16,6 +16,7 @@ ignore = [
     { id = "RUSTSEC-2026-0370", reason = "zvariant: unmaintained notice for the zbus stack that Slint, rfd and arboard use" },
     { id = "RUSTSEC-2026-0371", reason = "zbus_names: same zbus stack notice" },
     { id = "RUSTSEC-2026-0372", reason = "zvariant_derive: same zbus stack notice" },
+    { id = "RUSTSEC-2026-0441", reason = "pin-utils comes from spin_on in Slint's Skia renderer; no replacement is available to this project" },
 ]
 
 [licenses]
