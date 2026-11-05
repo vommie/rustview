@@ -6,6 +6,7 @@
 //! a later milestone only replaces the keys that lead here (`docs/multiview_focus.md`).
 
 use super::media_actions::MediaActionId;
+use super::video_filter::FilterChange;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ZoomKey {
@@ -77,6 +78,8 @@ pub enum PlayerCommand {
     },
     /// A key of the area "MPV `ab_repeat.lua`" (only while the script is active in the selected video's player).
     Ab(AbKey),
+    /// A key of the video filters (`video_filter`): rotate, mirror, gamma, ...
+    Filter(FilterChange),
 }
 
 /// The keys of the mpv script `ab_repeat.lua` (Settings > Hotkeys > MPV `ab_repeat.lua`).

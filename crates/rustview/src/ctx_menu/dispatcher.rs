@@ -73,6 +73,8 @@ impl CtxMenuDispatcher {
             menu_index: item.menu_index.saturating_as::<i32>(),
             tooltip: item.tooltip.clone().unwrap_or_default().into(),
             hold: item.hold,
+            value: 0.0,
+            value_text: slint::SharedString::default(),
         }
     }
 

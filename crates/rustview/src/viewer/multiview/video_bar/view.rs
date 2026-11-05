@@ -2,8 +2,8 @@
 
 use super::ab_state::AbPoint;
 use super::ab_view::AbBarView;
+use super::bar_menu::{MenuAction, MenuLevels};
 use super::collapse::{BarFit, BarNeeds};
-use super::more_menu::{MoreAction, MoreMenu};
 use super::placement::VideoBarPlacement;
 use super::popups::BarPopup;
 use super::progress::SpanShare;
@@ -35,8 +35,10 @@ pub struct VideoBarView {
     pub popup: Option<BarPopup>,
     /// The A-B group shows in its bubble (while the bar has the A-B button).
     pub ab_bubble: bool,
-    /// The entries of the "..." menu (and of its open submenu).
-    pub more: MoreMenu,
+    /// The entries of the open menu ("..." or the filter menu) and of its open submenus.
+    pub menu: MenuLevels,
+    /// How many video filters are on (the number on the filter button, or on "..." while it holds the filters).
+    pub filter_count: usize,
 }
 
 /// A bar a host shows (or lets fade out).
@@ -159,8 +161,16 @@ pub enum VideoBarInput {
     AbBubble,
     /// A click on "...": its menu opens or closes.
     MoreButton,
-    /// An entry of the "..." menu.
-    More(MoreAction),
+    /// A click on the filter button: its menu opens or closes.
+    FilterButton,
+    /// An entry of the open menu.
+    Menu(MenuAction),
+    /// A slider of the open menu is pressed, dragged or let go at `share` of its width (a right click: `share` 0.5).
+    MenuSlider {
+        action: MenuAction,
+        share: f32,
+        phase: DragPhase,
+    },
     /// A press outside the open popup: every popup of the bar closes (the A-B bubble stays).
     ClosePopups,
 }
@@ -201,7 +211,9 @@ impl VideoBarInput {
             Self::AudioButton => "audio button",
             Self::AbBubble => "A-B bubble",
             Self::MoreButton => "more",
-            Self::More(_) => "more entry",
+            Self::FilterButton => "filters",
+            Self::Menu(_) => "menu entry",
+            Self::MenuSlider { .. } => "menu slider",
             Self::ClosePopups => "close popups",
         }
     }
@@ -267,8 +279,12 @@ impl VideoBarInput {
             28 => Some(Self::AbBubble),
             29 => Some(Self::MoreButton),
             30 => Some(Self::ClosePopups),
-            31 => MoreAction::from_code(index).map(Self::More),
+            31 => MenuAction::from_code(index).map(Self::Menu),
             32 => ab(AbInput::MenuRefresh),
+            33 => MenuAction::from_code(index)
+                .zip(DragPhase::from_code(phase))
+                .map(|(action, phase)| Self::MenuSlider { action, share, phase }),
+            34 => Some(Self::FilterButton),
             _ => None,
         }
     }
@@ -306,13 +322,13 @@ mod tests {
     #[test]
     fn the_collapse_events_become_inputs() {
         let measured = VideoBarEvent {
-            widths: vec![400.0, 330.0, 280.0, 200.0, 150.0, 100.0],
+            widths: vec![400.0, 330.0, 280.0, 200.0, 175.0, 150.0, 100.0],
             ..event(26)
         };
         assert_eq!(
             VideoBarInput::from_event(measured),
             Some(VideoBarInput::Measured(BarNeeds([
-                400.0, 330.0, 280.0, 200.0, 150.0, 100.0
+                400.0, 330.0, 280.0, 200.0, 175.0, 150.0, 100.0
             ])))
         );
         let short = VideoBarEvent {
@@ -325,13 +341,29 @@ mod tests {
         assert_eq!(VideoBarInput::from_event(event(29)), Some(VideoBarInput::MoreButton));
         assert_eq!(VideoBarInput::from_event(event(30)), Some(VideoBarInput::ClosePopups));
         let mute = VideoBarEvent {
-            index: MoreAction::Mute.code(),
+            index: MenuAction::Mute.code(),
             ..event(31)
         };
         assert_eq!(
             VideoBarInput::from_event(mute),
-            Some(VideoBarInput::More(MoreAction::Mute))
+            Some(VideoBarInput::Menu(MenuAction::Mute))
         );
+        let gamma = MenuAction::Knob(crate::viewer::multiview::video_filter::Knob::Gamma);
+        let slider = VideoBarEvent {
+            index: gamma.code(),
+            share: 0.75,
+            phase: 1,
+            ..event(33)
+        };
+        assert_eq!(
+            VideoBarInput::from_event(slider),
+            Some(VideoBarInput::MenuSlider {
+                action: gamma,
+                share: 0.75,
+                phase: DragPhase::Move
+            })
+        );
+        assert_eq!(VideoBarInput::from_event(event(34)), Some(VideoBarInput::FilterButton));
         assert_eq!(
             VideoBarInput::from_event(event(32)),
             Some(VideoBarInput::Ab(AbInput::MenuRefresh))

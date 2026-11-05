@@ -2,6 +2,7 @@
 //! current keys of the edit actions over as text whenever it changes; the viewer never depends on the UI.
 
 use super::route::HostMode;
+use super::video_filter::menu::FilterKeys;
 use parking_lot::RwLock;
 
 /// The first key of each edit action of one area ("" = no key).
@@ -49,6 +50,17 @@ pub fn set_ab(keys: AbKeys) {
 
 pub fn ab() -> AbKeys {
     AB_LABELS.read().clone()
+}
+
+static FILTER_LABELS: RwLock<Option<FilterKeys>> = RwLock::new(None);
+
+/// The keys of the video filter actions (the filter menus name them).
+pub fn set_filters(keys: FilterKeys) {
+    *FILTER_LABELS.write() = Some(keys);
+}
+
+pub fn filters() -> FilterKeys {
+    FILTER_LABELS.read().clone().unwrap_or_default()
 }
 
 pub fn set(tab: EditKeys, fullscreen: EditKeys) {

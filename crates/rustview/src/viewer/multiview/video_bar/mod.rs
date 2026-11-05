@@ -13,6 +13,7 @@
 pub mod ab_menu;
 pub mod ab_state;
 pub mod ab_view;
+pub mod bar_menu;
 pub mod collapse;
 pub mod more_menu;
 pub mod placement;

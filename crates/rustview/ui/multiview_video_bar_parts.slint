@@ -28,6 +28,8 @@ export component BarIconButton inherits Rectangle {
     in property <string> tip;
     in property <string> shortcut;
     in property <length> pt: 1px;
+    // A small number in the corner (0 = none), in the color of `tint` when it is not the plain text color.
+    in property <int> badge;
     callback clicked();
     callback right-clicked();
     callback scrolled(length);
@@ -42,6 +44,24 @@ export component BarIconButton inherits Rectangle {
         icon: root.icon;
         size: root.icon-size;
         color: touch.has-hover ? (root.tint == Theme.text ? #ffffff : root.tint.brighter(0.25)) : root.tint;
+    }
+
+    if root.badge > 0 : Rectangle {
+        x: parent.width - self.width - Math.round(1 * root.pt / 1px) * 1px;
+        y: Math.round(2 * root.pt / 1px) * 1px;
+        height: Math.round(11 * root.pt / 1px) * 1px;
+        width: Math.max(self.height, badge-text.preferred-width + Math.round(5 * root.pt / 1px) * 1px);
+        border-radius: self.height / 2;
+        background: root.tint == Theme.text ? Theme.primary : root.tint;
+
+        badge-text := Text {
+            text: root.badge > 99 ? "99+" : "\{root.badge}";
+            font-size: Math.round(8 * root.pt / 1px) * 1px;
+            font-weight: 700;
+            color: Theme.fullscreen-background;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
     }
 
     touch := TouchArea {

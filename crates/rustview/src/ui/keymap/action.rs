@@ -7,6 +7,7 @@ use crate::ui::tabs::grid::mark::{GridKey, Step};
 use crate::viewer::multiview::command::{AbKey, PlayerCommand};
 use crate::viewer::multiview::media_actions::MediaActionId;
 use crate::viewer::multiview::primary_actions::PrimaryActionId;
+use crate::viewer::multiview::video_filter::FilterChange;
 
 /// The keys cannot be changed (Esc, the cursor keys of Browse, type-ahead find); the page shows them with a lock.
 pub const FIXED: u8 = 1;
@@ -178,6 +179,12 @@ actions! {
     PlayerVolumeDown: Player, "player.volume_down", "Quieter", ["Control+DownArrow"], REPEAT;
     PlayerSlower: Player, "player.slower", "Slower", ["OpenBracket"], REPEAT;
     PlayerFaster: Player, "player.faster", "Faster", ["CloseBracket"], REPEAT;
+    PlayerRotate: Player, "player.filter_rotate", "Filters: rotate right (90, 180, 270, back to 0 degrees)", ["R"];
+    PlayerRotateLeft: Player, "player.filter_rotate_left", "Filters: rotate left", [];
+    PlayerMirror: Player, "player.filter_mirror", "Filters: mirror (on top of the rotation)", [];
+    PlayerGamma: Player, "player.filter_gamma", "Filters: gamma up by 10 (after 100 back to 0)", [];
+    PlayerDeinterlace: Player, "player.filter_deinterlace", "Filters: deinterlace (on or off)", [];
+    PlayerFiltersOff: Player, "player.filters_off", "Filters: all filters off", [];
     AbSetA: AbRepeat, "ab_repeat.set_a", "Set A (the start of the repeat)", ["Home"];
     AbSetB: AbRepeat, "ab_repeat.set_b", "Set B (the end of the repeat)", ["End"];
     AbClear: AbRepeat, "ab_repeat.clear", "Clear A and B", ["Control+Delete"];
@@ -294,6 +301,12 @@ impl Action {
             Self::PlayerVolumeDown => PlayerCommand::Volume { louder: false },
             Self::PlayerSlower => PlayerCommand::Speed { faster: false },
             Self::PlayerFaster => PlayerCommand::Speed { faster: true },
+            Self::PlayerRotate => PlayerCommand::Filter(FilterChange::Rotate(90)),
+            Self::PlayerRotateLeft => PlayerCommand::Filter(FilterChange::Rotate(-90)),
+            Self::PlayerMirror => PlayerCommand::Filter(FilterChange::ToggleMirror),
+            Self::PlayerGamma => PlayerCommand::Filter(FilterChange::CycleGamma),
+            Self::PlayerDeinterlace => PlayerCommand::Filter(FilterChange::ToggleDeinterlace),
+            Self::PlayerFiltersOff => PlayerCommand::Filter(FilterChange::AllOff),
             Self::AbSetA => PlayerCommand::Ab(AbKey::SetA),
             Self::AbSetB => PlayerCommand::Ab(AbKey::SetB),
             Self::AbClear => PlayerCommand::Ab(AbKey::Clear),

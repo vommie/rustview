@@ -10,6 +10,7 @@ use std::time::Instant;
 pub mod ab_repeat;
 mod controls;
 mod events;
+mod filters;
 mod looping;
 mod messages;
 mod options;

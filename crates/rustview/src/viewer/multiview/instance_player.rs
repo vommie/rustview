@@ -28,6 +28,17 @@ impl MultiviewInstance {
         if let PlayerCommand::Ab(key) = command {
             return self.ab_key(index, key);
         }
+        if let PlayerCommand::Filter(change) = command {
+            self.change_filters(index, change);
+            // The bar shows for a moment, so the number on the filter button tells what is on now.
+            if let Some(video) = self.tiles[index].video.as_mut() {
+                video
+                    .bar
+                    .reveal
+                    .pulse(Instant::now() + Duration::from_millis(MULTIVIEW_VIDEO_BAR_PULSE_MS));
+            }
+            return Ok(UiAction::None);
+        }
         if command == PlayerCommand::Mute {
             self.toggle_mute_at(index);
             self.show_mute_feedback(index, MuteInput::Hotkey, Instant::now());
@@ -57,7 +68,7 @@ impl MultiviewInstance {
                     .player
                     .multiply_speed(if faster { SPEED_STEP } else { 1.0 / SPEED_STEP })
             }
-            PlayerCommand::Mute | PlayerCommand::Ab(_) => Ok(()),
+            PlayerCommand::Mute | PlayerCommand::Ab(_) | PlayerCommand::Filter(_) => Ok(()),
         };
         match result {
             Ok(()) if matches!(command, PlayerCommand::Volume { .. }) => {

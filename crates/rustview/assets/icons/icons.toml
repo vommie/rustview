@@ -125,6 +125,15 @@ ab_loop_off = { custom = "ab_loop_off.svg", doc = "Video control bar: no valid A
 ab_save = { tabler = "playlist-add", doc = "Video control bar: save the A-B repeat under a name" }
 ab_load = { tabler = "list-details", doc = "Video control bar: the saved A-B repeats of the video (menu)" }
 video_bar_more = { tabler = "dots", doc = "Video control bar: the \"...\" menu with the controls a narrow bar has no room for" }
+video_filter = { tabler = "adjustments-horizontal", doc = "Video control bar: the filter button and the Filters submenu of \"...\"" }
+video_filter_rotate_right = { tabler = "rotate-clockwise", doc = "Video filters: rotate the picture a quarter clockwise" }
+video_filter_rotate_left = { tabler = "rotate", doc = "Video filters: rotate the picture a quarter counterclockwise" }
+video_filter_rotate_180 = { tabler = "rotate-2", doc = "Video filters: rotate the picture by 180 degrees" }
+video_filter_mirror = { tabler = "flip-vertical", doc = "Video filters: mirror the picture (left and right swapped)" }
+video_filter_deinterlace = { tabler = "baseline-density-medium", doc = "Video filters: deinterlace (removes comb lines)" }
+video_filter_picture = { tabler = "brightness-half", doc = "Video filters: gamma, brightness, contrast and saturation" }
+video_filter_sound = { tabler = "wave-sine", doc = "Video filters: normalize the volume" }
+video_filter_off = { tabler = "filter-off", doc = "Video filters: switch every filter off" }
 lock = { tabler = "lock", doc = "Locked: the fullscreen cannot be closed" }
 lock_open = { tabler = "lock-open", doc = "Unlocked" }
 layout_reset = { tabler = "layout-grid-remove", doc = "Reset the arrangement of the Multiview to automatic" }

@@ -119,16 +119,21 @@ export struct MultiviewVideoBarView {
     ab-menu-rename-text: string,
     // How much of the bar fits its width (`video_bar::collapse`, decided in Rust from what `need` reports): 0 = everything,
     // 1 = the speaker opens a volume popup instead of the slider, 2 = no remaining time, 3 = the A-B group as one button with
-    // a bubble, 4 = the sound and the A-B repeat in the "..." menu, 5 = no current time either.
+    // a bubble, 4 = the filters in the "..." menu, 5 = the sound and the A-B repeat too, 6 = no current time either.
     fit: int,
     // The volume in percent (the volume popup names it).
     volume-text: string,
     volume-open: bool,
     // The A-B group shows in its bubble while the bar has the A-B button.
     ab-bubble: bool,
-    more-open: bool,
-    more-items: [ContextMenuItemModel],
-    // The open submenu of the "..." menu (empty: none) and the entry it belongs to.
-    more-sub-items: [ContextMenuItemModel],
-    more-active-id: int,
+    // The open menu: 0 = none, 1 = the "..." menu, 2 = the menu of the filter button. Its rows and the rows of its open
+    // submenus (empty: none), and the entries whose submenus are open.
+    menu-open: int,
+    menu-items: [ContextMenuItemModel],
+    menu-sub-items: [ContextMenuItemModel],
+    menu-sub2-items: [ContextMenuItemModel],
+    menu-active-id: int,
+    menu-sub-active-id: int,
+    // How many video filters are on (the number on the filter button, or on "..." while it holds the filters).
+    filter-count: int,
 }

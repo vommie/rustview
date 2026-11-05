@@ -6,12 +6,13 @@ use super::Slot;
 use crate::ui::multiview::views::sync_model;
 use crate::ui::{AbMenuRowView, AbStripSegmentView, ContextMenuItemModel, MultiviewVideoBarView, VideoBarSpanView};
 use crate::viewer::multiview::video_bar::ab_view::AbBarView;
-use crate::viewer::multiview::video_bar::more_menu::{EntryKind, MoreAction, MoreEntry};
+use crate::viewer::multiview::video_bar::bar_menu::{EntryKind, MenuAction, MenuEntry};
 use crate::viewer::multiview::video_bar::placement::{AbRoom, ab_popup_height, bubble_height};
 use crate::viewer::multiview::video_bar::popups::BarPopup;
 use crate::viewer::multiview::video_bar::prefs::{BarStyle, VideoBarPrefs};
 use crate::viewer::multiview::video_bar::reveal::Phase;
 use crate::viewer::multiview::video_bar::view::{VideoBarTarget, VideoBarView};
+use crate::viewer::multiview::video_filter::KNOB_RANGE;
 use rustview_core::util::cast::{Az, SaturatingAs, WrappingAs};
 use slint::ModelRc;
 
@@ -61,18 +62,19 @@ pub(super) fn row(target: &VideoBarTarget, prefs: &VideoBarPrefs, slot: &mut Slo
         fit: view.fit.code(),
         volume_text: view.volume_text.as_str().into(),
         volume_open: view.popup == Some(BarPopup::Volume),
-        more_open: matches!(view.popup, Some(BarPopup::More { .. })),
-        more_items: ModelRc::from(slot.more.clone()),
-        more_sub_items: ModelRc::from(slot.more_sub.clone()),
+        menu_open: match view.popup {
+            Some(BarPopup::More { .. }) => 1,
+            Some(BarPopup::Filters { .. }) => 2,
+            _ => 0,
+        },
+        menu_items: ModelRc::from(slot.menu[0].clone()),
+        menu_sub_items: ModelRc::from(slot.menu[1].clone()),
+        menu_sub2_items: ModelRc::from(slot.menu[2].clone()),
         ab_bubble: view.ab_bubble,
-        // The entry whose submenu is open stays highlighted, like the parent of a context menu's submenu.
-        more_active_id: view
-            .more
-            .entries
-            .iter()
-            .find(|entry| entry.open)
-            .and_then(|entry| entry.action)
-            .map_or(-1, MoreAction::code),
+        // The entries whose submenus are open stay highlighted, like the parent of a context menu's submenu.
+        menu_active_id: view.menu.open_code(0),
+        menu_sub_active_id: view.menu.open_code(1),
+        filter_count: view.filter_count.saturating_as::<i32>(),
         ..MultiviewVideoBarView::default()
     };
     if let Some(ab) = &view.ab {
@@ -205,27 +207,45 @@ fn sync_lists(view: &VideoBarView, slot: &mut Slot) {
             .collect();
         sync_model(&slot.ab_rows, entries);
     }
-    let last_more = last.map(|last| &last.more);
-    if last_more.is_none_or(|more| more.entries != view.more.entries) {
-        sync_model(&slot.more, view.more.entries.iter().map(menu_item).collect());
-    }
-    if last_more.is_none_or(|more| more.sub != view.more.sub) {
-        sync_model(&slot.more_sub, view.more.sub.iter().map(menu_item).collect());
+    let last_menu = last.map(|last| &last.menu);
+    let levels = [&view.menu.entries, &view.menu.sub, &view.menu.sub2];
+    for (level, entries) in levels.into_iter().enumerate() {
+        let before = last_menu.map(|menu| [&menu.entries, &menu.sub, &menu.sub2][level]);
+        if before.is_none_or(|before| before != entries) {
+            sync_model(&slot.menu[level], entries.iter().map(menu_item).collect());
+        }
     }
     slot.last = Some(view.clone());
 }
 
-/// An entry of the "..." menu as a row of `MultiviewBarMenu` (the rows of a context menu).
-fn menu_item(entry: &MoreEntry) -> ContextMenuItemModel {
+/// An entry of a bar's menu as a row of `MultiviewBarMenu` (the rows of a context menu, plus the slider of kind 6 with its
+/// value as a share of its width and as text).
+fn menu_item(entry: &MenuEntry) -> ContextMenuItemModel {
     let (kind, checked) = match entry.kind {
         EntryKind::Action => (0, false),
         EntryKind::Check(checked) => (1, checked),
+        EntryKind::Radio(checked) => (2, checked),
         EntryKind::Separator => (3, false),
         EntryKind::Header => (4, false),
         EntryKind::Submenu => (5, false),
+        EntryKind::Slider(_) => (6, false),
+    };
+    let (value, value_text) = match entry.kind {
+        EntryKind::Slider(value) => (
+            (value + KNOB_RANGE).az::<f32>() / (2 * KNOB_RANGE).az::<f32>(),
+            if value > 0 {
+                format!("+{value}")
+            } else {
+                value.to_string()
+            }
+            .into(),
+        ),
+        _ => (0.0, slint::SharedString::default()),
     };
     ContextMenuItemModel {
-        id: entry.action.map_or(-1, MoreAction::code),
+        id: entry.action.map_or(-1, MenuAction::code),
+        value,
+        value_text,
         text: entry.text.as_str().into(),
         shortcut: entry.shortcut.as_str().into(),
         icon: crate::icons::to_slint(entry.icon),

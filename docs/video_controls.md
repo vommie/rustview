@@ -56,7 +56,7 @@ an element of the canvas.
   tab grid, handed to its grid item).
 - Settings: `FullscreenPlayerSettings` (`fullscreen.player`), card `ui/settings_card_player.slint` + `settings_dialog/player_bar.rs`.
 
-## A narrow bar collapses (built in 0.6.10)
+## A narrow bar collapses (built in 0.6.10, the filter step in 0.6.11)
 
 When several videos share the Multiview, a tile can be too narrow for the whole bar. The progress bar always keeps at least
 three bar heights (`MULTIVIEW_VIDEO_BAR_SEEK_MIN_BAR_HEIGHTS`); the other parts give way step by step (`video_bar::collapse::BarFit`):
@@ -67,8 +67,9 @@ three bar heights (`MULTIVIEW_VIDEO_BAR_SEEK_MIN_BAR_HEIGHTS`); the other parts 
 | 1 `AudioButton` | the slider goes; a click on the speaker opens a vertical volume bar above it (percent, the bar, mute; RustCut's look), a right click mutes, the wheel changes the volume |
 | 2 `NoRemaining` | the remaining time goes |
 | 3 `AbButton` | the A-B group becomes one button (its icon in the loop's color); a click shows the group in a bubble above it, the next click hides it (the toggle is remembered in `view.video_bar_ab_bubble_open`, for every bar and the next start) |
-| 4 `More` | the speaker and the A-B button make room for "...": its menu has "Volume N %" (opens the volume bar above "..."), Mute, and the submenu "A-B Repeat" (Set A, Set B, Loop A-B, Clear A and B, Save..., Load...) |
-| 5 `NoTime` | the current time goes too; the menu starts with both times and a Milliseconds switch |
+| 4 `FilterMore` | the filter button gives way to "...", whose menu has "Filters (N)" (user decision 2026-11-05: a step of its own after the A-B button). "..." takes the filter button's place, so this step needs as much room as step 3 and the bar goes from 3 straight to 5; it starts to matter once something else goes into "..." first |
+| 5 `More` | the speaker and the A-B button make room too ("..." moves to the speaker's place): its menu has "Volume N %" (opens the volume bar above "..."), Mute, the submenu "A-B Repeat" (Set A, Set B, Loop A-B, Clear A and B, Save..., Load...) and "Filters" |
+| 6 `NoTime` | the current time goes too; the menu starts with both times and a Milliseconds switch |
 
 **Measured, not guessed.** Every part of the bar has a fixed width (the times are as wide as their templates), so
 `ui/multiview_video_bar.slint` computes what each step needs besides the progress bar (`need(step)`) and reports the six widths
@@ -92,6 +93,28 @@ is one more submenu in `more_menu.rs`. The small bars of the tab grid have no st
 tooltips, times, the bubble and the volume popup), `ui/multiview_video_bar_ab_marks.slint` (the A-B strip, flags and labels),
 `ui/multiview_video_bar_view.slint` and `ui/menu_item_types.slint` (the structs, in files of their own so `types.slint` can use
 them without an import cycle).
+
+## Video filters (questionnaire `2026-11-05-rustview-videofilter`, built in 0.6.11)
+
+The filter button (between the A-B group and the speaker; icon `adjustments-horizontal`) opens a menu like a context menu:
+Image (Rotate Right, Rotate Left, Rotate 180 Degrees, Mirror, Deinterlace, Adjust Picture > the sliders Gamma, Brightness,
+Contrast, Saturation from -100 to 100 and Reset Picture), Sound (Normalize Volume > Off, Loudness, Dynamic, Speech, Compressor,
+RustCut's four kinds) and All Filters Off. Rotation and mirroring combine; a filter entry leaves the menu open for the next one.
+While a filter is on the button is orange (`Theme.filter-active`) with the number of filters; inside "..." the entry reads
+"Filters (N)" with the groups Image and Sound, and "..." carries the number. A slider is dragged, takes the wheel (10 per notch)
+and a right click sets 0.
+
+- **Only for now** (user decision): filters belong to the tile (`TileState::filters`) and are never stored; a duplicate takes
+  them over (`instance_clone.rs`), a tile that takes over another medium's player drops them (`reload_video`), a merge keeps them.
+- **mpv:** rotation = `video-rotate` (mpv adds it to the file's rotation and reports the sum in `video-params/rotate`, so the
+  tile is probed again when that report arrives: aspect, zoom, texture), mirror = `@rv-mirror:lavfi=[hflip]` in `vf`, the
+  sliders = `gamma`/`brightness`/`contrast`/`saturation`, deinterlacing = `deinterlace`, normalization = `@rv-norm:lavfi=[...]`
+  in `af` (RustCut's graphs). The labeled filters are added and removed by label, so the user's own `vf`/`af` stay; only the
+  settings that changed are sent (`video_filter::mpv::changes`).
+- **Keys:** see `docs/hotkeys.md` (R rotates and goes round, the others have no key by default).
+- **Code:** pure `viewer/multiview/video_filter/` (`mod.rs` the model and `FilterChange`, `menu.rs` the entries, `mpv.rs` the
+  settings) and `video_bar/bar_menu.rs` (the menu types both menus share, up to three levels, slider rows = kind 6 of
+  `ContextMenuItemModel`); `instance_video_filter.rs`; `mpv_engine/filters.rs`; `ui/multiview_bar_menu_slider.slint`.
 
 The load menu has a refresh button left of "Delete all": the script reads its file again (`reload`) and publishes the list, in
 this player and in every other player of the same file (`MpvPlayer::ab_command`). Nothing watches the file; it is read only on

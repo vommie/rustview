@@ -76,7 +76,9 @@ export component MultiviewVideoBar inherits Rectangle {
     function ab-bubble-toggle() { root.send(28, 0, 0, 0, ""); }
     function more-button() { root.send(29, 0, 0, 0, ""); }
     function close-popups() { root.send(30, 0, 0, 0, ""); }
-    function more-entry(id: int) { root.send(31, 0, 0, id, ""); }
+    function menu-entry(id: int) { root.send(31, 0, 0, id, ""); }
+    function menu-slider(id: int, share: float, phase: int) { root.send(33, share, phase, id, ""); }
+    function filter-button() { root.send(34, 0, 0, 0, ""); }
 
     // One "point" of the default bar (30 px high): every size below is a multiple of it.
     property <length> pt: root.bar.bar-height / 30;
@@ -104,24 +106,32 @@ export component MultiviewVideoBar inherits Rectangle {
     property <length> rem-width: rem-measure.preferred-width;
     property <length> slider-width: 3 * root.bar.bar-height;
     property <int> fit: root.bar.mini ? 0 : root.bar.fit;
-    property <bool> has-cur: !root.bar.mini && root.fit < 5;
+    property <bool> has-cur: !root.bar.mini && root.fit < 6;
     property <bool> has-rem: !root.bar.mini && root.fit < 2;
     property <bool> has-ab-group: root.ab-on && root.fit < 3;
-    property <bool> has-ab-button: root.ab-on && root.fit == 3;
-    property <bool> has-speaker: !root.bar.mini && root.fit < 4;
+    property <bool> has-ab-button: root.ab-on && (root.fit == 3 || root.fit == 4);
+    property <bool> has-speaker: !root.bar.mini && root.fit < 5;
     property <bool> has-slider: !root.bar.mini && root.fit == 0;
+    property <bool> has-filter: !root.bar.mini && root.fit < 4;
     property <bool> has-more: !root.bar.mini && root.fit >= 4;
     property <length> play-x: root.pad;
     property <length> cur-x: root.play-x + root.btn + root.gap;
     property <length> left-end: root.has-cur ? root.cur-x + root.cur-width : root.play-x + root.btn;
     property <length> slider-x: root.width - root.pad - root.slider-width;
     property <length> right-1: root.has-slider ? root.slider-x - root.gap : root.width - root.pad;
-    // The speaker and "..." take the same place (a bar has one or the other).
+    // "..." takes the place of the filter button (step 4), then the speaker's (from step 5 on).
     property <length> speaker-x: root.right-1 - root.btn;
     property <length> speaker-center: root.speaker-x + root.btn / 2;
-    property <length> right-2: root.has-speaker || root.has-more ? root.speaker-x - root.gap : root.right-1;
-    property <length> ab-x: root.right-2 - (root.has-ab-button ? root.btn : root.ab-full-width);
-    property <length> right-3: root.has-ab-button || root.has-ab-group ? root.ab-x - root.gap : root.right-2;
+    property <bool> speaker-slot: root.has-speaker || (root.has-more && root.fit >= 5);
+    property <length> right-2: root.speaker-slot ? root.speaker-x - root.gap : root.right-1;
+    property <length> filter-x: root.right-2 - root.btn;
+    property <length> filter-center: root.filter-x + root.btn / 2;
+    property <bool> filter-slot: root.has-filter || (root.has-more && root.fit == 4);
+    property <length> right-2b: root.filter-slot ? root.filter-x - root.gap : root.right-2;
+    property <length> more-x-bar: root.fit == 4 ? root.filter-x : root.speaker-x;
+    property <length> more-center: root.more-x-bar + root.btn / 2;
+    property <length> ab-x: root.right-2b - (root.has-ab-button ? root.btn : root.ab-full-width);
+    property <length> right-3: root.has-ab-button || root.has-ab-group ? root.ab-x - root.gap : root.right-2b;
     property <length> rem-x: root.right-3 - root.rem-width;
     property <length> right-4: root.has-rem ? root.rem-x - root.gap : root.right-3;
     property <length> progress-x: root.left-end + root.gap;
@@ -130,10 +140,12 @@ export component MultiviewVideoBar inherits Rectangle {
     // What step `step` needs besides the progress bar: the same parts as above, each with its gap.
     pure function need(step: int) -> length {
         return 2 * root.pad + root.btn + root.gap
-            + (step < 5 ? root.cur-width + root.gap : 0px)
+            + (step < 6 ? root.cur-width + root.gap : 0px)
             + (step < 2 ? root.rem-width + root.gap : 0px)
             + (root.ab-on && step < 3 ? root.ab-full-width + root.gap : 0px)
-            + (root.ab-on && step == 3 ? root.btn + root.gap : 0px)
+            + (root.ab-on && (step == 3 || step == 4) ? root.btn + root.gap : 0px)
+            // The speaker (until step 4), and the filter button or "..." (always one of them).
+            + (step < 5 ? root.btn + root.gap : 0px)
             + root.btn + root.gap
             + (step == 0 ? root.slider-width + root.gap : 0px);
     }
@@ -141,12 +153,13 @@ export component MultiviewVideoBar inherits Rectangle {
     // Reported when the bar is made and whenever a width changes (the bar's height, the times' templates, the A-B group);
     // the small bar of the tab grid has no steps.
     property <string> needs-text: root.bar.mini ? "" : root.bar.key + ":" + root.need(0) / 1px + ":" + root.need(1) / 1px + ":"
-        + root.need(2) / 1px + ":" + root.need(3) / 1px + ":" + root.need(4) / 1px + ":" + root.need(5) / 1px;
+        + root.need(2) / 1px + ":" + root.need(3) / 1px + ":" + root.need(4) / 1px + ":" + root.need(5) / 1px + ":"
+        + root.need(6) / 1px;
     function report-needs() {
         if !root.bar.mini {
             VideoBarBus.event(root.bar.key, {
                 kind: 26,
-                widths: [root.need(0), root.need(1), root.need(2), root.need(3), root.need(4), root.need(5)],
+                widths: [root.need(0), root.need(1), root.need(2), root.need(3), root.need(4), root.need(5), root.need(6)],
             });
         }
     }
@@ -183,11 +196,14 @@ export component MultiviewVideoBar inherits Rectangle {
 
     // The volume popup and the "..." menu, above the speaker (or "...").
     property <length> volume-width: BarPopupMetrics.volume-width(root.pt);
-    property <length> volume-x: root.canvas-x(root.speaker-center - root.volume-width / 2, root.volume-width);
+    property <length> volume-center: root.has-speaker ? root.speaker-center : root.more-center;
+    property <length> volume-x: root.canvas-x(root.volume-center - root.volume-width / 2, root.volume-width);
     property <length> volume-y: Math.max(4px - root.y, root.bar-top - BarPopupMetrics.volume-height(root.pt));
-    property <length> more-width: 230px;
-    property <length> more-x: root.canvas-x(root.speaker-center - root.more-width / 2, root.more-width);
-    property <bool> popup-open: root.bar.ab-popup > 0 || root.bar.volume-open || root.bar.more-open;
+    property <length> menu-width: 250px;
+    property <bool> menu-shown: (root.bar.menu-open == 1 && root.has-more) || (root.bar.menu-open == 2 && root.has-filter);
+    property <length> menu-center: root.bar.menu-open == 2 ? root.filter-center : root.more-center;
+    property <length> menu-x: root.canvas-x(root.menu-center - root.menu-width / 2, root.menu-width);
+    property <bool> popup-open: root.bar.ab-popup > 0 || root.bar.volume-open || root.bar.menu-open > 0;
     property <length> bar-top: root.height - root.bar.bar-height;
     property <length> ab-strip-top: root.bar-top - root.bar.ab-strip-height;
     // The strip only shows while it has something to show: saved repeats, the current A-B or one of its points.
@@ -203,7 +219,7 @@ export component MultiviewVideoBar inherits Rectangle {
     property <length> ab-opener-x: root.has-ab-group ? root.ab-x + root.ab-opener-offset
         : root.ab-bubble-shown ? root.ab-bubble-x + root.ab-bubble-pad + root.ab-opener-offset
         : root.has-ab-button ? root.ab-button-center
-        : root.speaker-center;
+        : root.more-center;
     property <length> ab-popup-x: root.canvas-x(root.ab-opener-x - root.ab-popup-width / 2, root.ab-popup-width);
     property <length> ab-popup-y: Math.max(4px - root.y, (root.ab-bubble-shown ? root.ab-bubble-y : root.bar-top) - root.bar.ab-popup-height);
 
@@ -423,15 +439,33 @@ export component MultiviewVideoBar inherits Rectangle {
                 scrolled(delta) => { root.wheel(delta); }
             }
 
+            // The video filters: orange with the number of filters that are on.
+            if root.has-filter : BarIconButton {
+                x: root.filter-x;
+                height: root.btn;
+                size: root.btn;
+                pt: root.pt;
+                icon: IconId.video-filter;
+                icon-size: root.icon-size;
+                tint: root.bar.filter-count > 0 ? Theme.filter-active : Theme.text;
+                badge: root.bar.filter-count;
+                open: root.bar.menu-open == 2;
+                tip: root.bar.filter-count > 0 ? "Video filters (" + root.bar.filter-count + " on)" : "Video filters";
+                clicked => { root.filter-button(); }
+                scrolled(delta) => { root.wheel(delta); }
+            }
+
+            // "...": the controls the bar has no room for; the number tells how many video filters are on in it.
             if root.has-more : BarIconButton {
-                x: root.speaker-x;
+                x: root.more-x-bar;
                 height: root.btn;
                 size: root.btn;
                 pt: root.pt;
                 icon: IconId.video-bar-more;
                 icon-size: root.icon-size;
-                open: root.bar.more-open;
-                tip: "More controls";
+                badge: root.bar.filter-count;
+                open: root.bar.menu-open == 1;
+                tip: root.bar.filter-count > 0 ? "More controls (" + root.bar.filter-count + " video filters on)" : "More controls";
                 clicked => { root.more-button(); }
                 scrolled(delta) => { root.wheel(delta); }
             }
@@ -635,7 +669,7 @@ export component MultiviewVideoBar inherits Rectangle {
         x: root.volume-x;
         y: root.volume-y;
         pt: root.pt;
-        caret-center: root.speaker-center - root.volume-x;
+        caret-center: root.volume-center - root.volume-x;
         share: root.bar.volume-share;
         muted: root.bar.muted;
         level-text: root.bar.volume-text;
@@ -646,31 +680,52 @@ export component MultiviewVideoBar inherits Rectangle {
         mute => { root.speaker(); }
     }
 
-    if root.bar.more-open && root.has-more : Rectangle {
+    // The open menu ("..." or the filter button's) and its two submenu levels beside it.
+    if root.menu-shown : Rectangle {
         x: 0;
         y: 0;
         width: root.width;
         height: root.height;
 
-        more := MultiviewBarMenu {
-            x: root.more-x;
+        menu := MultiviewBarMenu {
+            x: root.menu-x;
             y: Math.max(4px - root.y, root.bar-top - self.content-height);
-            width: root.more-width;
-            items: root.bar.more-items;
+            width: root.menu-width;
+            items: root.bar.menu-items;
+            // As tall as the room above the bar allows (no scroll bar where the canvas has room).
+            max-content-height: Math.max(160px, root.bar-top + root.y - 8px);
             caret-down: true;
-            anchor-x: root.speaker-center - self.x;
-            active-id: root.bar.more-active-id;
-            item-clicked(id) => { root.more-entry(id); }
+            anchor-x: root.menu-center - self.x;
+            active-id: root.bar.menu-active-id;
+            item-clicked(id) => { root.menu-entry(id); }
+            item-slider(id, share, phase) => { root.menu-slider(id, share, phase); }
         }
 
-        if root.bar.more-sub-items.length > 0 : MultiviewBarMenu {
-            property <length> left: more.x - self.width - 2px;
-            x: self.left >= 4px - root.x ? self.left : more.x + more.width + 2px;
-            y: Math.max(4px - root.y, more.y + more.content-height - more.caret-height - self.content-height);
-            width: root.more-width;
-            items: root.bar.more-sub-items;
+        sub := MultiviewBarMenu {
+            property <length> left: menu.x - self.width - 2px;
+            visible: root.bar.menu-sub-items.length > 0;
+            x: self.left >= 4px - root.x ? self.left : menu.x + menu.width + 2px;
+            y: Math.max(4px - root.y, menu.y + menu.content-height - menu.caret-height - self.content-height);
+            width: root.menu-width;
+            items: root.bar.menu-sub-items;
+            max-content-height: Math.max(160px, root.bar-top + root.y - 8px);
             show-caret: false;
-            item-clicked(id) => { root.more-entry(id); }
+            active-id: root.bar.menu-sub-active-id;
+            item-clicked(id) => { root.menu-entry(id); }
+            item-slider(id, share, phase) => { root.menu-slider(id, share, phase); }
+        }
+
+        MultiviewBarMenu {
+            property <length> left: Math.min(sub.x, menu.x) - self.width - 2px;
+            visible: root.bar.menu-sub2-items.length > 0;
+            x: self.left >= 4px - root.x ? self.left : Math.max(sub.x, menu.x) + root.menu-width + 2px;
+            y: Math.max(4px - root.y, sub.y + sub.content-height - self.content-height);
+            width: root.menu-width;
+            items: root.bar.menu-sub2-items;
+            max-content-height: Math.max(160px, root.bar-top + root.y - 8px);
+            show-caret: false;
+            item-clicked(id) => { root.menu-entry(id); }
+            item-slider(id, share, phase) => { root.menu-slider(id, share, phase); }
         }
     }
 }

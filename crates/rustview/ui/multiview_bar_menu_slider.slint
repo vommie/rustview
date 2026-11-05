@@ -1,0 +1,135 @@
+// A slider row of a bar menu (`MultiviewBarMenu`, row kind 6): the video filters' picture adjustments. Its label starts where
+// the labels of the other rows start (after the icon slot), the value stands at its right end. The value goes from -100 to 100
+// with 0 in the middle; Rust maps the share of the track to it (`instance_video_bar::menu_slider`).
+
+import { Theme } from "styles.slint";
+import { IconSize } from "icons.slint";
+import { ContextMenuItemModel } from "menu_item_types.slint";
+import { TooltipHost } from "tooltips.slint";
+
+export component BarMenuSliderRow inherits Rectangle {
+    in property <ContextMenuItemModel> item;
+    // The share of the track (0..1) and the phase: 0 = press, 1 = drag, 2 = let go (a right click and the wheel: 2).
+    callback changed(float, int);
+
+    property <length> knob: 10px;
+    property <float> shown: Math.clamp(root.item.value, 0, 1);
+    property <bool> active: touch.has-hover || touch.pressed;
+
+    height: 28px;
+    border-radius: 4px;
+    background: root.active ? Theme.surface-hover : transparent;
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 8px;
+
+        // The icon slot of the other rows (empty), so every label starts at the same x.
+        Rectangle { width: IconSize.md; }
+
+        Text {
+            width: 72px;
+            text: root.item.text;
+            color: Theme.text;
+            font-size: 12px;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        track-area := Rectangle {
+            horizontal-stretch: 1;
+
+            // The track, the stretch from 0 (the middle) to the value, the tick of 0 and the knob.
+            Rectangle {
+                x: root.knob / 2;
+                y: (parent.height - self.height) / 2;
+                width: parent.width - root.knob;
+                height: 3px;
+                border-radius: 1.5px;
+                background: Theme.surface-selected;
+            }
+
+            Rectangle {
+                x: root.knob / 2 + (track-area.width - root.knob) * Math.min(root.shown, 0.5);
+                y: (parent.height - self.height) / 2;
+                width: (track-area.width - root.knob) * Math.abs(root.shown - 0.5);
+                height: 3px;
+                background: Theme.primary;
+            }
+
+            Rectangle {
+                x: Math.round((root.knob / 2 + (track-area.width - root.knob) / 2) / 1px) * 1px;
+                y: (parent.height - self.height) / 2;
+                width: 1px;
+                height: 9px;
+                background: Theme.text-muted;
+            }
+
+            Rectangle {
+                x: (track-area.width - root.knob) * root.shown;
+                y: (parent.height - self.height) / 2;
+                width: root.knob;
+                height: root.knob;
+                border-radius: self.width / 2;
+                background: root.active ? #ffffff : Theme.text;
+            }
+
+            touch := TouchArea {
+                mouse-cursor: pointer;
+                property <float> share: Math.clamp((self.mouse-x - root.knob / 2) / Math.max(1px, track-area.width - root.knob), 0, 1);
+
+                pointer-event(event) => {
+                    if event.kind == PointerEventKind.down {
+                        tip.on-hover-leave();
+                    }
+                    if event.button == PointerEventButton.left {
+                        if event.kind == PointerEventKind.down {
+                            root.changed(self.share, 0);
+                        } else if event.kind == PointerEventKind.up {
+                            root.changed(self.share, 2);
+                        }
+                    } else if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
+                        root.changed(0.5, 2);
+                    }
+                }
+                changed mouse-x => {
+                    if self.pressed {
+                        root.changed(self.share, 1);
+                    }
+                }
+                scroll-event(event) => {
+                    if event.delta-y == 0 {
+                        return reject;
+                    }
+                    // One notch: a twentieth of the track (10 of the 200 steps).
+                    root.changed(Math.clamp(root.shown + (event.delta-y > 0 ? 0.05 : -0.05), 0, 1), 2);
+                    return accept;
+                }
+                changed has-hover => {
+                    if self.has-hover && root.item.tooltip != "" {
+                        tip.on-hover-enter(self.mouse-x, self.mouse-y);
+                    } else {
+                        tip.on-hover-leave();
+                    }
+                }
+            }
+        }
+
+        Text {
+            width: 30px;
+            text: root.item.value-text;
+            color: root.item.value == 0.5 ? Theme.text-muted : Theme.text;
+            font-size: 11px;
+            vertical-alignment: center;
+            horizontal-alignment: right;
+        }
+    }
+
+    tip := TooltipHost {
+        text: root.item.tooltip;
+        shortcut: root.item.shortcut;
+        in-menu: true;
+        delay: 350ms;
+    }
+}

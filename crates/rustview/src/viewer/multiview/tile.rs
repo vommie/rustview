@@ -11,6 +11,7 @@ use super::instance::WeakInstance;
 use super::media_actions::MediaActionId;
 use super::model::{AspectSource, TileKind};
 use super::video_bar::state::VideoBarState;
+use super::video_filter::VideoFilters;
 use crate::ui::button_feedback::ButtonFeedback;
 use crate::viewer::edit::save_badge::SaveBadge;
 use crate::viewer::edit::tile_edit::{EditSource, TileEdit};
@@ -122,6 +123,8 @@ pub struct TileState {
     pub edit: Option<TileEdit>,
     /// The Save button of the tile (it outlives the edit for a moment after saving, fading out).
     pub save_badge: SaveBadge,
+    /// The video filters of the tile (`video_filter`): as long as the tile shows its medium, never remembered.
+    pub filters: VideoFilters,
 }
 
 impl TileState {
@@ -153,6 +156,7 @@ impl TileState {
             source: seed.source,
             edit: None,
             save_badge: SaveBadge::Hidden,
+            filters: VideoFilters::default(),
         }
     }
 }

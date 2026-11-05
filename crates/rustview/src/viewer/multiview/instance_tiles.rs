@@ -97,6 +97,7 @@ impl MultiviewInstance {
             return;
         };
         tile::reload_video(video, key, &path);
+        self.drop_filters_for_new_medium(index);
         // The zoom belonged to the file before; the new one gets its own once probed. A failure is tried again.
         self.tiles[index].zoom = None;
         self.tiles[index].error = None;
@@ -119,6 +120,8 @@ impl MultiviewInstance {
                 video.player.set_background_color(self.effective_video_background());
                 let tile = &mut self.tiles[index];
                 tile.video = Some(video);
+                self.apply_filters_to_new_player(index);
+                let tile = &mut self.tiles[index];
                 tracing::info!(
                     media_id,
                     index,

@@ -5,7 +5,7 @@
 /// The steps of a bar, from the full bar to the narrowest. Each step keeps what the one before it collapsed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum BarFit {
-    /// Everything: play, both times, the progress bar, the A-B group, the speaker and the volume slider.
+    /// Everything: play, both times, the progress bar, the A-B group, the filter button, the speaker and the volume slider.
     Full,
     /// The volume slider gives way: the speaker opens a vertical volume bar.
     AudioButton,
@@ -13,18 +13,21 @@ pub enum BarFit {
     NoRemaining,
     /// The A-B group becomes one button that shows the group in a bubble.
     AbButton,
-    /// The sound and the A-B repeat move into the "..." menu.
+    /// The filter button gives way to "..." (its menu has the filters).
+    FilterMore,
+    /// The sound and the A-B repeat move into the "..." menu as well.
     More,
     /// The current time goes as well (the "..." menu names both times).
     NoTime,
 }
 
 impl BarFit {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::Full,
         Self::AudioButton,
         Self::NoRemaining,
         Self::AbButton,
+        Self::FilterMore,
         Self::More,
         Self::NoTime,
     ];
@@ -36,8 +39,9 @@ impl BarFit {
             Self::AudioButton => 1,
             Self::NoRemaining => 2,
             Self::AbButton => 3,
-            Self::More => 4,
-            Self::NoTime => 5,
+            Self::FilterMore => 4,
+            Self::More => 5,
+            Self::NoTime => 6,
         }
     }
 
@@ -47,8 +51,9 @@ impl BarFit {
             Self::AudioButton => 1,
             Self::NoRemaining => 2,
             Self::AbButton => 3,
-            Self::More => 4,
-            Self::NoTime => 5,
+            Self::FilterMore => 4,
+            Self::More => 5,
+            Self::NoTime => 6,
         }
     }
 
@@ -62,26 +67,36 @@ impl BarFit {
         self < Self::More
     }
 
-    /// The A-B group is one button with a bubble.
-    pub fn ab_as_button(self) -> bool {
-        self == Self::AbButton
+    /// The sound and the A-B repeat are entries of the "..." menu.
+    pub fn sound_in_more(self) -> bool {
+        !self.sound_in_bar()
     }
 
-    /// The A-B repeat and the sound are entries of the "..." menu.
+    /// The filter button is in the bar (else its filters are a submenu of "...").
+    pub fn filter_in_bar(self) -> bool {
+        self < Self::FilterMore
+    }
+
+    /// The A-B group is one button with a bubble.
+    pub fn ab_as_button(self) -> bool {
+        matches!(self, Self::AbButton | Self::FilterMore)
+    }
+
+    /// The bar has "..." (the filters, later also the sound and the A-B repeat, are its entries).
     pub fn has_more(self) -> bool {
-        self >= Self::More
+        self >= Self::FilterMore
     }
 }
 
 /// What the canvas measured for every step: the width of everything but the progress bar (paddings, gaps, buttons, times),
 /// in logical pixels, in the order of `BarFit::ALL`.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct BarNeeds(pub [f32; 6]);
+pub struct BarNeeds(pub [f32; 7]);
 
 impl BarNeeds {
     /// The widths the canvas reported (`None` unless there is a finite, non-negative width for every step).
     pub fn from_reported(widths: &[f32]) -> Option<Self> {
-        let widths: [f32; 6] = widths.try_into().ok()?;
+        let widths: [f32; 7] = widths.try_into().ok()?;
         widths
             .iter()
             .all(|w| w.is_finite() && *w >= 0.0)
@@ -154,7 +169,7 @@ mod tests {
     use super::*;
 
     /// Needs of a bar 30 px high: every step a bit narrower than the one before.
-    const NEEDS: BarNeeds = BarNeeds([400.0, 330.0, 280.0, 200.0, 150.0, 100.0]);
+    const NEEDS: BarNeeds = BarNeeds([400.0, 330.0, 280.0, 200.0, 175.0, 150.0, 100.0]);
     const SEEK: f32 = 90.0;
     const HYST: f32 = 16.0;
 
@@ -165,6 +180,7 @@ mod tests {
         assert_eq!(decide(None, 489.0, &NEEDS, SEEK, HYST), BarFit::AudioButton);
         assert_eq!(decide(None, 370.0, &NEEDS, SEEK, HYST), BarFit::NoRemaining);
         assert_eq!(decide(None, 300.0, &NEEDS, SEEK, HYST), BarFit::AbButton);
+        assert_eq!(decide(None, 265.0, &NEEDS, SEEK, HYST), BarFit::FilterMore);
         assert_eq!(decide(None, 240.0, &NEEDS, SEEK, HYST), BarFit::More);
         assert_eq!(decide(None, 190.0, &NEEDS, SEEK, HYST), BarFit::NoTime);
     }
@@ -196,7 +212,7 @@ mod tests {
             BarFit::Full
         );
         // A step that still fits is kept, whatever is between.
-        assert_eq!(decide(Some(BarFit::More), 300.0, &NEEDS, SEEK, HYST), BarFit::More);
+        assert_eq!(decide(Some(BarFit::More), 280.0, &NEEDS, SEEK, HYST), BarFit::More);
         assert_eq!(decide(Some(BarFit::More), 306.0, &NEEDS, SEEK, HYST), BarFit::AbButton);
         // A big jump in width skips steps in both directions.
         assert_eq!(decide(Some(BarFit::NoTime), 1000.0, &NEEDS, SEEK, HYST), BarFit::Full);
@@ -231,18 +247,21 @@ mod tests {
     #[test]
     fn the_reported_widths_need_one_finite_width_per_step() {
         assert_eq!(BarNeeds::from_reported(&NEEDS.0), Some(NEEDS));
-        assert_eq!(BarNeeds::from_reported(&[1.0; 5]), None);
-        assert_eq!(BarNeeds::from_reported(&[1.0, 1.0, 1.0, 1.0, 1.0, f32::NAN]), None);
-        assert_eq!(BarNeeds::from_reported(&[1.0, 1.0, 1.0, 1.0, 1.0, -1.0]), None);
+        assert_eq!(BarNeeds::from_reported(&[1.0; 6]), None);
+        assert_eq!(BarNeeds::from_reported(&[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, f32::NAN]), None);
+        assert_eq!(BarNeeds::from_reported(&[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, -1.0]), None);
     }
 
     #[test]
     fn what_each_step_keeps() {
         assert!(BarFit::Full.has_slider() && !BarFit::AudioButton.has_slider());
-        assert!(BarFit::AbButton.sound_in_bar() && !BarFit::More.sound_in_bar());
-        assert!(BarFit::AbButton.ab_as_button() && !BarFit::More.ab_as_button() && !BarFit::NoRemaining.ab_as_button());
-        assert!(!BarFit::AbButton.has_more() && BarFit::More.has_more() && BarFit::NoTime.has_more());
+        assert!(BarFit::FilterMore.sound_in_bar() && !BarFit::More.sound_in_bar() && BarFit::NoTime.sound_in_more());
+        assert!(BarFit::AbButton.filter_in_bar() && !BarFit::FilterMore.filter_in_bar());
+        assert!(
+            BarFit::FilterMore.ab_as_button() && !BarFit::More.ab_as_button() && !BarFit::NoRemaining.ab_as_button()
+        );
+        assert!(!BarFit::AbButton.has_more() && BarFit::FilterMore.has_more() && BarFit::NoTime.has_more());
         let codes: Vec<i32> = BarFit::ALL.iter().map(|fit| fit.code()).collect();
-        assert_eq!(codes, [0, 1, 2, 3, 4, 5]);
+        assert_eq!(codes, [0, 1, 2, 3, 4, 5, 6]);
     }
 }

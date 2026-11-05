@@ -124,6 +124,7 @@ impl MultiviewInstance {
             let Some(video) = tile.video.as_ref() else {
                 continue;
             };
+            // mpv's `video-params/rotate` holds the file's rotation plus the tile's own (`video-rotate`, `video_filter`).
             let Some((width, height, rotate)) = video.player.video_display_params() else {
                 continue;
             };

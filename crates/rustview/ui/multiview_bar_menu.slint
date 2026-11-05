@@ -2,6 +2,7 @@ import { Theme } from "styles.slint";
 import { ContextMenuItemModel } from "types.slint";
 import { ContextMenuItemRow } from "context_menu.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
+import { BarMenuSliderRow } from "multiview_bar_menu_slider.slint";
 
 /// Drop-down of a button of the media action bar, drawn as a speech bubble: a caret points at the button that opened it, the body is
 /// slightly translucent and holds the same rows as a context menu. Any bar button with a menu uses this component, and the zoom
@@ -30,6 +31,8 @@ export component MultiviewBarMenu inherits Rectangle {
     property <length> caret-x: Math.max(14px, Math.min(root.width - 14px, root.anchor-x));
 
     callback item-clicked(int /* item id */);
+    // A slider row (kind 6) moved: its id, the share of its track and the phase (0 = press, 1 = drag, 2 = let go).
+    callback item-slider(int, float, int);
 
     height: root.content-height;
 
@@ -62,16 +65,23 @@ export component MultiviewBarMenu inherits Rectangle {
                 padding: 4px;
                 spacing: 1px;
 
-                for item in root.items : ContextMenuItemRow {
-                    item: item;
-                    is-parent-active: item.id >= 0 && item.id == root.active-id;
-
-                    scrolled(dx, dy) => {
-                        scroll.handle-scroll(dx, dy);
+                for item in root.items : VerticalLayout {
+                    if item.kind == 6 : BarMenuSliderRow {
+                        item: item;
+                        changed(share, phase) => { root.item-slider(item.id, share, phase); }
                     }
 
-                    clicked => {
-                        root.item-clicked(item.id);
+                    if item.kind != 6 : ContextMenuItemRow {
+                        item: item;
+                        is-parent-active: item.id >= 0 && item.id == root.active-id;
+
+                        scrolled(dx, dy) => {
+                            scroll.handle-scroll(dx, dy);
+                        }
+
+                        clicked => {
+                            root.item-clicked(item.id);
+                        }
                     }
                 }
             }

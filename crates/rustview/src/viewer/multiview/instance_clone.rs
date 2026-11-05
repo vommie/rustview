@@ -71,7 +71,12 @@ impl MultiviewInstance {
         };
         let seed = self.duplicate_seed(index);
         let media_id = seed.media_id;
+        let filters = self.tiles[index].filters;
+        let before: Vec<TileKey> = self.tiles.iter().map(|t| t.key).collect();
         self.apply_follow(&plan, vec![Some(seed)]);
+        if let Some(copy) = self.tiles.iter().map(|t| t.key).find(|k| !before.contains(k)) {
+            self.copy_filters(filters, copy);
+        }
         tracing::info!(
             media_id,
             shown = self.tiles.len(),

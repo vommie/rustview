@@ -9,6 +9,7 @@ pub mod main_window;
 
 use crate::ui::keymap::{Action, Area, Chord, KeyPress, Keymap, table_from_json};
 use crate::viewer::multiview::key_labels::{self, AbKeys, EditKeys};
+use crate::viewer::multiview::video_filter::menu::FilterKeys;
 use parking_lot::RwLock;
 use std::collections::BTreeMap;
 use std::sync::{Arc, LazyLock};
@@ -41,6 +42,14 @@ pub fn apply(stored: &BTreeMap<String, serde_json::Value>) {
             Action::FullscreenApplyCrop,
         ),
     );
+    key_labels::set_filters(FilterKeys {
+        rotate_right: keymap.first_label(Action::PlayerRotate),
+        rotate_left: keymap.first_label(Action::PlayerRotateLeft),
+        mirror: keymap.first_label(Action::PlayerMirror),
+        gamma: keymap.first_label(Action::PlayerGamma),
+        deinterlace: keymap.first_label(Action::PlayerDeinterlace),
+        all_off: keymap.first_label(Action::PlayerFiltersOff),
+    });
     key_labels::set_ab(AbKeys {
         set_a: keymap.first_label(Action::AbSetA),
         set_b: keymap.first_label(Action::AbSetB),

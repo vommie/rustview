@@ -24,8 +24,8 @@ pub(super) struct Slot {
     spans: Rc<VecModel<VideoBarSpanView>>,
     ab_strip: Rc<VecModel<AbStripSegmentView>>,
     ab_rows: Rc<VecModel<AbMenuRowView>>,
-    more: Rc<VecModel<ContextMenuItemModel>>,
-    more_sub: Rc<VecModel<ContextMenuItemModel>>,
+    /// The rows of the open menu and of its two submenu levels.
+    menu: [Rc<VecModel<ContextMenuItemModel>>; 3],
     last: Option<VideoBarView>,
 }
 
@@ -36,8 +36,7 @@ impl Slot {
             spans: Rc::default(),
             ab_strip: Rc::default(),
             ab_rows: Rc::default(),
-            more: Rc::default(),
-            more_sub: Rc::default(),
+            menu: Default::default(),
             last: None,
         }
     }

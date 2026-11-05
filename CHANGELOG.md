@@ -16,6 +16,12 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   bubble, and the sound and the A-B repeat move into a new "..." menu (with an A-B submenu); the narrowest bar keeps only play,
   the progress bar and "...". The progress bar always keeps a usable width, and a bar at a boundary does not switch back and forth.
   Esc closes the volume bar and the menu. Whether the A-B bubble is open is remembered.
+- A filter button on the control bar of a video: rotate right, left or by 180 degrees (combinable with mirroring), mirror,
+  deinterlace, sliders for gamma, brightness, contrast and saturation, and volume normalization (Loudness, Dynamic, Speech,
+  Compressor, as in RustCut), plus All Filters Off. The button turns orange and shows how many filters are on; on a narrow bar the
+  filters are a submenu of "..." (Filters > Image / Sound) and "..." shows the number. Filters apply only while the video is shown
+  and are not remembered; a duplicated tile takes them over. Hotkeys in the Video player area: R rotates and goes round (90, 180,
+  270, back to 0 degrees); rotate left, mirror, gamma up by 10 (wraps to 0), deinterlace and all filters off have no key by default.
 - The load menu of the A-B repeats has a refresh button: it reads the saved repeats again, for example after they were changed in
   mpv itself.
 

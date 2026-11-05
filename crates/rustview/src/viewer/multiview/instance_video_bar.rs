@@ -4,21 +4,25 @@
 
 use super::instance::MultiviewInstance;
 use super::instance_zoom::WHEEL_STEP_DELTA;
+use super::key_labels;
 use super::layout::Rect;
 use super::model::TileKind;
 use super::route::HostMode;
 use super::tile::VideoTile;
 use super::video_bar::ab_view;
+use super::video_bar::bar_menu::{MenuAction, MenuLevels, MenuPath};
 use super::video_bar::collapse::BarFit;
-use super::video_bar::more_menu::{self, MoreAction, MoreInput};
+use super::video_bar::more_menu::{self, MoreInput};
 use super::video_bar::placement::{self, AbRoom, VideoBarPlacement};
-use super::video_bar::popups::{self, BarPopup, MoreSub};
+use super::video_bar::popups::{self, BarPopup};
 use super::video_bar::prefs::{RevealMode, VideoBarPrefs};
 use super::video_bar::progress::ProgressTrack;
 use super::video_bar::reveal::{Phase, RevealInput};
 use super::video_bar::time_text;
 use super::video_bar::view::{DragPhase, VideoBarInput, VideoBarTarget, VideoBarView};
 use super::video_bar::volume::{self, VolumeIcon};
+use super::video_filter::menu as filter_menu;
+use super::video_filter::{FilterChange, KNOB_RANGE, VideoFilters};
 use super::volume_feedback::VolumeInput;
 use crate::viewer::ab_repeat::prefs as ab_prefs;
 use crate::viewer::mpv_engine::SeekPrecision;
@@ -75,6 +79,7 @@ impl MultiviewInstance {
             let video_rect = self.video_placement(index).map(|p| p.clip);
             let tile = &mut self.tiles[index];
             let (key, media_id, broken) = (tile.key, tile.media_id, tile.error.is_some());
+            let filters = tile.filters;
             let Some(video) = tile.video.as_mut().filter(|_| tile.kind == TileKind::Video) else {
                 continue;
             };
@@ -113,7 +118,7 @@ impl MultiviewInstance {
                 continue;
             }
             let width = place.bar.w.az::<f32>() / scale;
-            let view = bar_view(video, media_id, prefs, (mini, width), now);
+            let view = bar_view(video, media_id, prefs, (mini, width, &filters), now);
             let placement = match &view.ab {
                 Some(_) => place.with_room_above(ab_room_px(prefs.height, scale)),
                 None => place,
@@ -144,7 +149,12 @@ impl MultiviewInstance {
                 | VideoBarInput::AudioButton
                 | VideoBarInput::AbBubble
                 | VideoBarInput::MoreButton
-                | VideoBarInput::More(_)
+                | VideoBarInput::FilterButton
+                | VideoBarInput::Menu(_)
+                | VideoBarInput::MenuSlider {
+                    phase: DragPhase::Press,
+                    ..
+                }
                 | VideoBarInput::Seek {
                     phase: DragPhase::Press,
                     ..
@@ -163,7 +173,10 @@ impl MultiviewInstance {
             }
             VideoBarInput::Wheel { delta_y } => return self.video_wheel(index, delta_y, false) || selected,
             VideoBarInput::Ab(ab) => return self.ab_input_from_bar(index, ab) || selected,
-            VideoBarInput::More(action) => return self.more_action(index, action, prefs) || selected,
+            VideoBarInput::Menu(action) => return self.menu_action(index, action, prefs) || selected,
+            VideoBarInput::MenuSlider { action, share, phase } => {
+                return self.menu_slider(index, action, share, phase) || selected;
+            }
             _ => {}
         }
         let Some(video) = self.tiles[index].video.as_mut() else {
@@ -220,11 +233,24 @@ impl MultiviewInstance {
                 Ok(())
             }
             VideoBarInput::MoreButton => {
-                video.bar.toggle_popup(BarPopup::More { sub: None });
+                video.bar.toggle_popup(BarPopup::More {
+                    path: MenuPath::default(),
+                });
                 tracing::debug!(
                     media_id,
                     open = video.bar.popup.is_some(),
                     "[Multiview: VideoBar] More menu"
+                );
+                Ok(())
+            }
+            VideoBarInput::FilterButton => {
+                video.bar.toggle_popup(BarPopup::Filters {
+                    path: MenuPath::default(),
+                });
+                tracing::debug!(
+                    media_id,
+                    open = video.bar.popup.is_some(),
+                    "[Multiview: VideoBar] Filter menu"
                 );
                 Ok(())
             }
@@ -238,9 +264,11 @@ impl MultiviewInstance {
                 Ok(())
             }
             // Handled above.
-            VideoBarInput::Wheel { .. } | VideoBarInput::Speaker | VideoBarInput::Ab(_) | VideoBarInput::More(_) => {
-                Ok(())
-            }
+            VideoBarInput::Wheel { .. }
+            | VideoBarInput::Speaker
+            | VideoBarInput::Ab(_)
+            | VideoBarInput::Menu(_)
+            | VideoBarInput::MenuSlider { .. } => Ok(()),
         };
         if let Err(e) = result {
             tracing::warn!(media_id, input = name, error = %e, "[Multiview: VideoBar] The player did not take it");
@@ -259,41 +287,69 @@ impl MultiviewInstance {
         changed
     }
 
-    /// An entry of the "..." menu of tile `index`: what its control in the bar does, or a popup or submenu that opens.
-    fn more_action(&mut self, index: usize, action: MoreAction, prefs: &VideoBarPrefs) -> bool {
+    /// An entry of the open menu of tile `index`: a filter (the menu stays open for the next one), a submenu, or what its
+    /// control in the bar does (the menu closes).
+    fn menu_action(&mut self, index: usize, action: MenuAction, prefs: &VideoBarPrefs) -> bool {
         let key = self.tiles[index].key;
         tracing::debug!(
             media_id = self.tiles[index].media_id,
             ?action,
-            "[Multiview: VideoBar] More menu entry"
+            "[Multiview: VideoBar] Menu entry"
         );
+        if let Some(change) = action.filter_change() {
+            self.change_filters(index, change);
+            return true;
+        }
         let Some(video) = self.tiles[index].video.as_mut() else {
             return false;
         };
         match action {
-            MoreAction::Volume => {
+            MenuAction::Volume => {
                 video.bar.popup = Some(BarPopup::Volume);
                 video.bar.ab.popup = None;
                 true
             }
-            MoreAction::AbSubmenu => {
-                let sub = match video.bar.popup {
-                    Some(BarPopup::More {
-                        sub: Some(MoreSub::AbRepeat),
-                    }) => None,
-                    _ => Some(MoreSub::AbRepeat),
+            MenuAction::Open(sub) => {
+                video.bar.popup = match video.bar.popup {
+                    Some(BarPopup::More { mut path }) => {
+                        path.toggle(MenuPath::level_of(sub, false), sub);
+                        Some(BarPopup::More { path })
+                    }
+                    Some(BarPopup::Filters { mut path }) => {
+                        path.toggle(MenuPath::level_of(sub, true), sub);
+                        Some(BarPopup::Filters { path })
+                    }
+                    other => other,
                 };
-                video.bar.popup = Some(BarPopup::More { sub });
                 true
             }
             other => {
                 // The menu closes, unless the entry opens a popup of its own (Save, Load), which takes its place anyway.
                 video.bar.popup = None;
-                other
-                    .input()
-                    .is_some_and(|input| self.video_bar_input(key, input, prefs))
+                more_menu::input(other).is_some_and(|input| self.video_bar_input(key, input, prefs))
             }
         }
+    }
+
+    /// A slider of the open menu of tile `index` (a picture adjustment) moved to `share` of its width.
+    fn menu_slider(&mut self, index: usize, action: MenuAction, share: f32, phase: DragPhase) -> bool {
+        let MenuAction::Knob(knob) = action else {
+            return false;
+        };
+        let range = f64::from(KNOB_RANGE);
+        let value = ((f64::from(share.clamp(0.0, 1.0)) * 2.0 - 1.0) * range)
+            .round()
+            .to_int::<i32>();
+        if phase == DragPhase::Release {
+            tracing::debug!(
+                media_id = self.tiles[index].media_id,
+                ?knob,
+                value,
+                "[Multiview: Filters] Slider let go"
+            );
+        }
+        self.change_filters(index, FilterChange::SetKnob(knob, value));
+        true
     }
 
     /// A click on the speaker of tile `index`: see `volume::speaker_click`.
@@ -411,7 +467,7 @@ fn bar_view(
     video: &mut VideoTile,
     media_id: MediaId,
     prefs: &VideoBarPrefs,
-    (mini, width): (bool, f32),
+    (mini, width, filters): (bool, f32, &VideoFilters),
     now: Instant,
 ) -> VideoBarView {
     let playback = video.player.playback();
@@ -456,12 +512,9 @@ fn bar_view(
     video.bar.settle_popups(fit);
     let times = time_text::texts(position, track.duration_secs(), ms);
     let volume_icon = VolumeIcon::of(playback.volume, video.last_mute);
-    let sub = match video.bar.popup {
-        Some(BarPopup::More { sub }) => sub.filter(|_| ab.is_some()),
-        _ => None,
-    };
-    let more = if matches!(video.bar.popup, Some(BarPopup::More { .. })) {
-        more_menu::build(&MoreInput {
+    let keys = key_labels::filters();
+    let menu = match video.bar.popup {
+        Some(BarPopup::More { path }) => more_menu::build(&MoreInput {
             fit,
             times: &times,
             ms,
@@ -469,10 +522,12 @@ fn bar_view(
             volume_icon,
             muted: video.last_mute,
             ab: ab.as_ref(),
-            sub,
-        })
-    } else {
-        more_menu::MoreMenu::default()
+            filters,
+            keys: &keys,
+            path,
+        }),
+        Some(BarPopup::Filters { path }) => filter_menu::button_menu(filters, &keys, path),
+        _ => MenuLevels::default(),
     };
     VideoBarView {
         playing: !playback.paused,
@@ -488,6 +543,7 @@ fn bar_view(
         fit,
         popup: video.bar.popup,
         ab_bubble: popups::ab_bubble_open(),
-        more,
+        menu,
+        filter_count: filters.active_count(),
     }
 }

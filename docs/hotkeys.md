@@ -73,6 +73,11 @@ opens it in a background tab, F11 / F show a tab in the fullscreen and leave it,
 Ctrl+Page Down / Ctrl+Page Up switch tabs, Alt+1 / Alt+2 show Browse / the tab grid, Ctrl+Comma opens the settings, F1 opens
 them on the Hotkeys page, Ctrl+T switches Browse between thumbnails and the table. Mouse buttons stay as they are.
 
+Video filters (Video player area, questionnaire `2026-11-05-rustview-videofilter`, since 0.6.11): R rotates the selected video a
+quarter turn clockwise and goes round (90, 180, 270, back to 0 degrees; R was free in every area active with the player).
+Without a key by default: rotate left, mirror (on top of the rotation), gamma up by 10 (after 100 back to 0), deinterlace
+on or off, all filters off. The filter menus name the keys.
+
 ## Video zoom
 mpv's builtin `positioning` script (loaded: `load-scripts=yes`, `load-positioning` defaults to yes) already zooms toward
 the cursor with Ctrl+wheel over a video. The zoom keys of the Multiview zoom the selected video through its player
