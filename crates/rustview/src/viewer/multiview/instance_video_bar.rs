@@ -9,7 +9,10 @@ use super::model::TileKind;
 use super::route::HostMode;
 use super::tile::VideoTile;
 use super::video_bar::ab_view;
+use super::video_bar::collapse::BarFit;
+use super::video_bar::more_menu::{self, MoreAction, MoreInput};
 use super::video_bar::placement::{self, AbRoom, VideoBarPlacement};
+use super::video_bar::popups::{self, BarPopup, MoreSub};
 use super::video_bar::prefs::{RevealMode, VideoBarPrefs};
 use super::video_bar::progress::ProgressTrack;
 use super::video_bar::reveal::{Phase, RevealInput};
@@ -22,7 +25,8 @@ use crate::viewer::mpv_engine::SeekPrecision;
 use crate::viewer::multiview::follow::TileKey;
 use rustview_core::library::models::MediaId;
 use rustview_core::settings::schema::{
-    MULTIVIEW_VIDEO_BAR_FADE_MS, MULTIVIEW_VIDEO_BAR_IDLE_MS, MULTIVIEW_VIDEO_BAR_REVEAL_MARGIN_LOGICAL_PX,
+    MULTIVIEW_VIDEO_BAR_COLLAPSE_HYSTERESIS_LOGICAL_PX, MULTIVIEW_VIDEO_BAR_FADE_MS, MULTIVIEW_VIDEO_BAR_IDLE_MS,
+    MULTIVIEW_VIDEO_BAR_REVEAL_MARGIN_LOGICAL_PX, MULTIVIEW_VIDEO_BAR_SEEK_MIN_BAR_HEIGHTS,
     MULTIVIEW_VIDEO_WHEEL_VOLUME_STEP,
 };
 use rustview_core::util::cast::{Az, FloatToInt};
@@ -108,7 +112,8 @@ impl MultiviewInstance {
                 video.bar.set_hover(None);
                 continue;
             }
-            let view = bar_view(video, media_id, prefs, mini, now);
+            let width = place.bar.w.az::<f32>() / scale;
+            let view = bar_view(video, media_id, prefs, (mini, width), now);
             let placement = match &view.ab {
                 Some(_) => place.with_room_above(ab_room_px(prefs.height, scale)),
                 None => place,
@@ -136,6 +141,10 @@ impl MultiviewInstance {
             VideoBarInput::PlayPause
                 | VideoBarInput::ToggleMs
                 | VideoBarInput::Speaker
+                | VideoBarInput::AudioButton
+                | VideoBarInput::AbBubble
+                | VideoBarInput::MoreButton
+                | VideoBarInput::More(_)
                 | VideoBarInput::Seek {
                     phase: DragPhase::Press,
                     ..
@@ -153,7 +162,8 @@ impl MultiviewInstance {
                 return true;
             }
             VideoBarInput::Wheel { delta_y } => return self.video_wheel(index, delta_y, false) || selected,
-            VideoBarInput::Ab(ab) => return self.ab_input(index, ab) || selected,
+            VideoBarInput::Ab(ab) => return self.ab_input_from_bar(index, ab) || selected,
+            VideoBarInput::More(action) => return self.more_action(index, action, prefs) || selected,
             _ => {}
         }
         let Some(video) = self.tiles[index].video.as_mut() else {
@@ -196,13 +206,94 @@ impl MultiviewInstance {
                 }
                 player.set_volume(level)
             }
+            VideoBarInput::Measured(needs) => {
+                // Only a change of the widths (the bar height, the times' templates) changes what fits.
+                return video.bar.fit.measured(needs);
+            }
+            VideoBarInput::AudioButton => {
+                video.bar.toggle_popup(BarPopup::Volume);
+                tracing::debug!(
+                    media_id,
+                    open = video.bar.popup.is_some(),
+                    "[Multiview: VideoBar] Volume popup"
+                );
+                Ok(())
+            }
+            VideoBarInput::MoreButton => {
+                video.bar.toggle_popup(BarPopup::More { sub: None });
+                tracing::debug!(
+                    media_id,
+                    open = video.bar.popup.is_some(),
+                    "[Multiview: VideoBar] More menu"
+                );
+                Ok(())
+            }
+            VideoBarInput::AbBubble => {
+                popups::set_ab_bubble_open(!popups::ab_bubble_open());
+                video.bar.ab.popup = None;
+                Ok(())
+            }
+            VideoBarInput::ClosePopups => {
+                video.bar.close_popups();
+                Ok(())
+            }
             // Handled above.
-            VideoBarInput::Wheel { .. } | VideoBarInput::Speaker | VideoBarInput::Ab(_) => Ok(()),
+            VideoBarInput::Wheel { .. } | VideoBarInput::Speaker | VideoBarInput::Ab(_) | VideoBarInput::More(_) => {
+                Ok(())
+            }
         };
         if let Err(e) = result {
             tracing::warn!(media_id, input = name, error = %e, "[Multiview: VideoBar] The player did not take it");
         }
         true
+    }
+
+    /// An input of the A-B group; a save bubble or load menu it opens takes the place of the bar's other popups.
+    fn ab_input_from_bar(&mut self, index: usize, input: super::video_bar::view::AbInput) -> bool {
+        let changed = self.ab_input(index, input);
+        if let Some(video) = self.tiles[index].video.as_mut()
+            && video.bar.ab.popup.is_some()
+        {
+            video.bar.popup = None;
+        }
+        changed
+    }
+
+    /// An entry of the "..." menu of tile `index`: what its control in the bar does, or a popup or submenu that opens.
+    fn more_action(&mut self, index: usize, action: MoreAction, prefs: &VideoBarPrefs) -> bool {
+        let key = self.tiles[index].key;
+        tracing::debug!(
+            media_id = self.tiles[index].media_id,
+            ?action,
+            "[Multiview: VideoBar] More menu entry"
+        );
+        let Some(video) = self.tiles[index].video.as_mut() else {
+            return false;
+        };
+        match action {
+            MoreAction::Volume => {
+                video.bar.popup = Some(BarPopup::Volume);
+                video.bar.ab.popup = None;
+                true
+            }
+            MoreAction::AbSubmenu => {
+                let sub = match video.bar.popup {
+                    Some(BarPopup::More {
+                        sub: Some(MoreSub::AbRepeat),
+                    }) => None,
+                    _ => Some(MoreSub::AbRepeat),
+                };
+                video.bar.popup = Some(BarPopup::More { sub });
+                true
+            }
+            other => {
+                // The menu closes, unless the entry opens a popup of its own (Save, Load), which takes its place anyway.
+                video.bar.popup = None;
+                other
+                    .input()
+                    .is_some_and(|input| self.video_bar_input(key, input, prefs))
+            }
+        }
     }
 
     /// A click on the speaker of tile `index`: see `volume::speaker_click`.
@@ -285,6 +376,20 @@ impl MultiviewInstance {
         true
     }
 
+    /// Esc closes the volume popup or the "..." menu of a bar (the A-B popups take Esc in their text fields). Returns
+    /// whether one was open.
+    pub fn close_video_bar_popups(&mut self) -> bool {
+        let mut closed = false;
+        for video in self.tiles.iter_mut().filter_map(|t| t.video.as_mut()) {
+            closed |= video.bar.popup.take().is_some();
+        }
+        if closed {
+            tracing::debug!("[Multiview: VideoBar] Esc closed a popup of a bar");
+            self.bump();
+        }
+        closed
+    }
+
     /// The host stops showing bars (it closes, hides or is locked): drags and hovers on them are over.
     pub fn release_video_bars(&mut self) {
         for video in self.tiles.iter_mut().filter_map(|t| t.video.as_mut()) {
@@ -300,8 +405,15 @@ fn ab_room_px(bar_height: f32, scale: f32) -> i32 {
         .to_int::<i32>()
 }
 
-/// What the bar of `video` (showing medium `media_id`) shows now (`mini`: the small bar of the tab grid).
-fn bar_view(video: &mut VideoTile, media_id: MediaId, prefs: &VideoBarPrefs, mini: bool, now: Instant) -> VideoBarView {
+/// What the bar of `video` (showing medium `media_id`) shows now (`mini`: the small bar of the tab grid; `width`: the bar's
+/// width in logical pixels).
+fn bar_view(
+    video: &mut VideoTile,
+    media_id: MediaId,
+    prefs: &VideoBarPrefs,
+    (mini, width): (bool, f32),
+    now: Instant,
+) -> VideoBarView {
     let playback = video.player.playback();
     let ms = video.bar.ms_shown(media_id, prefs.show_ms);
     // With milliseconds the time of the observer (a tenth of a second) is too coarse: mpv is asked directly.
@@ -331,15 +443,51 @@ fn bar_view(video: &mut VideoTile, media_id: MediaId, prefs: &VideoBarPrefs, min
             (hours, ms),
         )
     };
+    // The small bar of the tab grid has no step of its own: it only ever shows play/pause and the progress bar.
+    let fit = if mini {
+        BarFit::Full
+    } else {
+        video.bar.fit.fit(
+            width,
+            MULTIVIEW_VIDEO_BAR_SEEK_MIN_BAR_HEIGHTS * prefs.height,
+            MULTIVIEW_VIDEO_BAR_COLLAPSE_HYSTERESIS_LOGICAL_PX,
+        )
+    };
+    video.bar.settle_popups(fit);
+    let times = time_text::texts(position, track.duration_secs(), ms);
+    let volume_icon = VolumeIcon::of(playback.volume, video.last_mute);
+    let sub = match video.bar.popup {
+        Some(BarPopup::More { sub }) => sub.filter(|_| ab.is_some()),
+        _ => None,
+    };
+    let more = if matches!(video.bar.popup, Some(BarPopup::More { .. })) {
+        more_menu::build(&MoreInput {
+            fit,
+            times: &times,
+            ms,
+            volume: playback.volume,
+            volume_icon,
+            muted: video.last_mute,
+            ab: ab.as_ref(),
+            sub,
+        })
+    } else {
+        more_menu::MoreMenu::default()
+    };
     VideoBarView {
         playing: !playback.paused,
-        times: time_text::texts(position, track.duration_secs(), ms),
+        times,
         fraction: track.fraction(),
         spans: track.shares(),
         volume_share: volume::slider_share(playback.volume),
-        volume_icon: VolumeIcon::of(playback.volume, video.last_mute),
+        volume_icon,
         muted: video.last_mute,
         hover,
+        volume_text: format!("{:.0} %", playback.volume.max(0.0)),
         ab,
+        fit,
+        popup: video.bar.popup,
+        ab_bubble: popups::ab_bubble_open(),
+        more,
     }
 }

@@ -15,9 +15,13 @@ export component MultiviewBarMenu inherits Rectangle {
     // The caret is under the bubble and points down (a bubble that sits above its opener) instead of up.
     in property <bool> caret-down: false;
     in property <length> max-content-height: 300px;
+    // The row with this id stays highlighted (its submenu is open beside the bubble; -1 = none).
+    in property <int> active-id: -1;
     // More than 0: the bubble holds its children (the zoom slider) instead of the rows, and is this tall (plus its padding).
     in property <length> custom-height: 0px;
-    out property <length> caret-height: 7px;
+    // False: no caret (a submenu beside its menu).
+    in property <bool> show-caret: true;
+    out property <length> caret-height: root.show-caret ? 7px : 0px;
     out property <length> content-height: root.caret-height + root.body-height;
     out property <length> corner-radius: 8px;
     out property <length> caret-center-x: root.caret-x;
@@ -60,6 +64,7 @@ export component MultiviewBarMenu inherits Rectangle {
 
                 for item in root.items : ContextMenuItemRow {
                     item: item;
+                    is-parent-active: item.id >= 0 && item.id == root.active-id;
 
                     scrolled(dx, dy) => {
                         scroll.handle-scroll(dx, dy);
@@ -76,7 +81,7 @@ export component MultiviewBarMenu inherits Rectangle {
     // The caret, drawn over the edge of the body that faces the opener: a filled triangle whose base also covers the body's border, and its two
     // outer edges.
     Path {
-        visible: !root.caret-down;
+        visible: root.show-caret && !root.caret-down;
         x: root.caret-x - 7px;
         y: 0px;
         width: 14px;
@@ -88,7 +93,7 @@ export component MultiviewBarMenu inherits Rectangle {
     }
 
     Path {
-        visible: !root.caret-down;
+        visible: root.show-caret && !root.caret-down;
         x: root.caret-x - 7px;
         y: 0px;
         width: 14px;
@@ -101,7 +106,7 @@ export component MultiviewBarMenu inherits Rectangle {
     }
 
     Path {
-        visible: root.caret-down;
+        visible: root.show-caret && root.caret-down;
         x: root.caret-x - 7px;
         y: root.body-height - 1px;
         width: 14px;
@@ -113,7 +118,7 @@ export component MultiviewBarMenu inherits Rectangle {
     }
 
     Path {
-        visible: root.caret-down;
+        visible: root.show-caret && root.caret-down;
         x: root.caret-x - 7px;
         y: root.body-height - 1px;
         width: 14px;

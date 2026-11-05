@@ -56,6 +56,47 @@ an element of the canvas.
   tab grid, handed to its grid item).
 - Settings: `FullscreenPlayerSettings` (`fullscreen.player`), card `ui/settings_card_player.slint` + `settings_dialog/player_bar.rs`.
 
+## A narrow bar collapses (built in 0.6.10)
+
+When several videos share the Multiview, a tile can be too narrow for the whole bar. The progress bar always keeps at least
+three bar heights (`MULTIVIEW_VIDEO_BAR_SEEK_MIN_BAR_HEIGHTS`); the other parts give way step by step (`video_bar::collapse::BarFit`):
+
+| Step | What changes |
+|---|---|
+| 0 `Full` | everything: play, current time, progress, remaining time, A-B group, speaker, volume slider |
+| 1 `AudioButton` | the slider goes; a click on the speaker opens a vertical volume bar above it (percent, the bar, mute; RustCut's look), a right click mutes, the wheel changes the volume |
+| 2 `NoRemaining` | the remaining time goes |
+| 3 `AbButton` | the A-B group becomes one button (its icon in the loop's color); a click shows the group in a bubble above it, the next click hides it (the toggle is remembered in `view.video_bar_ab_bubble_open`, for every bar and the next start) |
+| 4 `More` | the speaker and the A-B button make room for "...": its menu has "Volume N %" (opens the volume bar above "..."), Mute, and the submenu "A-B Repeat" (Set A, Set B, Loop A-B, Clear A and B, Save..., Load...) |
+| 5 `NoTime` | the current time goes too; the menu starts with both times and a Milliseconds switch |
+
+**Measured, not guessed.** Every part of the bar has a fixed width (the times are as wide as their templates), so
+`ui/multiview_video_bar.slint` computes what each step needs besides the progress bar (`need(step)`) and reports the six widths
+(event 26) when the bar is made and whenever one changes (bar height, the times' templates, the A-B group). Rust keeps them per
+tile (`BarFitState`) and picks the fullest step that fits (`decide`); a step fuller than the one shown needs 16 px to spare
+(`MULTIVIEW_VIDEO_BAR_COLLAPSE_HYSTERESIS_LOGICAL_PX`), so a width at a boundary never flickers. Until the first measurement a bar
+shows the narrowest step (it fades in; the measured step follows a frame later). The parts are placed by explicit `x` (from the
+left: play, time; from the right: slider, speaker or "...", the A-B group or button, remaining time); the progress bar takes the
+rest, and the openers of every popup are known from the same properties.
+
+**Popups.** The volume bar and the "..." menu (`video_bar::popups::BarPopup`) and the A-B save bubble and load menu are exclusive:
+opening one closes the other. Each opens above its opener with its caret on the opener's center: Save and Load of the group (in
+the bar or in the A-B bubble, above which they then open), else the A-B button, else "...". A popup whose opener leaves the bar
+closes (`settle_popups`); a press anywhere else on the canvas closes it (event 30), Esc too (`escape_crop` asks
+`close_video_bar_popups` first). The "..." menu is a `MultiviewBarMenu` with the rows of a context menu; its open submenu sits
+beside it (left where the canvas has room), bottoms aligned, without caret. A new kind of entry (the video filters of milestone 2)
+is one more submenu in `more_menu.rs`. The small bars of the tab grid have no steps.
+
+**Code.** Pure: `video_bar/{collapse,popups,more_menu}.rs`; instance: `instance_video_bar.rs` (`bar_view` decides the step,
+`more_action`); Slint: `ui/multiview_video_bar.slint` (placement, `need`, popups), `ui/multiview_video_bar_parts.slint` (buttons with
+tooltips, times, the bubble and the volume popup), `ui/multiview_video_bar_ab_marks.slint` (the A-B strip, flags and labels),
+`ui/multiview_video_bar_view.slint` and `ui/menu_item_types.slint` (the structs, in files of their own so `types.slint` can use
+them without an import cycle).
+
+The load menu has a refresh button left of "Delete all": the script reads its file again (`reload`) and publishes the list, in
+this player and in every other player of the same file (`MpvPlayer::ab_command`). Nothing watches the file; it is read only on
+this click and where the script reads it anyway (loading a file, every write).
+
 ## A-B repeats of the mpv script ab_repeat.lua (questionnaire 2026-10-25, built in 0.5.4)
 
 While the user's mpv script ab_repeat.lua runs in a video's player (Settings > Multiview), the bar gets an A-B group in

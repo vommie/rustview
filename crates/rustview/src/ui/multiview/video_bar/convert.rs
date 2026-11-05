@@ -4,9 +4,11 @@
 
 use super::Slot;
 use crate::ui::multiview::views::sync_model;
-use crate::ui::{AbMenuRowView, AbStripSegmentView, MultiviewVideoBarView, VideoBarSpanView};
+use crate::ui::{AbMenuRowView, AbStripSegmentView, ContextMenuItemModel, MultiviewVideoBarView, VideoBarSpanView};
 use crate::viewer::multiview::video_bar::ab_view::AbBarView;
+use crate::viewer::multiview::video_bar::more_menu::{EntryKind, MoreAction, MoreEntry};
 use crate::viewer::multiview::video_bar::placement::{AbRoom, ab_popup_height, bubble_height};
+use crate::viewer::multiview::video_bar::popups::BarPopup;
 use crate::viewer::multiview::video_bar::prefs::{BarStyle, VideoBarPrefs};
 use crate::viewer::multiview::video_bar::reveal::Phase;
 use crate::viewer::multiview::video_bar::view::{VideoBarTarget, VideoBarView};
@@ -56,6 +58,21 @@ pub(super) fn row(target: &VideoBarTarget, prefs: &VideoBarPrefs, slot: &mut Slo
         ab_strip: ModelRc::from(slot.ab_strip.clone()),
         ab_menu_rows: ModelRc::from(slot.ab_rows.clone()),
         ab_menu_renaming: -1,
+        fit: view.fit.code(),
+        volume_text: view.volume_text.as_str().into(),
+        volume_open: view.popup == Some(BarPopup::Volume),
+        more_open: matches!(view.popup, Some(BarPopup::More { .. })),
+        more_items: ModelRc::from(slot.more.clone()),
+        more_sub_items: ModelRc::from(slot.more_sub.clone()),
+        ab_bubble: view.ab_bubble,
+        // The entry whose submenu is open stays highlighted, like the parent of a context menu's submenu.
+        more_active_id: view
+            .more
+            .entries
+            .iter()
+            .find(|entry| entry.open)
+            .and_then(|entry| entry.action)
+            .map_or(-1, MoreAction::code),
         ..MultiviewVideoBarView::default()
     };
     if let Some(ab) = &view.ab {
@@ -188,5 +205,35 @@ fn sync_lists(view: &VideoBarView, slot: &mut Slot) {
             .collect();
         sync_model(&slot.ab_rows, entries);
     }
+    let last_more = last.map(|last| &last.more);
+    if last_more.is_none_or(|more| more.entries != view.more.entries) {
+        sync_model(&slot.more, view.more.entries.iter().map(menu_item).collect());
+    }
+    if last_more.is_none_or(|more| more.sub != view.more.sub) {
+        sync_model(&slot.more_sub, view.more.sub.iter().map(menu_item).collect());
+    }
     slot.last = Some(view.clone());
+}
+
+/// An entry of the "..." menu as a row of `MultiviewBarMenu` (the rows of a context menu).
+fn menu_item(entry: &MoreEntry) -> ContextMenuItemModel {
+    let (kind, checked) = match entry.kind {
+        EntryKind::Action => (0, false),
+        EntryKind::Check(checked) => (1, checked),
+        EntryKind::Separator => (3, false),
+        EntryKind::Header => (4, false),
+        EntryKind::Submenu => (5, false),
+    };
+    ContextMenuItemModel {
+        id: entry.action.map_or(-1, MoreAction::code),
+        text: entry.text.as_str().into(),
+        shortcut: entry.shortcut.as_str().into(),
+        icon: crate::icons::to_slint(entry.icon),
+        kind,
+        is_checked: checked,
+        is_enabled: entry.enabled,
+        has_submenu: entry.kind == EntryKind::Submenu,
+        tooltip: entry.tooltip.as_str().into(),
+        ..ContextMenuItemModel::default()
+    }
 }

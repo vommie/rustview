@@ -1,6 +1,9 @@
 import { IconId } from "icons.slint";
 import { MultiviewTileView, MultiviewGutterView, MultiviewScreenView, MultiviewTimeBadgeView } from "multiview_types.slint";
-import { MultiviewVideoBarView } from "multiview_video_bar.slint";
+import { MultiviewVideoBarView } from "multiview_video_bar_view.slint";
+import { ContextMenuItemModel } from "menu_item_types.slint";
+
+export { ContextMenuItemModel }
 
 export struct MediaItemView {
     id: int,
@@ -92,25 +95,6 @@ export struct TagHistoryItemModel {
 
 export struct TagHistoryRowModel {
     items: [TagHistoryItemModel],
-}
-
-export struct ContextMenuItemModel {
-    id: int,
-    text: string,
-    shortcut: string,
-    /// Library icon shown in the leading icon slot (`IconId.none` = empty slot).
-    icon: IconId,
-    /// Image of an external application (system icon theme, e.g. "Open With" entries). Takes precedence over `icon`.
-    app_icon: image,
-    kind: int, // 0 = Action, 1 = Checkable, 2 = Radio, 3 = Separator, 4 = Header, 5 = Submenu
-    is_checked: bool,
-    is_enabled: bool,
-    has_submenu: bool,
-    submenu_depth: int,
-    menu_index: int,
-    tooltip: string,
-    /// The entry acts only when held for `HoldConfirm.duration` (hold.slint).
-    hold: bool,
 }
 
 export struct ContextMenuLevelModel {

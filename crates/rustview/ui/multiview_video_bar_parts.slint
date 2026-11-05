@@ -1,0 +1,301 @@
+// Parts of a video's control bar (`multiview_video_bar.slint`): its icon buttons, its times, and the popups a collapsed bar
+// opens (the vertical volume bar of the speaker, the bubble with the A-B group). Every size comes from `pt` (one point of
+// the default bar, 30 px high). The look of the volume popup follows RustCut's (percent on top, the bar, mute below it).
+
+import { Theme } from "styles.slint";
+import { AppIcon, IconId } from "icons.slint";
+import { TooltipHost } from "tooltips.slint";
+
+/// The sizes of the bar's popups (the bar places them; Rust needs none of them).
+export global BarPopupMetrics {
+    // The volume popup: 46 x 194 points plus its caret.
+    public pure function volume-height(pt: length) -> length {
+        return Math.round(194 * pt / 1px) * 1px + Math.round(7 * pt / 1px) * 1px;
+    }
+
+    public pure function volume-width(pt: length) -> length {
+        return Math.round(46 * pt / 1px) * 1px;
+    }
+}
+
+/// A button of the bar: an icon in a square as high as the bar. `open`: its popup is open (highlighted like an opener).
+export component BarIconButton inherits Rectangle {
+    in property <IconId> icon;
+    in property <length> size;
+    in property <length> icon-size;
+    in property <color> tint: Theme.text;
+    in property <bool> open;
+    in property <string> tip;
+    in property <string> shortcut;
+    in property <length> pt: 1px;
+    callback clicked();
+    callback right-clicked();
+    callback scrolled(length);
+
+    width: root.size;
+    border-radius: Math.round(5 * root.pt / 1px) * 1px;
+    background: root.open ? Colors.white.with-alpha(0.16) : transparent;
+
+    AppIcon {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        icon: root.icon;
+        size: root.icon-size;
+        color: touch.has-hover ? (root.tint == Theme.text ? #ffffff : root.tint.brighter(0.25)) : root.tint;
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down && event.button == PointerEventButton.right {
+                tip-host.on-hover-leave();
+                root.right-clicked();
+            }
+        }
+        clicked => {
+            // A click may open a popup (or rebuild the bar): the tooltip goes first.
+            tip-host.on-hover-leave();
+            root.clicked();
+        }
+        scroll-event(event) => {
+            root.scrolled(event.delta-y);
+            return accept;
+        }
+        changed has-hover => {
+            if self.has-hover && root.tip != "" {
+                tip-host.on-hover-enter(self.mouse-x, self.mouse-y);
+            } else {
+                tip-host.on-hover-leave();
+            }
+        }
+    }
+
+    tip-host := TooltipHost {
+        text: root.tip;
+        shortcut: root.shortcut;
+    }
+}
+
+/// A time of the bar: as wide as its template (the widest text the video can need, measured by the bar), so nothing moves
+/// while it plays. A click switches the milliseconds of both times.
+export component BarTime inherits Rectangle {
+    in property <string> text;
+    in property <length> font-size;
+    in property <color> text-color;
+    in property <TextHorizontalAlignment> alignment;
+    callback clicked();
+
+    Text {
+        width: 100%;
+        height: 100%;
+        text: root.text;
+        font-size: root.font-size;
+        color: touch.has-hover ? #ffffff : root.text-color;
+        vertical-alignment: center;
+        horizontal-alignment: root.alignment;
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+/// The caret of a bubble above its opener, pointing down at it (`center` = its center inside the bubble), with the bubble's
+/// border along its two edges.
+component BubbleCaret inherits Rectangle {
+    in property <color> fill-color;
+    in property <length> center;
+    in property <length> size;
+
+    x: root.center - root.size;
+    width: 2 * root.size;
+    height: root.size + 1px;
+
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 14;
+        viewbox-height: 8;
+        commands: "M 0 1 L 7 8 L 14 1 L 14 0 L 0 0 Z";
+        fill: root.fill-color;
+    }
+
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 14;
+        viewbox-height: 8;
+        commands: "M 0 0.5 L 7 7.5 L 14 0.5";
+        stroke: Theme.border;
+        stroke-width: 1px;
+    }
+}
+
+/// A bubble above an opener of the bar: the body with the app's bubble look and the caret below it, touching the opener.
+/// The content goes inside (`@children`, laid out by the caller relative to the body).
+export component BarBubble inherits Rectangle {
+    in property <length> pt;
+    in property <length> caret-center;
+    in property <color> fill: Theme.surface;
+    out property <length> caret: Math.round(7 * root.pt / 1px) * 1px;
+    out property <length> body-height: root.height - root.caret;
+
+    body := Rectangle {
+        y: 0;
+        height: root.body-height;
+        border-radius: Math.round(6 * root.pt / 1px) * 1px;
+        background: root.fill;
+        border-width: 1px;
+        border-color: Theme.border;
+
+        // Presses between the controls stay inside (they never reach the video or the backdrop).
+        TouchArea { }
+
+        @children
+    }
+
+    BubbleCaret {
+        y: root.body-height - 1px;
+        center: root.caret-center;
+        size: root.caret;
+        fill-color: root.fill;
+    }
+}
+
+/// A vertical bar for the volume share from 0 (bottom) to 1 (top). It reports presses, drags and the release like the
+/// slider of the bar (phases 0, 1, 2), and the wheel.
+component VerticalVolume inherits Rectangle {
+    in property <float> share;
+    in property <bool> muted;
+    in property <length> pt;
+    callback changed(/* share */ float, /* phase */ int);
+    callback scrolled(length);
+
+    property <length> knob: Math.round(10 * root.pt / 1px) * 1px;
+    property <length> usable: root.height - root.knob;
+    property <float> shown: Math.clamp(root.share, 0, 1);
+    property <color> fill: root.muted ? Theme.text-muted.with-alpha(0.5) : Theme.primary;
+
+    pure function at(y: length) -> float {
+        return Math.clamp(1 - (y - root.knob / 2) / Math.max(1px, root.usable), 0, 1);
+    }
+
+    Rectangle {
+        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+        y: root.knob / 2;
+        width: Math.max(2px, Math.round(4 * root.pt / 1px) * 1px);
+        height: root.usable;
+        border-radius: self.width / 2;
+        background: Colors.white.with-alpha(0.22);
+
+        Rectangle {
+            y: parent.height * (1 - root.shown);
+            height: parent.height * root.shown;
+            border-radius: parent.border-radius;
+            background: root.fill;
+        }
+    }
+
+    Rectangle {
+        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+        y: root.usable * (1 - root.shown);
+        width: root.knob;
+        height: root.knob;
+        border-radius: self.width / 2;
+        background: root.muted ? Theme.text-muted : (touch.has-hover || touch.pressed ? #ffffff : Theme.text);
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        pointer-event(event) => {
+            if event.button == PointerEventButton.left {
+                if event.kind == PointerEventKind.down {
+                    root.changed(root.at(self.mouse-y), 0);
+                } else if event.kind == PointerEventKind.up {
+                    root.changed(root.at(self.mouse-y), 2);
+                }
+            }
+        }
+        changed mouse-y => {
+            if self.pressed {
+                root.changed(root.at(self.mouse-y), 1);
+            }
+        }
+        scroll-event(event) => {
+            root.scrolled(event.delta-y);
+            return accept;
+        }
+    }
+}
+
+/// The volume of a bar without slider, above its speaker (or above "..."): the level in percent, the vertical bar and the
+/// mute button below it, in a bubble whose caret points at `caret-center`. Its size is `BarPopupMetrics.volume-*`.
+export component BarVolumePopup inherits Rectangle {
+    in property <length> pt;
+    in property <length> caret-center;
+    in property <float> share;
+    in property <bool> muted;
+    in property <string> level-text;
+    in property <int> volume-icon; // 0 = muted (or silent), 1 = low, 2 = high
+    in property <length> icon-size;
+    callback volume(/* share */ float, /* phase */ int);
+    callback wheel(length);
+    callback mute();
+
+    property <length> w: BarPopupMetrics.volume-width(root.pt);
+
+    width: root.w;
+    height: BarPopupMetrics.volume-height(root.pt);
+
+    BarBubble {
+        width: 100%;
+        height: 100%;
+        pt: root.pt;
+        caret-center: root.caret-center;
+
+        TouchArea {
+            scroll-event(event) => {
+                root.wheel(event.delta-y);
+                return accept;
+            }
+        }
+
+        Text {
+            x: 0;
+            y: Math.round(8 * root.pt / 1px) * 1px;
+            width: root.w;
+            height: Math.round(14 * root.pt / 1px) * 1px;
+            text: root.level-text;
+            color: root.muted ? Theme.text-muted : Theme.text;
+            font-size: Math.max(9px, Math.round(11 * root.pt / 1px) * 1px);
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        VerticalVolume {
+            x: Math.round((root.w - self.width) / 2 / 1px) * 1px;
+            y: Math.round(26 * root.pt / 1px) * 1px;
+            width: Math.round(24 * root.pt / 1px) * 1px;
+            height: Math.round(124 * root.pt / 1px) * 1px;
+            pt: root.pt;
+            share: root.share;
+            muted: root.muted;
+            changed(share, phase) => { root.volume(share, phase); }
+            scrolled(delta) => { root.wheel(delta); }
+        }
+
+        BarIconButton {
+            x: Math.round((root.w - self.width) / 2 / 1px) * 1px;
+            y: Math.round(156 * root.pt / 1px) * 1px;
+            size: Math.round(30 * root.pt / 1px) * 1px;
+            height: self.size;
+            pt: root.pt;
+            icon: root.volume-icon == 0 ? IconId.volume-off : (root.volume-icon == 1 ? IconId.volume-low : IconId.volume-on);
+            icon-size: root.icon-size;
+            tip: root.muted ? "Sound on" : "Mute";
+            clicked => { root.mute(); }
+            scrolled(delta) => { root.wheel(delta); }
+        }
+    }
+}

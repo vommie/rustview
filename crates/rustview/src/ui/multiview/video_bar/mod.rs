@@ -8,7 +8,7 @@
 
 mod convert;
 
-use crate::ui::{AbMenuRowView, AbStripSegmentView, VideoBarSpanView};
+use crate::ui::{AbMenuRowView, AbStripSegmentView, ContextMenuItemModel, VideoBarSpanView};
 use crate::ui::{MultiviewVideoBarView, VideoBarEvent as SlintVideoBarEvent};
 use crate::viewer::multiview::follow::TileKey;
 use crate::viewer::multiview::video_bar::prefs::VideoBarPrefs;
@@ -24,6 +24,8 @@ pub(super) struct Slot {
     spans: Rc<VecModel<VideoBarSpanView>>,
     ab_strip: Rc<VecModel<AbStripSegmentView>>,
     ab_rows: Rc<VecModel<AbMenuRowView>>,
+    more: Rc<VecModel<ContextMenuItemModel>>,
+    more_sub: Rc<VecModel<ContextMenuItemModel>>,
     last: Option<VideoBarView>,
 }
 
@@ -34,6 +36,8 @@ impl Slot {
             spans: Rc::default(),
             ab_strip: Rc::default(),
             ab_rows: Rc::default(),
+            more: Rc::default(),
+            more_sub: Rc::default(),
             last: None,
         }
     }
@@ -60,7 +64,9 @@ impl VideoBarModel {
         let popup_before = self.popup_open();
         // The bar with an open popup last: it is drawn above every other bar.
         let mut ordered: Vec<&VideoBarTarget> = targets.iter().collect();
-        ordered.sort_by_key(|target| target.view.ab.as_ref().is_some_and(|ab| ab.popup_size().is_some()));
+        ordered.sort_by_key(|target| {
+            target.view.popup.is_some() || target.view.ab.as_ref().is_some_and(|ab| ab.popup_size().is_some())
+        });
         for (index, target) in ordered.iter().enumerate() {
             match self.slots.iter().position(|slot| slot.key == target.key) {
                 Some(found) if found == index => {}
@@ -147,6 +153,7 @@ pub fn input_of(event: SlintVideoBarEvent) -> Option<VideoBarInput> {
         index: event.index,
         text: event.text.into(),
         delta: event.delta,
+        widths: event.widths.iter().collect(),
     });
     if decoded.is_none() {
         tracing::warn!(kind = event.kind, "[Multiview: VideoBar] Unknown event of a bar");

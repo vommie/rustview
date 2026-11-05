@@ -15,7 +15,7 @@ use super::{
     DEFAULT_THUMBNAIL_BADGE_OVERFLOW, DEFAULT_THUMBNAIL_WIDTH, DEFAULT_TOOLTIP_DELAY_MS,
     DEFAULT_TYPE_AHEAD_CENTER_TARGET, DEFAULT_TYPE_AHEAD_CYCLE_REPEATED_KEYS, DEFAULT_TYPE_AHEAD_ENABLED,
     DEFAULT_TYPE_AHEAD_INCLUDE_FOLDERS, DEFAULT_TYPE_AHEAD_MULTIVIEW_DELAY_MS, DEFAULT_TYPE_AHEAD_NEW_SEARCH_GAP_MS,
-    DEFAULT_TYPE_AHEAD_NO_MATCH_MESSAGE, DEFAULT_TYPE_AHEAD_TIMEOUT_MS,
+    DEFAULT_TYPE_AHEAD_NO_MATCH_MESSAGE, DEFAULT_TYPE_AHEAD_TIMEOUT_MS, DEFAULT_VIDEO_BAR_AB_BUBBLE_OPEN,
 };
 use serde::{Deserialize, Serialize};
 
@@ -226,6 +226,10 @@ pub struct ViewSettings {
 
     /// Added in 0.4.15: the log window.
     pub log_window: super::LogWindowState,
+
+    /// Added in 0.6.10: the A-B buttons of a collapsed video control bar show in their bubble (the bubble's toggle is
+    /// remembered for the next videos and the next start).
+    pub video_bar_ab_bubble_open: bool,
 }
 
 impl Default for ViewSettings {
@@ -266,6 +270,7 @@ impl Default for ViewSettings {
             hotkeys_page: super::HotkeysPageState::default(),
             debug_page: super::DebugPageState::default(),
             log_window: super::LogWindowState::default(),
+            video_bar_ab_bubble_open: DEFAULT_VIDEO_BAR_AB_BUBBLE_OPEN,
         }
     }
 }

@@ -1,0 +1,134 @@
+// What a video's control bar shows (`ui::multiview::video_bar` fills it, `multiview_video_bar.slint` draws it). A file of its
+// own, without components, so that `types.slint` (the tab grid items carry small bars) can use it without an import cycle.
+
+import { ContextMenuItemModel } from "menu_item_types.slint";
+
+/// A saved repeat in the strip: shares of the progress bar and its palette color (-1: grey).
+export struct AbStripSegmentView {
+    from: float,
+    to: float,
+    color: int,
+}
+
+/// A row of the load menu (`ab_view::MenuRowView`); `index` is its place in the saved list.
+export struct AbMenuRowView {
+    index: int,
+    number: int,
+    name: string,
+    times: string,
+    length: string,
+    from: float,
+    to: float,
+    color: int,
+    current: bool,
+}
+
+/// A stretch of the progress bar (`viewer::multiview::video_bar::progress`): shares of the bar's width and its kind.
+export struct VideoBarSpanView {
+    from: float,
+    to: float,
+    kind: int, // 0 = played
+}
+
+/// What a control bar shows (`ui::multiview::video_bar`, made from `viewer::multiview::video_bar::view`). The rectangle is the bar
+/// with the room above it (the time bubble, the A-B group), in logical pixels relative to the canvas.
+export struct MultiviewVideoBarView {
+    key: int, // the tile (`TileKey`), carried back by every event
+    x: length,
+    y: length,
+    width: length,
+    height: length,
+    pill: bool,
+    // The small bar of a tab grid item: play/pause and the progress bar only.
+    mini: bool,
+    bar-opacity: float,
+    bar-height: length,
+    bubble-height: length,
+    fade: bool,
+    // The bar is wanted: it fades in; false: it fades out (Rust drops it when the fade is over).
+    revealed: bool,
+    playing: bool,
+    current-text: string,
+    current-template: string,
+    remaining-text: string,
+    remaining-template: string,
+    spans: [VideoBarSpanView],
+    volume-share: float,
+    volume-icon: int, // 0 = muted (or silent), 1 = low, 2 = high
+    muted: bool,
+    // The pointer over the progress bar: the bubble shows the time there.
+    hover-shown: bool,
+    hover-share: float,
+    hover-text: string,
+    // The A-B repeat group of the mpv script ab_repeat.lua (`video_bar::ab_view`); all of it only while `ab-shown`. The room above
+    // the bar comes from Rust (`placement::AbRoom`): the strip, one row for the flags and one for the label of the repeat under the
+    // pointer.
+    ab-shown: bool,
+    ab-strip-height: length,
+    ab-strip-flank: length,
+    ab-row-height: length,
+    ab-popup-height: length,
+    ab-a-look: int,
+    ab-b-look: int,
+    ab-loop-look: int,
+    ab-a-tip: string,
+    ab-b-tip: string,
+    ab-loop-tip: string,
+    // The keys the badges of the tooltips of A, B and AB name ("" = no badge) and whether a right click on AB clears anything.
+    ab-a-key: string,
+    ab-b-key: string,
+    ab-loop-key: string,
+    ab-clearable: bool,
+    ab-save-enabled: bool,
+    ab-save-tip: string,
+    ab-load-count: int,
+    ab-load-tip: string,
+    ab-strip: [AbStripSegmentView],
+    ab-span-shown: bool,
+    ab-span-from: float,
+    ab-span-to: float,
+    ab-span-looping: bool,
+    ab-dim: bool,
+    ab-a-flag-shown: bool,
+    ab-a-flag-share: float,
+    ab-a-flag-text: string,
+    ab-a-flag-auto: bool,
+    ab-b-flag-shown: bool,
+    ab-b-flag-share: float,
+    ab-b-flag-text: string,
+    ab-b-flag-auto: bool,
+    ab-flags-draggable: bool,
+    ab-strip-clickable: bool,
+    ab-label-shown: bool,
+    ab-label-share: float,
+    ab-label-text: string,
+    // 0 = no popup, 1 = the save bubble, 2 = the load menu. The texts the user types are the start values of their fields (a
+    // field is made when its popup or rename opens; what is typed is reported and comes back here).
+    ab-popup: int,
+    ab-save-text: string,
+    ab-save-placeholder: string,
+    ab-save-hint: string,
+    ab-menu-rows: [AbMenuRowView],
+    ab-menu-query: string,
+    ab-menu-page: int,
+    ab-menu-pages: int,
+    ab-menu-scroll: bool,
+    ab-menu-visible-rows: int,
+    ab-menu-status: string,
+    ab-menu-renaming: int,
+    ab-menu-rename-text: string,
+    // How much of the bar fits its width (`video_bar::collapse`, decided in Rust from what `need` reports): 0 = everything,
+    // 1 = the speaker opens a volume popup instead of the slider, 2 = no remaining time, 3 = the A-B group as one button with
+    // a bubble, 4 = the sound and the A-B repeat in the "..." menu, 5 = no current time either.
+    fit: int,
+    // The volume in percent (the volume popup names it).
+    volume-text: string,
+    volume-open: bool,
+    // The A-B group shows in its bubble while the bar has the A-B button.
+    ab-bubble: bool,
+    more-open: bool,
+    more-items: [ContextMenuItemModel],
+    // The open submenu of the "..." menu (empty: none) and the entry it belongs to.
+    more-sub-items: [ContextMenuItemModel],
+    more-active-id: int,
+}

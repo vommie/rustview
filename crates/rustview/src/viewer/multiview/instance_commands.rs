@@ -146,9 +146,13 @@ impl MultiviewInstance {
         Ok(self.perform_action(key, action))
     }
 
-    /// Esc: cancels the crop tool of the selected tile, else the one opened last (newest first). Returns whether there was
-    /// one; otherwise Esc keeps its usual meaning (close the fullscreen, end a selection of tabs).
+    /// Esc: closes the open volume popup or "..." menu of a video's control bar, else cancels the crop tool of the selected
+    /// tile, else the one opened last (newest first). Returns whether there was one; otherwise Esc keeps its usual meaning
+    /// (close the fullscreen, end a selection of tabs).
     pub fn escape_crop(&mut self) -> bool {
+        if self.close_video_bar_popups() {
+            return true;
+        }
         if let Some(key) = self.focus_target()
             && self.cancel_crop(key)
         {

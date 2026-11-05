@@ -274,6 +274,20 @@ impl UiBridge {
         prefs::apply(&app_settings.fullscreen);
         zoom_prefs::apply(&app_settings.fullscreen);
         crate::viewer::multiview::video_bar::prefs::apply(&app_settings.fullscreen.player);
+        {
+            // The A-B bubble of a collapsed video bar: its last state, and its toggles stored quietly (UI state, no change hooks).
+            let store = settings.clone();
+            crate::viewer::multiview::video_bar::popups::install(
+                app_settings.view.video_bar_ab_bubble_open,
+                move |open| {
+                    let mut current = store.get();
+                    if current.view.video_bar_ab_bubble_open != open {
+                        current.view.video_bar_ab_bubble_open = open;
+                        store.save_quiet_async(&current);
+                    }
+                },
+            );
+        }
         crate::viewer::edit::prefs::apply(&app_settings.image_edit);
         window.set_show_hidden_folders(app_settings.folders.show_hidden_folders);
 

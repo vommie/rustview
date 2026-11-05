@@ -2,7 +2,10 @@
 
 use super::ab_state::AbPoint;
 use super::ab_view::AbBarView;
+use super::collapse::{BarFit, BarNeeds};
+use super::more_menu::{MoreAction, MoreMenu};
 use super::placement::VideoBarPlacement;
+use super::popups::BarPopup;
 use super::progress::SpanShare;
 use super::reveal::Phase;
 use super::time_text::TimeTexts;
@@ -22,8 +25,18 @@ pub struct VideoBarView {
     pub muted: bool,
     /// The pointer over the progress bar: where (share of the bar) and the time there.
     pub hover: Option<(f32, String)>,
+    /// The volume in percent, as the volume popup names it.
+    pub volume_text: String,
     /// The A-B repeat group (only while the mpv script `ab_repeat.lua` is active in the player).
     pub ab: Option<AbBarView>,
+    /// How much of the bar fits its width (`collapse`).
+    pub fit: BarFit,
+    /// The volume popup or the "..." menu is open.
+    pub popup: Option<BarPopup>,
+    /// The A-B group shows in its bubble (while the bar has the A-B button).
+    pub ab_bubble: bool,
+    /// The entries of the "..." menu (and of its open submenu).
+    pub more: MoreMenu,
 }
 
 /// A bar a host shows (or lets fade out).
@@ -94,6 +107,8 @@ pub enum AbInput {
     MenuPick(usize),
     MenuDelete(usize),
     MenuDeleteAll,
+    /// The saved repeats are read again (they may have changed outside, in mpv itself).
+    MenuRefresh,
     MenuRename(usize),
     MenuRenameText(String),
     MenuRenameCommit(String),
@@ -136,6 +151,18 @@ pub enum VideoBarInput {
         delta_y: f32,
     },
     Ab(AbInput),
+    /// The canvas measured what each step of the bar needs besides the progress bar.
+    Measured(BarNeeds),
+    /// A click on the speaker of a bar without slider: its volume popup opens or closes.
+    AudioButton,
+    /// A click on the A-B button: the bubble with the A-B group opens or closes.
+    AbBubble,
+    /// A click on "...": its menu opens or closes.
+    MoreButton,
+    /// An entry of the "..." menu.
+    More(MoreAction),
+    /// A press outside the open popup: every popup of the bar closes (the A-B bubble stays).
+    ClosePopups,
 }
 
 impl AbInput {
@@ -147,6 +174,7 @@ impl AbInput {
                 | Self::MenuPick(_)
                 | Self::MenuDelete(_)
                 | Self::MenuDeleteAll
+                | Self::MenuRefresh
                 | Self::MenuRename(_)
                 | Self::StripClick(_)
                 | Self::Flag {
@@ -169,6 +197,12 @@ impl VideoBarInput {
             Self::Volume { .. } => "volume",
             Self::Wheel { .. } => "wheel",
             Self::Ab(_) => "A-B repeat",
+            Self::Measured(_) => "measured",
+            Self::AudioButton => "audio button",
+            Self::AbBubble => "A-B bubble",
+            Self::MoreButton => "more",
+            Self::More(_) => "more entry",
+            Self::ClosePopups => "close popups",
         }
     }
 }
@@ -182,6 +216,7 @@ pub struct VideoBarEvent {
     pub index: i32,
     pub text: String,
     pub delta: f32,
+    pub widths: Vec<f32>,
 }
 
 impl VideoBarInput {
@@ -194,6 +229,7 @@ impl VideoBarInput {
             index,
             text,
             delta,
+            widths,
         } = event;
         let at = usize::try_from(index).ok();
         let ab = |input: AbInput| Some(Self::Ab(input));
@@ -226,6 +262,13 @@ impl VideoBarInput {
                 let point = if index == 0 { AbPoint::A } else { AbPoint::B };
                 DragPhase::from_code(phase).map(|phase| Self::Ab(AbInput::Flag { point, share, phase }))
             }
+            26 => BarNeeds::from_reported(&widths).map(Self::Measured),
+            27 => Some(Self::AudioButton),
+            28 => Some(Self::AbBubble),
+            29 => Some(Self::MoreButton),
+            30 => Some(Self::ClosePopups),
+            31 => MoreAction::from_code(index).map(Self::More),
+            32 => ab(AbInput::MenuRefresh),
             _ => None,
         }
     }
@@ -258,6 +301,41 @@ mod tests {
             kind,
             ..VideoBarEvent::default()
         }
+    }
+
+    #[test]
+    fn the_collapse_events_become_inputs() {
+        let measured = VideoBarEvent {
+            widths: vec![400.0, 330.0, 280.0, 200.0, 150.0, 100.0],
+            ..event(26)
+        };
+        assert_eq!(
+            VideoBarInput::from_event(measured),
+            Some(VideoBarInput::Measured(BarNeeds([
+                400.0, 330.0, 280.0, 200.0, 150.0, 100.0
+            ])))
+        );
+        let short = VideoBarEvent {
+            widths: vec![1.0; 3],
+            ..event(26)
+        };
+        assert_eq!(VideoBarInput::from_event(short), None);
+        assert_eq!(VideoBarInput::from_event(event(27)), Some(VideoBarInput::AudioButton));
+        assert_eq!(VideoBarInput::from_event(event(28)), Some(VideoBarInput::AbBubble));
+        assert_eq!(VideoBarInput::from_event(event(29)), Some(VideoBarInput::MoreButton));
+        assert_eq!(VideoBarInput::from_event(event(30)), Some(VideoBarInput::ClosePopups));
+        let mute = VideoBarEvent {
+            index: MoreAction::Mute.code(),
+            ..event(31)
+        };
+        assert_eq!(
+            VideoBarInput::from_event(mute),
+            Some(VideoBarInput::More(MoreAction::Mute))
+        );
+        assert_eq!(
+            VideoBarInput::from_event(event(32)),
+            Some(VideoBarInput::Ab(AbInput::MenuRefresh))
+        );
     }
 
     #[test]

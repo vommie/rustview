@@ -124,6 +124,7 @@ ab_loop = { custom = "ab_loop.svg", doc = "Video control bar: the A-B repeat pla
 ab_loop_off = { custom = "ab_loop_off.svg", doc = "Video control bar: no valid A-B to repeat (own SVG, crossed out)" }
 ab_save = { tabler = "playlist-add", doc = "Video control bar: save the A-B repeat under a name" }
 ab_load = { tabler = "list-details", doc = "Video control bar: the saved A-B repeats of the video (menu)" }
+video_bar_more = { tabler = "dots", doc = "Video control bar: the \"...\" menu with the controls a narrow bar has no room for" }
 lock = { tabler = "lock", doc = "Locked: the fullscreen cannot be closed" }
 lock_open = { tabler = "lock-open", doc = "Unlocked" }
 layout_reset = { tabler = "layout-grid-remove", doc = "Reset the arrangement of the Multiview to automatic" }

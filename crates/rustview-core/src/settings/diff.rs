@@ -505,6 +505,13 @@ impl SettingsDiff {
             ));
         }
 
+        if old.view.video_bar_ab_bubble_open != new.view.video_bar_ab_bubble_open {
+            changes.push(format!(
+                "View: video_bar_ab_bubble_open ({} -> {})",
+                old.view.video_bar_ab_bubble_open, new.view.video_bar_ab_bubble_open
+            ));
+        }
+
         if old.view.tab_grid_columns != new.view.tab_grid_columns {
             changes.push(format!(
                 "View: tab_grid_columns ({} -> {})",

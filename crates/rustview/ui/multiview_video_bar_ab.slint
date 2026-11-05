@@ -8,26 +8,9 @@ import { AppIcon, IconId } from "icons.slint";
 import { HoldConfirm, HoldLogic, HoldRing } from "hold.slint";
 import { TooltipHost } from "tooltips.slint";
 import { MiddleElideText } from "middle_elide_text.slint";
+import { AbMenuRowView, AbStripSegmentView } from "multiview_video_bar_view.slint";
 
-/// A saved repeat in the strip: shares of the progress bar and its palette color (-1: grey).
-export struct AbStripSegmentView {
-    from: float,
-    to: float,
-    color: int,
-}
-
-/// A row of the load menu (`ab_view::MenuRowView`); `index` is its place in the saved list.
-export struct AbMenuRowView {
-    index: int,
-    number: int,
-    name: string,
-    times: string,
-    length: string,
-    from: float,
-    to: float,
-    color: int,
-    current: bool,
-}
+export { AbMenuRowView, AbStripSegmentView }
 
 /// The colors of saved repeats (yellow, `Theme.accent`, is the active A-B and never one of them).
 export global AbColors {
@@ -727,6 +710,7 @@ export component AbLoadMenu inherits Rectangle {
     callback rename-cancel();
     callback delete(int);
     callback delete-all();
+    callback refresh();
     callback cancel();
 
     property <length> pad: Math.round(6 * root.pt / 1px) * 1px;
@@ -830,6 +814,16 @@ export component AbLoadMenu inherits Rectangle {
                     enabled: root.page + 1 < root.pages;
                     tip: "Next page";
                     clicked => { root.page-step(1); }
+                }
+
+                // The saved repeats are read again: they may have changed outside (in mpv itself), nothing watches the file.
+                AbButton {
+                    width: root.footer;
+                    pt: root.pt;
+                    icon: IconId.refresh;
+                    icon-size: root.icon-size;
+                    tip: "Read the saved repeats again (they may have changed in mpv)";
+                    clicked => { root.refresh(); }
                 }
 
                 AbHoldButton {

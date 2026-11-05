@@ -309,6 +309,11 @@ impl MpvPlayer {
         };
         tracing::debug!(?command, "[AbRepeat: Player] Command");
         if send(&self.mpv, &client, command) {
+            // A reload the user asked for (the file may have changed outside): every player of the file reads it again.
+            if *command == Command::Reload {
+                let path = self.ab.read().ranges.path.clone();
+                reload_others(&self.mpv, &path);
+            }
             Ok(())
         } else {
             Err(ViewerError::Mpv(format!("ab_repeat did not take {command:?}")))

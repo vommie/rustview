@@ -9,6 +9,16 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ## [Unreleased]
 
+### Added
+
+- The control bar of a video adapts to narrow tiles (several videos in the Multiview): step by step the volume slider becomes a
+  speaker with a vertical volume bar, the remaining time goes, the A-B repeat group becomes one button that shows the group in a
+  bubble, and the sound and the A-B repeat move into a new "..." menu (with an A-B submenu); the narrowest bar keeps only play,
+  the progress bar and "...". The progress bar always keeps a usable width, and a bar at a boundary does not switch back and forth.
+  Esc closes the volume bar and the menu. Whether the A-B bubble is open is remembered.
+- The load menu of the A-B repeats has a refresh button: it reads the saved repeats again, for example after they were changed in
+  mpv itself.
+
 ## [0.6.9] - 2026-11-02
 
 ### Added

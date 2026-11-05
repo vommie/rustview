@@ -1,0 +1,249 @@
+// The A-B repeat marks of a video's control bar (`multiview_video_bar.slint`, only while the mpv script ab_repeat.lua is active):
+// the strip of saved repeats that grows out of the bar over the progress bar, the flags of A and B with their stems, and the
+// label of the saved repeat under the pointer. Everything follows the progress bar (`track-x`, `track-w`); the element covers
+// the whole bar component, so its coordinates are the bar's.
+
+import { Theme } from "styles.slint";
+import { AbColors } from "multiview_video_bar_ab.slint";
+import { MultiviewVideoBarView } from "multiview_video_bar_view.slint";
+
+export component AbMarks inherits Rectangle {
+    in property <MultiviewVideoBarView> bar;
+    in property <length> pt;
+    in property <length> track-x;
+    in property <length> track-w;
+    in property <length> bar-top;
+    in property <length> ab-strip-top;
+    in property <bool> ab-strip-shown;
+    in property <length> ab-font;
+    in property <color> bar-fill;
+    callback ab-strip-hover(/* inside */ bool, /* share */ float);
+    callback ab-strip-click(/* share */ float);
+    callback ab-flag(/* point */ int, /* share */ float, /* phase */ int);
+
+    property <length> ab-flag-row-y: root.ab-strip-top - root.bar.ab-row-height;
+    property <length> ab-label-row-y: root.ab-flag-row-y - root.bar.ab-row-height;
+    // The progress block inside the bar (the flags' stems end at its bottom).
+    property <length> block-bottom: root.bar-top + (root.bar.bar-height + (root.bar.bar-height - 2 * Math.round(6 * root.pt / 1px) * 1px)) / 2;
+    property <length> block-top: root.block-bottom - (root.bar.bar-height - 2 * Math.round(6 * root.pt / 1px) * 1px);
+    // How far the video has played (the first span is always the played part, from the start), as a share of the progress bar.
+    property <float> played-share: root.bar.spans.length > 0 && root.bar.spans[0].kind == 0 ? root.bar.spans[0].to : 0;
+    // A blue stem would vanish over the blue played part: there, inside the progress block only, it is white.
+    property <bool> ab-a-foot-light: root.bar.ab-a-look != 1 && root.bar.ab-a-flag-share <= root.played-share;
+    property <bool> ab-b-foot-light: root.bar.ab-b-look != 1 && root.bar.ab-b-flag-share <= root.played-share;
+    property <length> ab-strip-margin: Math.round(7 * root.pt / 1px) * 1px;
+    property <length> ab-lane: Math.max(3px, Math.round(root.bar.ab-strip-height * 0.42 / 1px) * 1px);
+    property <length> ab-lane-y: root.ab-strip-top + Math.round((root.bar.ab-strip-height - root.ab-lane) / 2 / 1px) * 1px + 1px;
+    // The flag labels: centered over their stems, or pushed apart (the left one to the left, the right one to the right) when
+    // they would touch; never outside the window.
+    property <length> ab-label-pad: Math.round(4 * root.pt / 1px) * 1px;
+    property <length> ab-label-height: root.bar.ab-row-height - 2px;
+    property <length> ab-a-x: root.track-x + root.bar.ab-a-flag-share * root.track-w;
+    property <length> ab-b-x: root.track-x + root.bar.ab-b-flag-share * root.track-w;
+    property <length> ab-a-w: a-flag-text.preferred-width + 2 * root.ab-label-pad;
+    property <length> ab-b-w: b-flag-text.preferred-width + 2 * root.ab-label-pad;
+    property <bool> ab-a-first: root.ab-a-x <= root.ab-b-x;
+    property <length> ab-l-x: root.ab-a-first ? root.ab-a-x : root.ab-b-x;
+    property <length> ab-l-w: root.ab-a-first ? root.ab-a-w : root.ab-b-w;
+    property <length> ab-r-x: root.ab-a-first ? root.ab-b-x : root.ab-a-x;
+    property <length> ab-r-w: root.ab-a-first ? root.ab-b-w : root.ab-a-w;
+    property <length> ab-label-gap: Math.round(4 * root.pt / 1px) * 1px;
+    property <bool> ab-crowded: root.bar.ab-a-flag-shown && root.bar.ab-b-flag-shown
+        && root.ab-l-x + root.ab-l-w / 2 + root.ab-label-gap > root.ab-r-x - root.ab-r-w / 2;
+    property <length> ab-l-left: root.ab-crowded
+        ? Math.min(root.ab-l-x - root.ab-l-w + 3px, (root.ab-l-x + root.ab-r-x) / 2 - root.ab-label-gap / 2 - root.ab-l-w)
+        : root.ab-l-x - root.ab-l-w / 2;
+    property <length> ab-r-left: root.ab-crowded
+        ? Math.max(root.ab-r-x - 3px, (root.ab-l-x + root.ab-r-x) / 2 + root.ab-label-gap / 2)
+        : root.ab-r-x - root.ab-r-w / 2;
+    property <length> ab-a-left: Math.round(Math.clamp(root.ab-a-first ? root.ab-l-left : root.ab-r-left, 0px, Math.max(0px, root.width - root.ab-a-w)) / 1px) * 1px;
+    property <length> ab-b-left: Math.round(Math.clamp(root.ab-a-first ? root.ab-r-left : root.ab-l-left, 0px, Math.max(0px, root.width - root.ab-b-w)) / 1px) * 1px;
+    property <color> ab-a-color: root.bar.ab-a-look == 1 ? Theme.accent : Theme.primary;
+    property <color> ab-b-color: root.bar.ab-b-look == 1 ? Theme.accent : Theme.primary;
+
+
+    // The strip of saved repeats: a tab that grows out of the bar over the progress bar, its flanks curving into the bar. It
+    // ends exactly on the bar: an overlap would show as a darker seam where the two translucent fills lie on each other. Its
+    // sides stand `ab-strip-margin` outside the progress bar (the repeats in it line up with the progress bar exactly).
+    Path {
+        visible: root.ab-strip-shown;
+        property <length> outset: root.bar.ab-strip-flank + root.ab-strip-margin;
+        property <float> h: root.bar.ab-strip-height / 1px;
+        property <float> f: root.bar.ab-strip-flank / 1px;
+        property <float> c: root.bar.ab-strip-height / 2 / 1px;
+        property <float> w: (root.track-w + 2 * self.outset) / 1px;
+        x: root.track-x - self.outset;
+        y: root.ab-strip-top;
+        width: Math.max(1px, root.track-w + 2 * self.outset);
+        height: root.bar.ab-strip-height;
+        viewbox-width: Math.max(1, self.w);
+        viewbox-height: self.h;
+        // From the bottom left: the concave flank up to the top corner, the corner, the top, the other corner and flank.
+        commands: "M 0 " + self.h + " Q " + self.f + " " + self.h + " " + self.f + " " + self.c
+            + " Q " + self.f + " 0 " + (self.f + self.c) + " 0"
+            + " L " + (self.w - self.f - self.c) + " 0 Q " + (self.w - self.f) + " 0 " + (self.w - self.f) + " " + self.c
+            + " Q " + (self.w - self.f) + " " + self.h + " " + self.w + " " + self.h + " Z";
+        fill: root.bar-fill;
+    }
+
+    // Saved repeats: one thin row, every repeat slightly translucent, so overlapping ones show as stronger color.
+    for segment in root.bar.ab-strip : Rectangle {
+        visible: root.bar.ab-shown;
+        x: root.track-x + segment.from * root.track-w;
+        y: root.ab-lane-y;
+        width: Math.max(2px, (segment.to - segment.from) * root.track-w);
+        height: root.ab-lane;
+        border-radius: root.ab-lane / 2;
+        background: AbColors.of(segment.color).with-alpha(0.55);
+    }
+
+    strip-touch := TouchArea {
+        visible: root.ab-strip-shown;
+        x: root.track-x;
+        y: root.ab-strip-top;
+        width: root.track-w;
+        height: root.bar.ab-strip-height;
+        mouse-cursor: root.bar.ab-label-shown && root.bar.ab-strip-clickable ? pointer : default;
+        property <float> share: Math.clamp(self.mouse-x / Math.max(1px, self.width), 0, 1);
+        changed mouse-x => {
+            if self.has-hover {
+                root.ab-strip-hover(true, self.share);
+            }
+        }
+        changed has-hover => { root.ab-strip-hover(self.has-hover, self.share); }
+        clicked => { root.ab-strip-click(self.share); }
+    }
+
+    // The stems of the flags, from the label row down to the bottom of the progress block (dashed: set by the script).
+    for i in (root.bar.ab-shown && root.bar.ab-a-flag-shown ? Math.ceil((root.block-bottom - root.ab-flag-row-y - root.ab-label-height) / 4px) : 0) : Rectangle {
+        x: Math.round(root.ab-a-x / 1px) * 1px - 1px;
+        y: root.ab-flag-row-y + root.ab-label-height + i * 4px;
+        width: 2px;
+        height: root.bar.ab-a-flag-auto ? 2px : 4px;
+        clip: true;
+        background: root.ab-a-color;
+
+        if root.ab-a-foot-light : Rectangle {
+            y: root.block-top - parent.y;
+            height: root.block-bottom - root.block-top;
+            background: Colors.white;
+        }
+    }
+
+    for i in (root.bar.ab-shown && root.bar.ab-b-flag-shown ? Math.ceil((root.block-bottom - root.ab-flag-row-y - root.ab-label-height) / 4px) : 0) : Rectangle {
+        x: Math.round(root.ab-b-x / 1px) * 1px - 1px;
+        y: root.ab-flag-row-y + root.ab-label-height + i * 4px;
+        width: 2px;
+        height: root.bar.ab-b-flag-auto ? 2px : 4px;
+        clip: true;
+        background: root.ab-b-color;
+
+        if root.ab-b-foot-light : Rectangle {
+            y: root.block-top - parent.y;
+            height: root.block-bottom - root.block-top;
+            background: Colors.white;
+        }
+    }
+
+    a-flag := Rectangle {
+        visible: root.bar.ab-shown && root.bar.ab-a-flag-shown;
+        x: root.ab-a-left;
+        y: root.ab-flag-row-y;
+        width: root.ab-a-w;
+        height: root.ab-label-height;
+        border-radius: Math.round(3 * root.pt / 1px) * 1px;
+        background: root.bar.ab-a-flag-auto ? root.bar-fill : root.ab-a-color;
+        border-width: root.bar.ab-a-flag-auto ? 1px : 0px;
+        border-color: root.ab-a-color;
+
+        a-flag-text := Text {
+            text: root.bar.ab-a-flag-text;
+            font-size: root.ab-font;
+            font-weight: 700;
+            color: root.bar.ab-a-flag-auto ? root.ab-a-color : Theme.fullscreen-background;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        TouchArea {
+            enabled: root.bar.ab-flags-draggable;
+            mouse-cursor: root.bar.ab-flags-draggable ? ew-resize : default;
+            property <float> share: Math.clamp((self.absolute-position.x - root.absolute-position.x + self.mouse-x - root.track-x) / Math.max(1px, root.track-w), 0, 1);
+            pointer-event(event) => {
+                if event.button == PointerEventButton.left {
+                    if event.kind == PointerEventKind.down {
+                        root.ab-flag(0, self.share, 0);
+                    } else if event.kind == PointerEventKind.up {
+                        root.ab-flag(0, self.share, 2);
+                    }
+                }
+            }
+            changed mouse-x => {
+                if self.pressed {
+                    root.ab-flag(0, self.share, 1);
+                }
+            }
+        }
+    }
+
+    b-flag := Rectangle {
+        visible: root.bar.ab-shown && root.bar.ab-b-flag-shown;
+        x: root.ab-b-left;
+        y: root.ab-flag-row-y;
+        width: root.ab-b-w;
+        height: root.ab-label-height;
+        border-radius: Math.round(3 * root.pt / 1px) * 1px;
+        background: root.bar.ab-b-flag-auto ? root.bar-fill : root.ab-b-color;
+        border-width: root.bar.ab-b-flag-auto ? 1px : 0px;
+        border-color: root.ab-b-color;
+
+        b-flag-text := Text {
+            text: root.bar.ab-b-flag-text;
+            font-size: root.ab-font;
+            font-weight: 700;
+            color: root.bar.ab-b-flag-auto ? root.ab-b-color : Theme.fullscreen-background;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        TouchArea {
+            enabled: root.bar.ab-flags-draggable;
+            mouse-cursor: root.bar.ab-flags-draggable ? ew-resize : default;
+            property <float> share: Math.clamp((self.absolute-position.x - root.absolute-position.x + self.mouse-x - root.track-x) / Math.max(1px, root.track-w), 0, 1);
+            pointer-event(event) => {
+                if event.button == PointerEventButton.left {
+                    if event.kind == PointerEventKind.down {
+                        root.ab-flag(1, self.share, 0);
+                    } else if event.kind == PointerEventKind.up {
+                        root.ab-flag(1, self.share, 2);
+                    }
+                }
+            }
+            changed mouse-x => {
+                if self.pressed {
+                    root.ab-flag(1, self.share, 1);
+                }
+            }
+        }
+    }
+
+    // The saved repeat under the pointer: its name (and times), small, following the pointer.
+    hover-label := Rectangle {
+        visible: root.bar.ab-shown && root.bar.ab-label-shown;
+        property <length> pointer-x: root.track-x + root.bar.ab-label-share * root.track-w;
+        width: label-text.preferred-width + 2 * root.ab-label-pad;
+        height: root.ab-label-height;
+        x: Math.round(Math.clamp(self.pointer-x - self.width / 2, 0px, Math.max(0px, root.width - self.width)) / 1px) * 1px;
+        y: root.ab-label-row-y;
+        border-radius: self.height / 2;
+        background: #11111b.with-alpha(0.88);
+
+        label-text := Text {
+            text: root.bar.ab-label-text;
+            font-size: root.ab-font;
+            color: Theme.text;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+}

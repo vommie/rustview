@@ -610,6 +610,18 @@ pub const MULTIVIEW_VIDEO_BAR_PILL_INSET_LOGICAL_PX: f32 = 10.0;
 /// A video narrower or lower than this (logical pixels) gets no control bar.
 pub const MULTIVIEW_VIDEO_BAR_MIN_VIDEO_WIDTH_LOGICAL_PX: f32 = 200.0;
 
+/// The progress bar of a control bar keeps at least this many bar heights of width: the other parts of the bar collapse
+/// step by step (`video_bar::collapse`) before it gets narrower.
+pub const MULTIVIEW_VIDEO_BAR_SEEK_MIN_BAR_HEIGHTS: f32 = 3.0;
+
+/// A collapsed control bar grows back to a fuller step only when this much more width (logical pixels) than that step needs
+/// is free, so a width right at a boundary does not switch back and forth.
+pub const MULTIVIEW_VIDEO_BAR_COLLAPSE_HYSTERESIS_LOGICAL_PX: f32 = 16.0;
+
+/// A collapsed control bar shows the A-B buttons in their bubble only after a click on its A-B button (the toggle is
+/// remembered in `view.*`).
+pub const DEFAULT_VIDEO_BAR_AB_BUBBLE_OPEN: bool = false;
+
 /// The small control bar of a video in a tab grid item: its height in logical pixels (it does not follow the setting).
 pub const MULTIVIEW_VIDEO_BAR_MINI_HEIGHT_LOGICAL_PX: f32 = 22.0;
 

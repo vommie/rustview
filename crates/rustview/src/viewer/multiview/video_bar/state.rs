@@ -2,6 +2,8 @@
 //! bar, the seek that is on its way, the last audible level and when it shows.
 
 use super::ab_state::AbBarState;
+use super::collapse::{BarFit, BarFitState};
+use super::popups::BarPopup;
 use super::reveal::BarReveal;
 use super::volume;
 use rustview_core::library::models::MediaId;
@@ -41,6 +43,10 @@ pub struct VideoBarState {
     last_audible: Option<f64>,
     /// The A-B repeat group (popups, the strip under the pointer, a dragged flag).
     pub ab: AbBarState,
+    /// How much of the bar fits (what the canvas measured, the step shown last).
+    pub fit: BarFitState,
+    /// The volume popup or the "..." menu (at most one popup of the bar is open, this or one of the A-B group).
+    pub popup: Option<BarPopup>,
 }
 
 impl VideoBarState {
@@ -58,10 +64,38 @@ impl VideoBarState {
         self.ms_switched = Some((media, shown));
     }
 
-    /// A drag on the progress bar runs, the volume slider or an A-B flag is dragged, or an A-B popup is open: the bar stays
+    /// A drag on the progress bar runs, the volume slider or an A-B flag is dragged, or a popup is open: the bar stays
     /// whatever the pointer does.
     pub fn dragging(&self) -> bool {
-        self.drag.is_some() || self.volume_drag || self.ab.holds_bar()
+        self.drag.is_some() || self.volume_drag || self.ab.holds_bar() || self.popup.is_some()
+    }
+
+    /// Opens `popup` (closing the A-B popups), or closes it when it is open already.
+    pub fn toggle_popup(&mut self, popup: BarPopup) {
+        if self.popup == Some(popup) {
+            self.popup = None;
+        } else {
+            self.popup = Some(popup);
+            self.ab.popup = None;
+        }
+    }
+
+    /// Every popup of the bar closes (the A-B bubble is no popup: it stays).
+    pub fn close_popups(&mut self) {
+        self.popup = None;
+        self.ab.popup = None;
+    }
+
+    /// The bar shows step `fit` now: a popup whose opener left the bar closes.
+    pub fn settle_popups(&mut self, fit: BarFit) {
+        if let Some(popup) = self.popup.filter(|popup| !popup.fits(fit)) {
+            tracing::debug!(
+                ?popup,
+                ?fit,
+                "[Multiview: VideoBar] Popup closed: its opener left the bar"
+            );
+            self.popup = None;
+        }
     }
 
     /// The progress bar is pressed or dragged to `share` (`released`: let go there). `seek` is how the video goes to `secs`
@@ -142,6 +176,8 @@ impl VideoBarState {
         self.volume_drag = false;
         self.hover = None;
         self.ab.release();
+        self.popup = None;
+        self.fit.reset();
         self.reveal.reset();
     }
 }

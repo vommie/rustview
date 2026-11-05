@@ -135,6 +135,7 @@ impl MultiviewInstance {
                     return Err(HintKind::AbNoRange);
                 }
                 video.bar.ab.popup = Some(AbPopup::Save { text: String::new() });
+                video.bar.popup = None;
                 return Ok(UiAction::None);
             }
             AbKey::LoadMenu => {
@@ -142,6 +143,7 @@ impl MultiviewInstance {
                     return Err(HintKind::AbNoSavedRepeats);
                 }
                 video.bar.ab.popup = Some(load_popup(&snapshot));
+                video.bar.popup = None;
                 return Ok(UiAction::None);
             }
         };
@@ -249,6 +251,8 @@ fn menu_input(input: AbInput, snapshot: &AbSnapshot, state: &mut super::video_ba
         }
         AbInput::MenuDelete(index) => outcome.commands.extend(RangeRef::of(list, index).map(Command::Delete)),
         AbInput::MenuDeleteAll => outcome.commands.push(Command::DeleteAll),
+        // The script reads its file again and publishes the list (nothing is read before this click).
+        AbInput::MenuRefresh => outcome.commands.push(Command::Reload),
         AbInput::MenuRename(index) => {
             *renaming = list.get(index).map(|range| Renaming {
                 index,
