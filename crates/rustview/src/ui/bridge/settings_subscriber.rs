@@ -6,7 +6,6 @@ use crate::ui::folder_tree::BridgeFolders;
 use crate::ui::formats_policy::{FormatPolicyApplier, FormatPolicyContext};
 use crate::ui::media::BridgeMedia;
 use crate::ui::multiview;
-use crate::ui::sidebar::BridgeSidebarPanelTabs;
 use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::tabs::BridgeViewerTabs;
@@ -120,10 +119,6 @@ impl UiBridge {
                     );
                 }
 
-                if diff_clone.view_settings_changed {
-                    window.set_info_is_collapsed(new_clone.view.is_inspector_collapsed);
-                }
-
                 if diff_clone.appearance_grid_changed {
                     window.set_thumb_size(new_clone.appearance.default_thumbnail_size.saturating_as::<i32>());
                     let ratio = GridAspectRatio::from_str_name(&new_clone.appearance.thumbnail_aspect_ratio);
@@ -176,8 +171,6 @@ impl UiBridge {
                         st.tag_history_ids.clone_from(&new_clone.tags.history_tag_ids);
                         st.tag_history_height = new_clone.tags.history_height;
                     }
-                    window.set_tag_history_height(new_clone.tags.history_height);
-                    window.set_tag_history_is_collapsed(new_clone.tags.is_history_collapsed);
                     BridgeTagHistory::sync_ui(&window, &library, &state);
                 }
 
@@ -186,8 +179,6 @@ impl UiBridge {
                     window.set_tag_tree_compact(new_clone.tags.compact_tree);
                     BridgeTags::reload_tags(&window, &library, &state);
                 }
-
-                BridgeSidebarPanelTabs::sync_ui(&window, &settings, &state);
 
                 StatusBarBridge::update_metrics(&window, &state);
             });

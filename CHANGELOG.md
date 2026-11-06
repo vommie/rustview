@@ -9,6 +9,21 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ## [Unreleased]
 
+### Added
+
+- The sidebars are a dock like RustCut's: every panel (Folders, Favorites, Info, Tag & Rate, Tag History) is a tab in a group,
+  and a tab can be dragged into another group, into a new group above or below one, or to the other sidebar. A click on the
+  active tab or the chevron folds a group to its tab bar, the maximize button (or a double click on the bar) lets a group fill
+  its sidebar, the bar between two groups changes their heights. The button at the end of the top group collapses a sidebar
+  to a rail of panel icons: resting on an icon or clicking it shows its group over the view, holding it keeps it there. The
+  layout is remembered (`view.dock` in `settings.json`); Settings > Debug > Reset Layout restores the default. No migration:
+  the first start takes the sidebars of the older settings (widths, tab order, folded Info and Tag History) as they were.
+
+### Changed
+
+- Sidebar tabs and group bars look like RustCut's: the active tab merges into its panel, the groups are rounded cards on the
+  darker sidebar background, and "Info / Metadata" is called "Info".
+
 ## [0.6.13] - 2026-11-06
 
 ### Added

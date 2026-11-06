@@ -21,7 +21,6 @@ use crate::ui::selection::rubberband::RubberbandAutoScroller;
 use crate::ui::selection::{BridgeFileSelection, FileClickContext, LastClickRecord};
 use crate::ui::settings_dialog::SettingsDialogController;
 use crate::ui::shutdown::ShutdownTargets;
-use crate::ui::sidebar::BridgeSidebarPanelTabs;
 use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::tabs::BridgeViewerTabs;
@@ -222,7 +221,6 @@ impl UiBridge {
         window.set_tab_grid_auto_columns(v_settings.tab_grid_auto_columns);
 
         initial_state.is_inspector_collapsed = v_settings.is_inspector_collapsed;
-        window.set_info_is_collapsed(v_settings.is_inspector_collapsed);
 
         window.set_col_filename_width(v_settings.col_filename_width);
         window.set_col_path_width(v_settings.col_path_width);
@@ -293,8 +291,6 @@ impl UiBridge {
         window.set_show_hidden_folders(app_settings.folders.show_hidden_folders);
 
         window.set_tag_tree_compact(app_settings.tags.compact_tree);
-        window.set_tag_history_height(initial_state.tag_history_height);
-        window.set_tag_history_is_collapsed(initial_state.is_tag_history_collapsed);
 
         StatusBarBridge::info(&window, "Initializing RustView...");
 
@@ -321,7 +317,6 @@ impl UiBridge {
         let ctx_menu_dispatcher = Arc::new(CtxMenuDispatcher::new());
         let last_click = Arc::new(Mutex::new(None));
 
-        BridgeSidebarPanelTabs::init(&window, &settings, &state);
         Self::set_debug_context(&settings_dialog, &window, &library, &thumbnails, &settings, &state);
 
         fullscreen.bind(

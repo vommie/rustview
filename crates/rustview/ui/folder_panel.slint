@@ -161,6 +161,11 @@ export component FolderPanel inherits VerticalLayout {
     in-out property <bool> show-hidden-folders: false;
     in property <int> drop-target-folder-id: -1;
     out property <length> scroll-offset-y: tree-list.scroll-offset-y;
+    // The tree list in window coordinates (the drop target and auto-scroll of a media drag hit-test it in Rust).
+    out property <length> tree-x: tree-list.absolute-position.x;
+    out property <length> tree-y: tree-list.absolute-position.y;
+    out property <length> tree-width: tree-list.width;
+    out property <length> tree-height: tree-list.height;
 
     callback folder-clicked(int, string);
     callback folder-toggle-expand(int);

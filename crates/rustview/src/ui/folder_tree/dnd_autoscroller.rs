@@ -15,9 +15,6 @@ pub const FOLDER_TREE_AUTOSCROLL_MAX_SPEED_PX: f32 = 18.0;
 pub const FOLDER_TREE_AUTOSCROLL_ACCEL_DURATION_SECS: f32 = 1.5;
 pub const FOLDER_TREE_AUTOSCROLL_TICK_INTERVAL_MS: u64 = 16; // ~60 FPS
 
-/// Fixed Y offset from window top to the first folder row:
-/// `TopToolbar` (38px) + Sidebar padding (8px) + `SidebarPanelTabBar` (28px) + spacing (6px) + `FolderPanelToolbar` (26px) + spacing (6px) = 112px.
-pub const FOLDER_TREE_TOP_OFFSET_PX: f32 = 112.0;
 pub const FOLDER_TREE_ROW_HEIGHT_PX: f32 = 24.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -63,18 +60,18 @@ impl DndFolderTreeAutoScroller {
 
     /// Evaluates cursor position relative to the `FolderTree` boundaries and starts/adjusts or stops auto-scrolling.
     pub fn update_cursor(&self, window: &MainWindow, cursor_x: f32, cursor_y: f32) {
-        let active_tab = window.get_active_sidebar_panel_tab();
-        if active_tab.as_str() != "folders" {
+        if !window.get_folders_panel_shown() {
             self.stop();
             return;
         }
 
-        let sidebar_w = window.get_sidebar_left_width();
+        let tree_x = window.get_folder_tree_x();
+        let tree_top = window.get_folder_tree_y();
         let tree_container_h = window.get_folder_tree_container_height();
-        let tree_bottom_y = FOLDER_TREE_TOP_OFFSET_PX + tree_container_h;
+        let tree_bottom_y = tree_top + tree_container_h;
 
-        let in_sidebar_x = cursor_x >= 0.0 && cursor_x <= sidebar_w;
-        let in_tree_y = cursor_y >= FOLDER_TREE_TOP_OFFSET_PX && cursor_y <= tree_bottom_y;
+        let in_sidebar_x = cursor_x >= tree_x && cursor_x <= tree_x + window.get_folder_tree_width();
+        let in_tree_y = cursor_y >= tree_top && cursor_y <= tree_bottom_y;
 
         if !in_sidebar_x || !in_tree_y {
             self.stop();
@@ -82,8 +79,8 @@ impl DndFolderTreeAutoScroller {
         }
 
         // 1. Top Hot Zone (Scroll UP)
-        if cursor_y <= FOLDER_TREE_TOP_OFFSET_PX + FOLDER_TREE_AUTOSCROLL_EDGE_ZONE_PX {
-            let dist_from_top = (cursor_y - FOLDER_TREE_TOP_OFFSET_PX).max(0.0);
+        if cursor_y <= tree_top + FOLDER_TREE_AUTOSCROLL_EDGE_ZONE_PX {
+            let dist_from_top = (cursor_y - tree_top).max(0.0);
             let proximity = 1.0 - (dist_from_top / FOLDER_TREE_AUTOSCROLL_EDGE_ZONE_PX).clamp(0.0, 1.0);
             self.set_active_zone(window, FolderTreeAutoScrollDirection::Up, cursor_x, cursor_y, proximity);
             return;
@@ -183,7 +180,7 @@ impl DndFolderTreeAutoScroller {
         let new_scroll_y = window.get_folder_tree_scroll_y();
 
         // Hit-test update while content scrolls underneath cursor
-        let local_y = cursor_y - FOLDER_TREE_TOP_OFFSET_PX - new_scroll_y;
+        let local_y = cursor_y - window.get_folder_tree_y() - new_scroll_y;
         let row_idx = (local_y / FOLDER_TREE_ROW_HEIGHT_PX).floor().to_int::<i32>();
         let folders = window.get_folders();
 

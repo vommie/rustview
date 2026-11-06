@@ -8,8 +8,6 @@ import { NodeButton } from "node_button.slint";
 import { CompactTagTreeList } from "tag_tree_compact.slint";
 import { TagPanelToolbar } from "tag_panel_toolbar.slint";
 import { TagSearchFilter } from "tag_search_filter.slint";
-import { TagHistoryPanel } from "tag_history_panel.slint";
-import { ResizerBar } from "resizer_bar.slint";
 
 export component TagTreeItem inherits Rectangle {
     in property <TagNodeView> tag;
@@ -217,12 +215,6 @@ export component TagPanel inherits VerticalLayout {
     // Compact Mode of the tree (`tags.compact_tree`): dense rows sharing one line (tag_tree_compact.slint).
     in property <bool> compact-tree: false;
 
-    // Tag History properties
-    in property <[TagHistoryRowModel]> tag-history-rows: [];
-    in property <int> tag-history-count: 0;
-    in-out property <bool> tag-history-is-collapsed: false;
-    in-out property <length> tag-history-height: 96px;
-
     out property <bool> filter-has-focus: filter-input.has-focus;
 
     callback mode-toggled(bool);
@@ -238,13 +230,6 @@ export component TagPanel inherits VerticalLayout {
     callback tag-context-menu(int, length, length);
     callback root-context-menu(length, length);
     callback tree-geometry-changed(length /* available_height */);
-
-    // Tag History callbacks
-    callback tag-history-collapsed-toggled(bool);
-    callback tag-history-tag-clicked(int /* tag_id */);
-    callback tag-history-geometry-changed(length /* available_width */);
-    callback tag-history-resized(length /* new_height */);
-    callback tag-history-resize-finished(length /* final_height */);
 
     // a. Controls: Modular Tag Panel Toolbar (Mode, Match, Scope Dropdown, Sensitive Reset)
     TagPanelToolbar {
@@ -315,39 +300,5 @@ export component TagPanel inherits VerticalLayout {
             tag-context-menu(id, x, y) => { root.tag-context-menu(id, tree-area.x + x, tree-area.y + y); }
             root-context-menu(x, y) => { root.root-context-menu(tree-area.x + x, tree-area.y + y); }
         }
-    }
-
-    // Horizontal Resizer Bar positioned between Tag Tree and Tag History
-    history-resizer := ResizerBar {
-        is-horizontal: false;
-        height: (!root.tag-history-is-collapsed) ? self.thickness : 0px;
-        visible: !root.tag-history-is-collapsed;
-
-        property <length> start-h: 96px;
-        drag-started => {
-            self.start-h = root.tag-history-height;
-        }
-        dragged(delta) => {
-            // Tag History is bottom-anchored: dragging UP (negative delta) expands, dragging DOWN (positive delta) shrinks
-            root.tag-history-height = Math.max(40px, Math.min(500px, self.start-h - delta));
-            root.tag-history-resized(root.tag-history-height);
-        }
-        drag-finished => {
-            root.tag-history-resize-finished(root.tag-history-height);
-        }
-    }
-
-    // e. Tags History: Collapsible panel at the bottom with resizable body height
-    history-panel := TagHistoryPanel {
-        vertical-stretch: 0;
-        body-height: root.tag-history-height;
-        is-dragging: history-resizer.is-dragging;
-        rows: root.tag-history-rows;
-        tag-count: root.tag-history-count;
-        is-collapsed <=> root.tag-history-is-collapsed;
-        has-selection: root.has-selection;
-        collapsed-toggled(c) => { root.tag-history-collapsed-toggled(c); }
-        tag-clicked(id) => { root.tag-history-tag-clicked(id); }
-        geometry-changed(w) => { root.tag-history-geometry-changed(w); }
     }
 }

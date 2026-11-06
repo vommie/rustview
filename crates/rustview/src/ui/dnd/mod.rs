@@ -4,9 +4,7 @@ use crate::ui::MainWindow;
 use crate::ui::browse_folders::{BrowseDragScroller, BrowseFolders};
 use crate::ui::file_dialogs::conflict::FileOpsConflictDialogController;
 use crate::ui::file_dialogs::missing::MissingFileDialogController;
-use crate::ui::folder_tree::dnd_autoscroller::{
-    DndFolderTreeAutoScroller, FOLDER_TREE_ROW_HEIGHT_PX, FOLDER_TREE_TOP_OFFSET_PX,
-};
+use crate::ui::folder_tree::dnd_autoscroller::{DndFolderTreeAutoScroller, FOLDER_TREE_ROW_HEIGHT_PX};
 use crate::ui::media::BridgeMedia;
 use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::multiview::MultiviewHandle;
@@ -205,25 +203,25 @@ impl BridgeDnd {
                 }
                 return;
             }
-            let active_panel_tab = window.get_active_sidebar_panel_tab();
-            if active_panel_tab.as_str() != "folders" {
+            if !window.get_folders_panel_shown() {
                 if window.get_drop_target_folder_id() != -1 {
                     window.set_drop_target_folder_id(-1);
                 }
                 return;
             }
 
-            let sidebar_w = window.get_sidebar_left_width();
+            let tree_x = window.get_folder_tree_x();
+            let tree_y = window.get_folder_tree_y();
             let scroll_y = window.get_folder_tree_scroll_y();
             let tree_container_h = window.get_folder_tree_container_height();
-            let tree_bottom_y = FOLDER_TREE_TOP_OFFSET_PX + tree_container_h;
+            let tree_bottom_y = tree_y + tree_container_h;
 
-            if current_x >= 0.0
-                && current_x <= sidebar_w
-                && current_y >= FOLDER_TREE_TOP_OFFSET_PX
+            if current_x >= tree_x
+                && current_x <= tree_x + window.get_folder_tree_width()
+                && current_y >= tree_y
                 && current_y <= tree_bottom_y
             {
-                let local_y = current_y - FOLDER_TREE_TOP_OFFSET_PX - scroll_y;
+                let local_y = current_y - tree_y - scroll_y;
                 let row_idx = (local_y / FOLDER_TREE_ROW_HEIGHT_PX).floor().to_int::<i32>();
                 let folders = window.get_folders();
 
@@ -252,8 +250,7 @@ impl BridgeDnd {
             return;
         }
 
-        let active_panel_tab = window.get_active_sidebar_panel_tab();
-        if active_panel_tab.as_str() != "folders" || BridgeMedia::is_scan_running(window, state) {
+        if !window.get_folders_panel_shown() || BridgeMedia::is_scan_running(window, state) {
             return;
         }
 
@@ -323,12 +320,12 @@ impl BridgeDnd {
                 return;
             }
             let selected_count = state.read().file_selection.count();
-            let sidebar_w = window.get_sidebar_left_width();
+            let tree_right = window.get_folder_tree_x() + window.get_folder_tree_width();
 
             let (popup_x, popup_y) = if browse_target.is_some() {
                 (release_x, release_y)
             } else {
-                ((sidebar_w + 4.0).min(release_x.max(8.0)), release_y.max(48.0))
+                ((tree_right + 4.0).min(release_x.max(8.0)), release_y.max(48.0))
             };
 
             window.set_choice_target_folder_id(target_folder_id);
@@ -341,8 +338,10 @@ impl BridgeDnd {
             // While a scan runs no folder is a drop target (nothing lights up); a release over the folder tree or a folder row of the
             // Browse view still gets an answer instead of being taken for a drop onto another application.
             if BridgeMedia::is_scan_running(window, state) {
-                let over_tree = window.get_active_sidebar_panel_tab().as_str() == "folders"
-                    && release_x <= window.get_sidebar_left_width();
+                let tree_x = window.get_folder_tree_x();
+                let over_tree = window.get_folders_panel_shown()
+                    && release_x >= tree_x
+                    && release_x <= tree_x + window.get_folder_tree_width();
                 let over_folder_row = window.invoke_drag_row_id_at(release_x, release_y) != 0;
                 if over_tree || over_folder_row {
                     StatusBarBridge::warn(window, "Cannot move or copy files while a scan or refresh is running.");

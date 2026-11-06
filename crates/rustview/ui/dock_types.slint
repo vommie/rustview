@@ -1,0 +1,160 @@
+// The sidebars as a dock like RustCut's (ported from RustCut's `ui/dock_types.slint`): the data Rust publishes and the callbacks it handles. The model and its geometry live in Rust
+// (src/ui/dock/); Slint only places what the plan says: a group's y = fixed_before + frac_before * extra and its height =
+// fixed + frac * extra, where extra is the sidebar height minus `total_fixed`.
+
+import { IconId } from "icons.slint";
+
+/// One tab of a group's tab bar, at the position Rust computed.
+export struct DockTabView {
+    key: string,
+    title: string,
+    icon: IconId,
+    active: bool,
+    x: length,
+    width: length,
+    /// Displacement while another tab is dragged over this bar (animated).
+    shift: length,
+    /// The tab being dragged (shown faded at its place).
+    placeholder: bool,
+    /// The title shows (a narrow bar shows only the selected tab's title), the tab is in the bar (else behind "+n"),
+    /// and a thin line follows it (P9.15).
+    titled: bool,
+    shown: bool,
+    separator: bool,
+}
+
+/// One panel group of a sidebar.
+export struct DockGroupView {
+    tabs: [DockTabView],
+    active_key: string,
+    /// The body is shown (expanded and not hidden by a maximized neighbor).
+    shows_body: bool,
+    collapsed: bool,
+    maximized: bool,
+    can_maximize: bool,
+    /// The first group carries the button that collapses the whole sidebar.
+    first: bool,
+    fixed_before: length,
+    frac_before: float,
+    fixed: length,
+    frac: float,
+    /// The bar below this group can be dragged (both neighbors show their bodies).
+    resizable_below: bool,
+    /// Tabs behind the "+n" button and where it starts in the bar (P9.15).
+    overflow: int,
+    overflow_x: length,
+}
+
+/// One icon of a collapsed sidebar's rail.
+export struct DockRailItem {
+    key: string,
+    title: string,
+    icon: IconId,
+    active: bool,
+    /// First panel of a group after the first one: a separator goes above it.
+    group_start: bool,
+    /// The index of its group in the sidebar (the overlay shows that group, P9.9).
+    group: int,
+}
+
+/// A collapsed sidebar's group over the center (P9.9, D-P9d as decided in Q-P9.9): a rail icon shows its panel's group
+/// at the sidebar's width over the full height, after 0.3 s of hovering or at once on a click; it goes away 0.4 s after
+/// the pointer left the rail and the group, unless it was held to stay: then a click on its icon or holding it again
+/// ends that. Each side holds its own group (`pin-left`, `pin-right`; Rust keeps them in the dock layout, so they
+/// survive expanding the sidebar and a restart; user review 2026-10-27), the rail's expand button wears a pin then.
+export global RailPeek {
+    // The side shown by hovering or a click (-1 = none) and the index of its group.
+    in-out property <int> side: -1;
+    in-out property <int> group;
+    // The held group of each side (-1 = none).
+    in-out property <int> pin-left: -1;
+    in-out property <int> pin-right: -1;
+    // The side whose rail the pointer is over (-1 = none), and whether it is over the shown group.
+    in-out property <int> hover-rail: -1;
+    in-out property <bool> over-group;
+    // The pointer is over the body of the shown group (the panel lies over the group, not inside it).
+    in-out property <bool> over-body;
+
+    pure public function pin(side: int) -> int {
+        return side == 0 ? root.pin-left : root.pin-right;
+    }
+
+    /// Holds `group` of `side` (-1 = lets go) and tells Rust, which stores it.
+    public function set-pin(side: int, group: int) {
+        if side == 0 {
+            root.pin-left = group;
+        } else {
+            root.pin-right = group;
+        }
+        Dock.pin-changed(side, group);
+    }
+}
+
+/// Where a panel is (one row per panel, in the order of `PanelId::ALL`: Folders, Favorites, Info, Tag & Rate, Tag
+/// History): its side, its group (-1 = nowhere) and whether it is the group's active tab. The main window places the
+/// panel's body over that group (`DockPanelSlot`).
+export struct DockPanelPlace {
+    side: int,
+    group: int,
+    active: bool,
+}
+
+/// Sizes shared with Rust (`src/ui/dock/plan.rs`, `metrics`), set by Rust at startup.
+export global DockMetrics {
+    in property <length> sidebar-padding: 6px;
+    in property <length> tab-bar-height: 30px;
+    in property <length> tab-height: 26px;
+    in property <length> overflow-width: 34px;
+    in property <length> bar-button: 22px;
+    in property <length> resizer: 6px;
+    in property <length> rail-width: 36px;
+}
+
+/// State and actions of the dock. Sides are 0 = left, 1 = right.
+export global Dock {
+    in property <[DockGroupView]> left-groups;
+    in property <[DockGroupView]> right-groups;
+    in property <[DockRailItem]> left-rail;
+    in property <[DockRailItem]> right-rail;
+    in property <length> left-width: 330px;
+    in property <length> right-width: 330px;
+    in property <length> left-total-fixed;
+    in property <length> right-total-fixed;
+    in property <bool> left-shown: true;
+    in property <bool> right-shown: true;
+    in property <bool> left-collapsed;
+    in property <bool> right-collapsed;
+    in property <[DockPanelPlace]> panel-places;
+
+    // Dragging a tab: the ghost follows the cursor and the drop area lights up (window coordinates).
+    in property <bool> dragging;
+    in property <length> ghost-x;
+    in property <length> ghost-y;
+    in property <length> ghost-width: 100px;
+    in property <string> ghost-title;
+    in property <IconId> ghost-icon;
+    in property <bool> drop-visible;
+    in property <length> drop-x;
+    in property <length> drop-y;
+    in property <length> drop-width;
+    in property <length> drop-height;
+
+    callback tab-clicked(string /* key */);
+    callback tab-double-clicked(string /* key */);
+    callback bar-double-clicked(int /* side */, int /* group */);
+    callback group-collapse-clicked(int /* side */, int /* group */);
+    callback group-maximize-clicked(int /* side */, int /* group */);
+    callback sidebar-collapse-clicked(int /* side */);
+    callback rail-clicked(int /* side */, string /* key; empty = expand only */);
+    // A rail group was held over the center, or let go (-1).
+    callback pin-changed(int /* side */, int /* group */);
+    callback tab-drag-started(string /* key */, length /* x */, length /* y */, length /* grab offset */, length /* width */);
+    callback tab-drag-moved(length /* x */, length /* y */);
+    callback tab-drag-ended();
+    callback sidebar-resize-started(int /* side */);
+    callback sidebar-resized(int /* side */, length /* delta */);
+    callback group-resize-started(int /* side */, int /* upper group */, length /* sidebar height */);
+    callback group-resized(int /* side */, int /* upper group */, length /* delta */);
+    callback reset-layout();
+    callback toggle-sidebar(int /* side */);
+}

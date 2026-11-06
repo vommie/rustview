@@ -5,7 +5,6 @@
 use crate::system::SystemDisplayService;
 use crate::ui::MainWindow;
 use crate::ui::media::BridgeMedia;
-use crate::ui::sidebar::BridgeSidebarPanelTabs;
 use crate::ui::state::UiState;
 use parking_lot::RwLock;
 use rustview_core::settings::SettingsManager;
@@ -78,6 +77,7 @@ pub fn reset_layout(
     view.col_duration_width = defaults.col_duration_width;
     view.col_format_width = defaults.col_format_width;
     view.col_flags_width = defaults.col_flags_width;
+    view.dock = None;
     settings.save_quiet(&app_settings);
 
     {
@@ -85,13 +85,9 @@ pub fn reset_layout(
         st.is_inspector_collapsed = defaults.is_inspector_collapsed;
         st.tab_grid_columns = defaults.tab_grid_columns;
         st.tab_grid_auto_columns = defaults.tab_grid_auto_columns;
-        defaults
-            .left_sidebar_active_panel_tab
-            .clone_into(&mut st.active_sidebar_panel_tab);
     }
     window.set_sidebar_left_width(defaults.sidebar_left_width);
     window.set_sidebar_right_width(defaults.sidebar_right_width);
-    window.set_info_is_collapsed(defaults.is_inspector_collapsed);
     window.set_tab_grid_columns(defaults.tab_grid_columns.saturating_as::<i32>());
     window.set_tab_grid_auto_columns(defaults.tab_grid_auto_columns);
     window.set_col_filename_width(defaults.col_filename_width);
@@ -107,7 +103,8 @@ pub fn reset_layout(
     window.set_col_duration_width(defaults.col_duration_width);
     window.set_col_format_width(defaults.col_format_width);
     window.set_col_flags_width(defaults.col_flags_width);
-    BridgeSidebarPanelTabs::sync_ui(window, settings, state);
+    // The dock goes back to its default arrangement (it saves itself, `view.dock`).
+    crate::ui::dock::reset_layout();
     if table_view_changed {
         BridgeMedia::handle_view_mode_toggled(defaults.is_table_view, 0, window, thumbnails, settings, state);
     }

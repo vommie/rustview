@@ -2,14 +2,12 @@ import { Theme } from "styles.slint";
 import { TagHistoryRowModel } from "types.slint";
 import { TagHistoryItemView } from "tag_history_item.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
-import { CollapsiblePanel } from "collapsible_panel.slint";
 
 export { TagHistoryItemView } from "tag_history_item.slint";
 
-/// Collapsible Assigned Tags History panel inheriting from the unified CollapsiblePanel component.
-/// Supports smooth ease-in-out height animation, interactive dragging without animation lag,
-/// horizontal flow wrapping, and scrollable rows.
-export component TagHistoryPanel inherits CollapsiblePanel {
+/// The body of the sidebar group Tag History: the recently assigned tags in wrapped, scrollable rows (the group's tab
+/// bar, fold and maximize are the dock's, `ui/dock_sidebar.slint`).
+export component TagHistoryPanel inherits Rectangle {
     in property <[TagHistoryRowModel]> rows: [];
     in property <int> tag-count: 0;
     in property <bool> has-selection: true;
@@ -17,8 +15,8 @@ export component TagHistoryPanel inherits CollapsiblePanel {
     callback tag-clicked(int /* tag_id */);
     callback geometry-changed(length /* available_width */);
 
-    title: "TAG HISTORY";
-    count-badge: root.tag-count > 0 ? (root.tag-count + "") : "";
+    // The badge of the group's tab ("" = none).
+    out property <string> count-badge: root.tag-count > 0 ? (root.tag-count + "") : "";
 
     changed width => {
         if self.width > 20px {

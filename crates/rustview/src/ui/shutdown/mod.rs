@@ -157,6 +157,8 @@ fn release_resources(t: &ShutdownTargets<'_>) {
         tracing::warn!(unsaved, "[Shutdown: ImageEdit] Unsaved picture edits are discarded");
     }
     t.tab_manager.shutdown();
+    // The dock saved every change already; its bridge goes with the window.
+    crate::ui::dock::release();
     SystemDndHandler::cancel_ghost_overlay();
     t.settings.flush();
 }

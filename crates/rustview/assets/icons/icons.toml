@@ -187,3 +187,14 @@ rating_2 = { custom = "rating_2.svg", color = true, doc = "Rating 2 badge" }
 rating_3 = { custom = "rating_3.svg", color = true, doc = "Rating 3 badge" }
 rating_4 = { custom = "rating_4.svg", color = true, doc = "Rating 4 badge" }
 rating_5 = { custom = "rating_5.svg", color = true, doc = "Rating 5 badge" }
+
+# --- Sidebars drawn like RustCut's dock (0.6.14) -------------------------------------------------------------------
+sidebar_left_collapse = { tabler = "layout-sidebar-left-collapse", doc = "Collapse the left sidebar to its rail" }
+sidebar_left_expand = { tabler = "layout-sidebar-left-expand", doc = "Expand the left sidebar from its rail" }
+sidebar_right_collapse = { tabler = "layout-sidebar-right-collapse", doc = "Collapse the right sidebar to its rail" }
+sidebar_right_expand = { tabler = "layout-sidebar-right-expand", doc = "Expand the right sidebar from its rail" }
+group_maximize = { tabler = "arrows-maximize", doc = "A sidebar group fills its sidebar" }
+group_restore = { tabler = "arrows-minimize", doc = "A maximized sidebar group gives the room back" }
+panel_info = { tabler = "info-circle", doc = "Sidebar panel Info (file, path, size, MD5)" }
+panel_tag_history = { tabler = "history", doc = "Sidebar panel Tag History" }
+rail_pinned = { tabler = "pin", style = "filled", doc = "A held sidebar group over the center (badge on the rail)" }

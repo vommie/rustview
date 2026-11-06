@@ -16,8 +16,6 @@ use std::sync::Arc;
 
 /// Height of the bars above the Browse view in the main window (`main.slint` adds it to every point it reports).
 const BROWSE_VIEW_TOP_PX: f32 = 64.0;
-/// Thickness of the resizer bar between the sidebar and the Browse view (`resizer_bar.slint`).
-const RESIZER_THICKNESS_PX: f32 = 6.0;
 /// Height of the status bar below the Browse view.
 const STATUS_BAR_HEIGHT_PX: f32 = 28.0;
 
@@ -45,7 +43,7 @@ impl BrowseDragScroller {
     pub fn update(&self, window: &MainWindow, state: &Arc<RwLock<UiState>>, x: f32, y: f32) {
         let scale = window.window().scale_factor().max(0.1);
         let window_h = window.window().size().height.az::<f32>() / scale;
-        let left = window.get_sidebar_left_width() + RESIZER_THICKNESS_PX;
+        let left = window.get_center_frame_x();
         let right = left + window.get_media_view_width();
         if x < left || x > right {
             self.inner.stop();

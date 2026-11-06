@@ -1,6 +1,5 @@
 import { Theme } from "styles.slint";
 import { TooltipArea } from "tooltips.slint";
-import { CollapsiblePanel } from "collapsible_panel.slint";
 
 /// Standalone text component that dynamically clips overflowing text on the left side with an ellipsis badge "…".
 export component LeftElidedText inherits Rectangle {
@@ -116,8 +115,9 @@ export component MetadataPathRow inherits Rectangle {
     }
 }
 
-/// Fully modular, collapsible Metadata Inspector panel inheriting from the unified CollapsiblePanel component.
-export component MetadataInspector inherits CollapsiblePanel {
+/// The body of the sidebar group Info: the selected medium's file, path, size, dimensions, format and MD5 (the group's
+/// tab bar, fold and maximize are the dock's, `ui/dock_sidebar.slint`).
+export component MetadataInspector inherits Rectangle {
     in property <string> filename: "-";
     in property <string> filename-tooltip: "";
     in property <string> path-label: "Path:";
@@ -137,9 +137,8 @@ export component MetadataInspector inherits CollapsiblePanel {
     in property <string> hash-label: "";
     in property <string> badge-text: "";
 
-    title: "INFO / METADATA";
-    count-badge: root.badge-text != "" ? root.badge-text : (root.selection-count > 1 ? (root.selection-count + " Files") : "");
-    body-height: 130px;
+    // The badge of the group's tab ("" = none).
+    out property <string> count-badge: root.badge-text != "" ? root.badge-text : (root.selection-count > 1 ? (root.selection-count + " Files") : "");
 
     VerticalLayout {
         padding-left: 8px;
@@ -147,7 +146,7 @@ export component MetadataInspector inherits CollapsiblePanel {
         padding-top: 4px;
         padding-bottom: 4px;
         spacing: 3px;
-        alignment: center;
+        alignment: start;
 
         MetadataRow {
             label: "File:";

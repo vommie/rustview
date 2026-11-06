@@ -9,7 +9,6 @@ use crate::ui::media::BridgeMedia;
 use crate::ui::rating_hotkey::{RatingHotkeyParams, rate as rate_by_key};
 use crate::ui::selection::BridgeFileSelection;
 use crate::ui::selection::keyboard::{KeyboardNavigateParams, handle_keyboard_navigate};
-use crate::ui::sidebar::BridgeSidebarPanelTabs;
 use crate::ui::state::LastActivePanel;
 use crate::ui::tabs::BridgeViewerTabs;
 use crate::ui::tabs::grid_bridge::BridgeTabGrid;
@@ -45,7 +44,21 @@ impl UiBridge {
             self.settings_dialog.clone(),
         );
 
-        BridgeSidebarPanelTabs::register_callbacks(&self.window, self.settings.clone(), self.state.clone());
+        {
+            // The sidebars are the dock (`ui::dock`); a change of it changes the room of the view in the center.
+            let window = self.window.clone_strong();
+            let tab_manager = self.tab_manager.clone();
+            let fullscreen = self.fullscreen.clone();
+            let settings = self.settings.clone();
+            let state = self.state.clone();
+            crate::ui::dock::install(&self.window, &self.settings, move || {
+                if window.get_active_view_mode() == 1 {
+                    BridgeViewerTabs::sync_video_embedding(&window, &tab_manager, &fullscreen, &settings);
+                } else if window.get_active_view_mode() == 2 {
+                    BridgeTabGrid::sync_tab_grid_ui(&window, &tab_manager, &settings, &state);
+                }
+            });
+        }
 
         BridgeFileSelection::register_callbacks(
             &self.window,
@@ -88,12 +101,6 @@ impl UiBridge {
             self.state.clone(),
         );
 
-        let set_th_col = self.settings.clone();
-        let st_th_col = self.state.clone();
-        self.window.on_tag_history_collapsed_toggled(move |collapsed| {
-            BridgeTagHistory::handle_collapsed_toggled(collapsed, &set_th_col, &st_th_col);
-        });
-
         let win_th_click = self.window.clone_strong();
         let lib_th_click = self.library.clone();
         let thumb_th_click = self.thumbnails.clone();
@@ -117,48 +124,6 @@ impl UiBridge {
         let st_th_geom = self.state.clone();
         self.window.on_tag_history_geometry_changed(move |avail_w| {
             BridgeTagHistory::handle_geometry_changed(avail_w, &win_th_geom, &lib_th_geom, &st_th_geom);
-        });
-
-        let last_th_resize = Arc::new(Mutex::new(Instant::now()));
-        let th_resize_count = Arc::new(AtomicUsize::new(0));
-        let last_th_clone = last_th_resize;
-        let th_count_clone = th_resize_count;
-        let st_th_resize = self.state.clone();
-
-        self.window.on_tag_history_resized(move |new_height| {
-            let count = th_count_clone.fetch_add(1, Ordering::Relaxed) + 1;
-            st_th_resize.write().tag_history_height = new_height;
-
-            let mut last_log = last_th_clone.lock();
-            let elapsed = last_log.elapsed();
-            if elapsed.as_millis() >= 100 {
-                let hz = if elapsed.as_secs_f64() > 0.0 {
-                    count.az::<f64>() / elapsed.as_secs_f64()
-                } else {
-                    0.0
-                };
-                tracing::debug!(
-                    height = new_height,
-                    event_rate_hz = format!("{:.1}", hz),
-                    total_events = count,
-                    "[Benchmark: TagHistory Drag] Smooth high-FPS Tag History height resize active"
-                );
-                *last_log = Instant::now();
-                th_count_clone.store(0, Ordering::Relaxed);
-            }
-        });
-
-        let set_th_fin = self.settings.clone();
-        let st_th_fin = self.state.clone();
-        self.window.on_tag_history_resize_finished(move |final_height| {
-            tracing::info!(
-                final_height,
-                "[UiBridge: TagHistory] Tag History height resize finished and persisted"
-            );
-            st_th_fin.write().tag_history_height = final_height;
-            let mut app_settings = set_th_fin.get();
-            app_settings.tags.history_height = final_height;
-            set_th_fin.save_quiet_async(&app_settings);
         });
 
         BridgeMedia::register_query_callbacks(
@@ -185,19 +150,6 @@ impl UiBridge {
                 &set_fav,
                 &st_fav,
             );
-        });
-
-        let set_collapse = self.settings.clone();
-        let st_collapse = self.state.clone();
-        self.window.on_info_collapsed_toggled(move |collapsed| {
-            tracing::info!(
-                collapsed,
-                "[UiBridge: InfoInspector] Toggled inspector collapsible panel state"
-            );
-            st_collapse.write().is_inspector_collapsed = collapsed;
-            let mut app_settings = set_collapse.get();
-            app_settings.view.is_inspector_collapsed = collapsed;
-            set_collapse.save_quiet_async(&app_settings);
         });
 
         self.register_rename_callbacks();

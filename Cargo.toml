@@ -60,6 +60,7 @@ num-format = { version = "0.4", features = ["with-system-locale"] }
 resvg = { version = "0.48", default-features = false, features = ["text", "system-fonts", "raster-images"] }
 toml = "1"
 tempfile = "3"
+proptest = "1"
 clap = { version = "4", features = ["derive"] }
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 # XDG directories of the library and settings, and `~` expansion in paths typed on the command line or found in desktop files.

@@ -505,6 +505,10 @@ impl SettingsDiff {
             ));
         }
 
+        if old.view.dock != new.view.dock {
+            changes.push("View: dock (sidebar layout)".to_owned());
+        }
+
         if old.view.video_bar_ab_bubble_open != new.view.video_bar_ab_bubble_open {
             changes.push(format!(
                 "View: video_bar_ab_bubble_open ({} -> {})",

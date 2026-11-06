@@ -1,0 +1,66 @@
+// The bodies of the dock's panels. RustView's panels are bound to the main window's properties, so each one exists once
+// and lies over the group that shows it: over its group in an expanded sidebar, or over the group a rail icon shows over
+// the center (`DockPeek`). Where a panel is comes from Rust (`Dock.panel-places`); its group's geometry from the plan
+// (`DockGroupView`), exactly as `DockSidebar` places the group.
+
+import { Dock, DockMetrics, DockPanelPlace, DockGroupView, RailPeek } from "dock_types.slint";
+
+export component DockPanelSlot inherits Rectangle {
+    // The panel's row in `Dock.panel-places` (the order of `PanelId::ALL`).
+    in property <int> panel;
+    // The dock areas in window coordinates, and whether the view shows them (Browse shows the left one only).
+    in property <length> left-x;
+    in property <length> left-y;
+    in property <length> left-width;
+    in property <length> left-height;
+    in property <length> right-x;
+    in property <length> right-y;
+    in property <length> right-width;
+    in property <length> right-height;
+    in property <bool> left-visible: true;
+    in property <bool> right-visible: true;
+
+    property <DockPanelPlace> place: Dock.panel-places[root.panel];
+    property <bool> is-left: root.place.side == 0;
+    property <DockGroupView> group: root.is-left ? Dock.left-groups[root.place.group] : Dock.right-groups[root.place.group];
+    property <bool> side-collapsed: root.is-left ? Dock.left-collapsed : Dock.right-collapsed;
+    property <bool> side-visible: root.is-left ? root.left-visible : root.right-visible;
+    property <length> side-x: root.is-left ? root.left-x : root.right-x;
+    property <length> side-y: root.is-left ? root.left-y : root.right-y;
+    property <length> side-width: root.is-left ? root.left-width : root.right-width;
+    property <length> side-height: root.is-left ? root.left-height : root.right-height;
+    property <length> extra: Math.max(0px, root.side-height - (root.is-left ? Dock.left-total-fixed : Dock.right-total-fixed));
+    // The group a rail icon shows over the center (as main.slint's `DockPeek` picks it).
+    property <bool> peek-open: RailPeek.side == root.place.side || RailPeek.pin(root.place.side) >= 0;
+    property <int> peek-group: RailPeek.side == root.place.side ? RailPeek.group : RailPeek.pin(root.place.side);
+    out property <bool> peeked: root.side-collapsed && root.peek-open && root.peek-group == root.place.group;
+    property <length> pad: DockMetrics.sidebar-padding;
+    property <length> peek-width: root.is-left ? Dock.left-width : Dock.right-width;
+
+    property <length> frame-x: root.peeked
+        ? (root.is-left ? root.side-x + root.side-width : root.side-x - root.peek-width) + root.pad
+        : root.side-x + root.pad;
+    property <length> frame-y: root.peeked ? root.side-y : root.side-y + root.group.fixed_before + root.group.frac_before * root.extra;
+    property <length> frame-width: (root.peeked ? root.peek-width : root.side-width) - 2 * root.pad;
+    property <length> frame-height: root.peeked ? root.side-height - root.pad : root.group.fixed + root.group.frac * root.extra;
+
+    // Inside the group's frame line, below its tab bar.
+    x: root.frame-x + 1px;
+    y: root.frame-y + DockMetrics.tab-bar-height;
+    width: Math.max(0px, root.frame-width - 2px);
+    height: Math.max(0px, root.frame-height - DockMetrics.tab-bar-height - 1px);
+    visible: root.place.group >= 0 && root.place.active && root.side-visible
+        && (root.peeked || (!root.side-collapsed && root.group.shows_body));
+    clip: true;
+
+    // The shown group stays while the pointer is over its body (a parent touch area keeps its hover over the children).
+    hover := TouchArea {
+        changed has-hover => {
+            if root.peeked {
+                RailPeek.over-body = self.has-hover;
+            }
+        }
+
+        @children
+    }
+}

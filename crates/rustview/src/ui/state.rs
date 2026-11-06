@@ -4,7 +4,6 @@ use crate::ui::browse_folders::{BrowseFolderRows, FolderRowsRequest, FolderTimes
 use crate::ui::browse_window::{RingWindow, ViewGeometry};
 use crate::ui::selection::model::FileSelectionModel;
 use crate::ui::selection::rubberband::RubberbandSession;
-use crate::ui::sidebar::panel_tab_dnd::SidebarPanelTabDndSession;
 use crate::ui::tabs::dnd::TabDndSession;
 use crate::ui::tabs::grid::MasonryRect;
 use crate::ui::tabs::tab_selection::TabSelection;
@@ -157,7 +156,6 @@ pub struct UiState {
     pub rubberband_session: RubberbandSession,
     pub active_tab_dnd_session: Option<TabDndSession>,
     pub active_sidebar_panel_tab: String,
-    pub active_sidebar_panel_tab_dnd_session: Option<SidebarPanelTabDndSession>,
     pub is_inspector_collapsed: bool,
     pub media_row_map: RowMap,
     pub filter: QueryFilter,
@@ -240,7 +238,6 @@ impl Default for UiState {
             rubberband_session: RubberbandSession::default(),
             active_tab_dnd_session: None,
             active_sidebar_panel_tab: DEFAULT_LEFT_SIDEBAR_ACTIVE_PANEL_TAB.to_string(),
-            active_sidebar_panel_tab_dnd_session: None,
             is_inspector_collapsed: DEFAULT_IS_INSPECTOR_COLLAPSED,
             media_row_map: RowMap::default(),
             filter: QueryFilter::default(),

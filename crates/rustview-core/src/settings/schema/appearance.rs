@@ -230,6 +230,10 @@ pub struct ViewSettings {
     /// Added in 0.6.10: the A-B buttons of a collapsed video control bar show in their bubble (the bubble's toggle is
     /// remembered for the next videos and the next start).
     pub video_bar_ab_bubble_open: bool,
+
+    /// Added in 0.6.14: the sidebars as a dock like `RustCut`'s (groups of panel tabs, rail, maximized and held groups;
+    /// the app's `ui::dock::persist` owns the shape). `None` in older files: the dock starts from the fields above.
+    pub dock: Option<serde_json::Value>,
 }
 
 impl Default for ViewSettings {
@@ -271,6 +275,7 @@ impl Default for ViewSettings {
             debug_page: super::DebugPageState::default(),
             log_window: super::LogWindowState::default(),
             video_bar_ab_bubble_open: DEFAULT_VIDEO_BAR_AB_BUBBLE_OPEN,
+            dock: None,
         }
     }
 }

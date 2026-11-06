@@ -161,9 +161,9 @@ impl UiBridge {
         }
 
         let last_panel = params.state.read().last_active_panel;
-        let active_sidebar_tab = window.get_active_sidebar_panel_tab();
-        let is_folders_tab = active_sidebar_tab.as_str() == "folders";
-        let is_favorites_tab = active_sidebar_tab.as_str() == "favorites";
+        // The panel the key acts on is the one the dock shows (the active tab of its group, unfolded).
+        let is_folders_tab = window.get_folders_panel_shown();
+        let is_favorites_tab = window.get_favorites_panel_shown();
 
         let browse_folders = params.state.read().focused_browse_folders();
         let effective_panel = match last_panel {
@@ -387,9 +387,9 @@ impl UiBridge {
         }
 
         let last_panel = params.state.read().last_active_panel;
-        let active_sidebar_tab = window.get_active_sidebar_panel_tab();
-        let is_folders_tab = active_sidebar_tab.as_str() == "folders";
-        let is_favorites_tab = active_sidebar_tab.as_str() == "favorites";
+        // The panel the key acts on is the one the dock shows (the active tab of its group, unfolded).
+        let is_folders_tab = window.get_folders_panel_shown();
+        let is_favorites_tab = window.get_favorites_panel_shown();
 
         let browse_folders = params.state.read().focused_browse_folders();
         let effective_panel = match last_panel {

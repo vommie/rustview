@@ -51,9 +51,6 @@ impl BridgeTagHistory {
             settings.save_quiet_async(&updated_settings);
         }
 
-        window.set_tag_history_height(history_height);
-        window.set_tag_history_is_collapsed(is_collapsed);
-
         Self::sync_ui(window, library, state);
 
         tracing::info!(
@@ -70,7 +67,7 @@ impl BridgeTagHistory {
         let t0 = Instant::now();
         let is_tab_mode = window.get_active_view_mode() == 1;
 
-        let (history_ids, is_collapsed, history_height, available_w, selected_file_ids, has_selection) = {
+        let (history_ids, history_height, available_w, selected_file_ids, has_selection) = {
             let s = state.read();
             let file_ids = if is_tab_mode {
                 s.active_tab_selection().unwrap_or_default()
@@ -82,7 +79,6 @@ impl BridgeTagHistory {
 
             (
                 s.tag_history_ids.clone(),
-                s.is_tag_history_collapsed,
                 s.tag_history_height,
                 s.tag_history_available_width,
                 file_ids,
@@ -93,8 +89,6 @@ impl BridgeTagHistory {
         if history_ids.is_empty() {
             window.set_tag_history_rows(ModelRc::new(VecModel::from(vec![])));
             window.set_tag_history_count(0);
-            window.set_tag_history_is_collapsed(is_collapsed);
-            window.set_tag_history_height(history_height);
             return;
         }
 
@@ -183,8 +177,6 @@ impl BridgeTagHistory {
 
         window.set_tag_history_rows(ModelRc::new(VecModel::from(slint_rows)));
         window.set_tag_history_count(total_valid_count.saturating_as::<i32>());
-        window.set_tag_history_is_collapsed(is_collapsed);
-        window.set_tag_history_height(history_height);
 
         tracing::debug!(
             total_items = total_valid_count,
@@ -290,23 +282,6 @@ impl BridgeTagHistory {
         BridgeViewerTabs::sync_ui(window, tab_manager, library, settings, state);
         StatusBarBridge::update_metrics(window, state);
         Self::sync_ui(window, library, state);
-    }
-
-    /// Handles toggling the collapsed state of the Tag History panel.
-    pub fn handle_collapsed_toggled(is_collapsed: bool, settings: &SettingsManager, state: &RwLock<UiState>) {
-        {
-            let mut st = state.write();
-            st.is_tag_history_collapsed = is_collapsed;
-        }
-        let mut app_settings = settings.get();
-        app_settings.tags.is_history_collapsed = is_collapsed;
-        settings.save_quiet_async(&app_settings);
-
-        tracing::info!(
-            is_collapsed,
-            history_height = state.read().tag_history_height,
-            "[BridgeTagHistory: CollapseToggle] Collapsed state persisted; height restored/kept at last configured size"
-        );
     }
 
     /// Records that a tag was assigned (e.g. from Tag Tree or shortcut) and puts it at the front of history.
