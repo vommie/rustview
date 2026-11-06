@@ -9,6 +9,8 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ## [Unreleased]
 
+## [0.6.15] - 2026-11-06
+
 ### Added
 
 - A light theme (Catppuccin Latte, the same colors as RustCut's): Settings > Appearance > Theme chooses System, Dark or
@@ -1111,7 +1113,8 @@ First usable version: the application skeleton grew into a working media browser
 ### Added
 - Initial commit of the project.
 
-[Unreleased]: https://github.com/vommie/rustview/compare/v0.6.13...HEAD
+[Unreleased]: https://github.com/vommie/rustview/compare/v0.6.15...HEAD
+[0.6.15]: https://github.com/vommie/rustview/compare/v0.6.13...v0.6.15
 [0.6.13]: https://github.com/vommie/rustview/compare/v0.6.11...v0.6.13
 [0.6.11]: https://github.com/vommie/rustview/compare/v0.6.9...v0.6.11
 [0.6.9]: https://github.com/vommie/rustview/compare/v0.6.7...v0.6.9
