@@ -11,6 +11,7 @@ use rustview_core::util::cast::SaturatingAs;
 const STYLES: [&str; 2] = ["bar", "pill"];
 const REVEALS: [&str; 2] = ["bottom", "anywhere"];
 const SEEKS: [&str; 4] = ["exact", "osc", "keyframes", "mpv"];
+const NORMALIZES: [&str; 5] = ["off", "loudness", "dynamic", "speech", "compressor"];
 
 fn index_of(names: &[&str], name: &str) -> i32 {
     names
@@ -36,6 +37,7 @@ pub(super) fn populate(window: &SettingsWindow, player: &FullscreenPlayerSetting
     window.set_fullscreen_player_fade(player.fade);
     window.set_fullscreen_player_show_ms(player.show_ms);
     window.set_fullscreen_player_seek_idx(index_of(&SEEKS, &player.seek));
+    window.set_fullscreen_player_normalize_idx(index_of(&NORMALIZES, &player.normalize));
     window.set_fullscreen_player_limits(crate::ui::PlayerBarLimits {
         min_opacity: MIN_FULLSCREEN_PLAYER_BAR_OPACITY_PERCENT.saturating_as::<i32>(),
         max_opacity: MAX_FULLSCREEN_PLAYER_BAR_OPACITY_PERCENT.saturating_as::<i32>(),
@@ -59,6 +61,7 @@ pub(super) fn save(window: &SettingsWindow, player: &mut FullscreenPlayerSetting
     player.fade = window.get_fullscreen_player_fade();
     player.show_ms = window.get_fullscreen_player_show_ms();
     player.seek = name_at(&SEEKS, window.get_fullscreen_player_seek_idx());
+    player.normalize = name_at(&NORMALIZES, window.get_fullscreen_player_normalize_idx());
 }
 
 #[cfg(test)]

@@ -1,0 +1,332 @@
+// The filter rows of a bar menu (`MultiviewBarMenu`): the slider (row kind 6) and the filter (row kind 7) of the video
+// filters. Both have the columns of a context menu row (padding, icon slot, label) plus a value column of the menu's width
+// (`value-width`, the widest value any row of the menu can show), a reset button and the slot of the submenu chevron, so the
+// columns line up across the menu and nothing moves when a value changes. A filter that is on shows its icon and value in
+// `Theme.filter-active`; its reset button is enabled only then.
+
+import { Theme } from "styles.slint";
+import { AppIcon, IconId, IconSize } from "icons.slint";
+import { ContextMenuItemModel } from "menu_item_types.slint";
+import { TooltipHost } from "tooltips.slint";
+
+/// The columns every menu row shares (the measuring of `MultiviewBarMenu` uses the same numbers).
+export global BarMenuMetrics {
+    out property <length> padding: 10px;
+    out property <length> spacing: 8px;
+    out property <length> slot: IconSize.md;
+    out property <length> reset: 20px;
+    out property <length> chevron: IconSize.sm;
+    out property <length> slider-label: 72px;
+    out property <length> slider-min: 96px;
+    out property <length> row-height: 28px;
+}
+
+/// The reset button of a filter row: enabled (a hover background, the text color) only while the filter is on.
+component BarMenuResetButton inherits Rectangle {
+    in property <bool> enabled;
+    callback clicked();
+
+    width: BarMenuMetrics.reset;
+    height: BarMenuMetrics.reset;
+    border-radius: 4px;
+    background: root.enabled && touch.has-hover ? Theme.surface-selected : transparent;
+
+    AppIcon {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        icon: IconId.video-filter-reset;
+        size: IconSize.md;
+        color: root.enabled ? (touch.has-hover ? #ffffff : Theme.text) : Theme.text-muted.with-alpha(0.25);
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => {
+            tip.on-hover-leave();
+            root.clicked();
+        }
+        changed has-hover => {
+            if self.has-hover {
+                tip.on-hover-enter(self.mouse-x, self.mouse-y);
+            } else {
+                tip.on-hover-leave();
+            }
+        }
+    }
+
+    tip := TooltipHost {
+        text: "Reset";
+        in-menu: true;
+        delay: 350ms;
+    }
+}
+
+/// The value column of a row: the value left aligned in a column as wide as the menu's widest value.
+component BarMenuValue inherits Text {
+    in property <length> column;
+    in property <bool> on;
+
+    width: self.column;
+    font-size: 11px;
+    color: root.on ? Theme.filter-active : Theme.text-muted;
+    vertical-alignment: center;
+    horizontal-alignment: right;
+}
+
+/// A filter (kind 7): icon, label, key, value, reset, and the chevron when it opens a submenu.
+export component BarMenuFilterRow inherits Rectangle {
+    in property <ContextMenuItemModel> item;
+    in property <length> value-width;
+    // The submenu of this row is open (it stays highlighted).
+    in property <bool> is-parent-active;
+    callback clicked();
+    callback reset();
+
+    height: BarMenuMetrics.row-height;
+    border-radius: 4px;
+    background: touch.has-hover || root.is-parent-active ? Theme.surface-hover : transparent;
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            tip.on-hover-leave();
+            root.clicked();
+        }
+        changed has-hover => {
+            if self.has-hover && root.item.tooltip != "" {
+                tip.on-hover-enter(self.mouse-x, self.mouse-y);
+            } else {
+                tip.on-hover-leave();
+            }
+        }
+    }
+
+    tip := TooltipHost {
+        text: root.item.tooltip;
+        shortcut: root.item.shortcut;
+        in-menu: true;
+        delay: 350ms;
+    }
+
+    HorizontalLayout {
+        padding-left: BarMenuMetrics.padding;
+        padding-right: BarMenuMetrics.padding;
+        spacing: BarMenuMetrics.spacing;
+
+        VerticalLayout {
+            alignment: center;
+            AppIcon {
+                icon: root.item.icon;
+                size: BarMenuMetrics.slot;
+                color: root.item.is-checked ? Theme.filter-active : (touch.has-hover || root.is-parent-active ? Theme.text : Theme.text-muted);
+            }
+        }
+
+        Text {
+            text: root.item.text;
+            color: Theme.text;
+            font-size: 12px;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+
+        if root.item.shortcut != "" : Text {
+            text: root.item.shortcut;
+            color: Theme.text-muted;
+            font-size: 11px;
+            vertical-alignment: center;
+        }
+
+        BarMenuValue {
+            column: root.value-width;
+            on: root.item.is-checked;
+            text: root.item.value-text;
+        }
+
+        VerticalLayout {
+            alignment: center;
+            BarMenuResetButton {
+                enabled: root.item.reset-enabled;
+                clicked => { root.reset(); }
+            }
+        }
+
+        // The chevron of a row that opens a submenu; the slot stays empty in the others, so the reset buttons line up.
+        VerticalLayout {
+            alignment: center;
+            width: BarMenuMetrics.chevron;
+            AppIcon {
+                icon: root.item.has-submenu ? IconId.chevron-right : IconId.none;
+                size: BarMenuMetrics.chevron;
+                color: Theme.text-muted;
+            }
+        }
+    }
+}
+
+/// A slider (kind 6): the video filters' picture adjustments. The value goes from -100 to 100 with 0 in the middle; Rust maps
+/// the share of the track to it (`instance_video_bar::menu_slider`).
+export component BarMenuSliderRow inherits Rectangle {
+    in property <ContextMenuItemModel> item;
+    in property <length> value-width;
+    // The share of the track (0..1) and the phase: 0 = press, 1 = drag, 2 = let go (a right click and the wheel: 2).
+    callback changed(float, int);
+    callback reset();
+
+    property <length> knob: 10px;
+    property <float> shown: Math.clamp(root.item.value, 0, 1);
+    property <bool> active: touch.has-hover || touch.pressed;
+
+    height: BarMenuMetrics.row-height;
+    border-radius: 4px;
+    background: root.active ? Theme.surface-hover : transparent;
+
+    HorizontalLayout {
+        padding-left: BarMenuMetrics.padding;
+        padding-right: BarMenuMetrics.padding;
+        spacing: BarMenuMetrics.spacing;
+
+        // The icon slot of the other rows (empty), so every label starts at the same x.
+        Rectangle { width: BarMenuMetrics.slot; }
+
+        Text {
+            width: BarMenuMetrics.slider-label;
+            text: root.item.text;
+            color: Theme.text;
+            font-size: 12px;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        track-area := Rectangle {
+            horizontal-stretch: 1;
+            min-width: BarMenuMetrics.slider-min;
+
+            // The track, the stretch from 0 (the middle) to the value, the tick of 0 and the knob.
+            Rectangle {
+                x: root.knob / 2;
+                y: (parent.height - self.height) / 2;
+                width: parent.width - root.knob;
+                height: 3px;
+                border-radius: 1.5px;
+                background: Theme.surface-selected;
+            }
+
+            Rectangle {
+                x: root.knob / 2 + (track-area.width - root.knob) * Math.min(root.shown, 0.5);
+                y: (parent.height - self.height) / 2;
+                width: (track-area.width - root.knob) * Math.abs(root.shown - 0.5);
+                height: 3px;
+                background: root.item.reset-enabled ? Theme.filter-active : Theme.primary;
+            }
+
+            Rectangle {
+                x: Math.round((root.knob / 2 + (track-area.width - root.knob) / 2) / 1px) * 1px;
+                y: (parent.height - self.height) / 2;
+                width: 1px;
+                height: 9px;
+                background: Theme.text-muted;
+            }
+
+            Rectangle {
+                x: (track-area.width - root.knob) * root.shown;
+                y: (parent.height - self.height) / 2;
+                width: root.knob;
+                height: root.knob;
+                border-radius: self.width / 2;
+                background: root.active ? #ffffff : Theme.text;
+            }
+
+            touch := TouchArea {
+                mouse-cursor: pointer;
+                property <float> share: Math.clamp((self.mouse-x - root.knob / 2) / Math.max(1px, track-area.width - root.knob), 0, 1);
+
+                pointer-event(event) => {
+                    if event.kind == PointerEventKind.down {
+                        tip.on-hover-leave();
+                    }
+                    if event.button == PointerEventButton.left {
+                        if event.kind == PointerEventKind.down {
+                            root.changed(self.share, 0);
+                        } else if event.kind == PointerEventKind.up {
+                            root.changed(self.share, 2);
+                        }
+                    } else if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
+                        root.changed(0.5, 2);
+                    }
+                }
+                changed mouse-x => {
+                    if self.pressed {
+                        root.changed(self.share, 1);
+                    }
+                }
+                scroll-event(event) => {
+                    if event.delta-y == 0 {
+                        return reject;
+                    }
+                    // One notch: a twentieth of the track (10 of the 200 steps).
+                    root.changed(Math.clamp(root.shown + (event.delta-y > 0 ? 0.05 : -0.05), 0, 1), 2);
+                    return accept;
+                }
+                changed has-hover => {
+                    if self.has-hover && root.item.tooltip != "" {
+                        tip.on-hover-enter(self.mouse-x, self.mouse-y);
+                    } else {
+                        tip.on-hover-leave();
+                    }
+                }
+            }
+        }
+
+        BarMenuValue {
+            column: root.value-width;
+            on: root.item.reset-enabled;
+            text: root.item.value-text;
+        }
+
+        VerticalLayout {
+            alignment: center;
+            BarMenuResetButton {
+                enabled: root.item.reset-enabled;
+                clicked => { root.reset(); }
+            }
+        }
+
+        Rectangle { width: BarMenuMetrics.chevron; }
+    }
+
+    tip := TooltipHost {
+        text: root.item.tooltip;
+        shortcut: root.item.shortcut;
+        in-menu: true;
+        delay: 350ms;
+    }
+}
+
+/// What one row of a bar menu needs in width (laid out like the rows, never drawn): `MultiviewBarMenu` takes the widest.
+export component BarMenuRowMeasure inherits HorizontalLayout {
+    in property <ContextMenuItemModel> item;
+    in property <length> value-width;
+    property <bool> filter-like: root.item.kind == 6 || root.item.kind == 7;
+
+    padding-left: BarMenuMetrics.padding;
+    padding-right: BarMenuMetrics.padding;
+    spacing: BarMenuMetrics.spacing;
+
+    if root.item.kind != 3 && root.item.kind != 4 : Rectangle { width: BarMenuMetrics.slot; }
+    if root.item.kind == 6 : Rectangle { width: BarMenuMetrics.slider-label + BarMenuMetrics.spacing + BarMenuMetrics.slider-min; }
+    if root.item.kind != 6 && root.item.kind != 3 : Text {
+        text: root.item.text;
+        font-size: root.item.kind == 4 ? 10px : 12px;
+        font-weight: root.item.kind == 4 ? 700 : 400;
+    }
+    if root.item.shortcut != "" && root.item.kind != 3 : Text {
+        text: root.item.shortcut;
+        font-size: 11px;
+    }
+    if root.filter-like : Rectangle { width: root.value-width; }
+    if root.filter-like : Rectangle { width: BarMenuMetrics.reset; }
+    if root.filter-like || root.item.has-submenu : Rectangle { width: BarMenuMetrics.chevron; }
+}

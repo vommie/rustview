@@ -134,6 +134,7 @@ video_filter_deinterlace = { tabler = "baseline-density-medium", doc = "Video fi
 video_filter_picture = { tabler = "brightness-half", doc = "Video filters: gamma, brightness, contrast and saturation" }
 video_filter_sound = { tabler = "wave-sine", doc = "Video filters: normalize the volume" }
 video_filter_off = { tabler = "filter-off", doc = "Video filters: switch every filter off" }
+video_filter_reset = { tabler = "arrow-back-up", doc = "Video filters: the reset button of a filter in the menu (enabled while the filter is on)" }
 lock = { tabler = "lock", doc = "Locked: the fullscreen cannot be closed" }
 lock_open = { tabler = "lock-open", doc = "Unlocked" }
 layout_reset = { tabler = "layout-grid-remove", doc = "Reset the arrangement of the Multiview to automatic" }

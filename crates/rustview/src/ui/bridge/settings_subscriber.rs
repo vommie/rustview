@@ -114,6 +114,10 @@ impl UiBridge {
                     zoom_prefs::apply(&new_clone.fullscreen);
                     crate::viewer::multiview::video_bar::prefs::apply(&new_clone.fullscreen.player);
                     multiview::refresh_settings(&settings);
+                    crate::viewer::multiview::video_filter::apply_default_normalize(
+                        &new_clone.fullscreen.player.normalize,
+                        &tab_manager.all_instances(),
+                    );
                 }
 
                 if diff_clone.view_settings_changed {

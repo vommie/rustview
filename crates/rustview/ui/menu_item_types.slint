@@ -11,7 +11,7 @@ export struct ContextMenuItemModel {
     icon: IconId,
     /// Image of an external application (system icon theme, e.g. "Open With" entries). Takes precedence over `icon`.
     app_icon: image,
-    kind: int, // 0 = Action, 1 = Checkable, 2 = Radio, 3 = Separator, 4 = Header, 5 = Submenu, 6 = Slider (video bar menus)
+    kind: int, // 0 = Action, 1 = Checkable, 2 = Radio, 3 = Separator, 4 = Header, 5 = Submenu, 6 = Slider, 7 = Filter (video bar menus)
     is_checked: bool,
     is_enabled: bool,
     has_submenu: bool,
@@ -20,7 +20,12 @@ export struct ContextMenuItemModel {
     tooltip: string,
     /// The entry acts only when held for `HoldConfirm.duration` (hold.slint).
     hold: bool,
-    /// Kind 6 (a slider of a video bar's menu): its value as a share of its width, and as text.
+    /// Kinds 6 (a slider) and 7 (a filter row) of a video bar's menu: the slider's value as a share of its width, the value
+    /// column's text and its widest text (the column keeps that width), and the reset button (`resettable`: there is one,
+    /// `reset_enabled`: it can be pressed, the filter is on).
     value: float,
     value_text: string,
+    value_template: string,
+    resettable: bool,
+    reset_enabled: bool,
 }

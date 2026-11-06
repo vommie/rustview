@@ -52,7 +52,7 @@ pub(super) fn before_init(init: &MpvInitializer) {
     };
     // Rendering: mpv's render API (the video surface's render thread draws every frame).
     set("vo", "libmpv");
-    set("hwdec", "auto-safe");
+    set("hwdec", crate::viewer::multiview::video_filter::mpv::HWDEC_DEFAULT);
     // Playback lifecycle: a finished video stays on its last frame, a player without a file waits.
     set("keep-open", "yes");
     set("idle", "yes");

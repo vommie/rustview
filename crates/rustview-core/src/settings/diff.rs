@@ -656,8 +656,8 @@ impl SettingsDiff {
             ));
             let player = &new.fullscreen.player;
             changes.push(format!(
-                "Fullscreen player: bar_style: '{}', bar_opacity_percent: {}, bar_height_px: {}, reveal: '{}', fade: {}, show_ms: {}, seek: '{}'",
-                player.bar_style, player.bar_opacity_percent, player.bar_height_px, player.reveal, player.fade, player.show_ms, player.seek
+                "Fullscreen player: bar_style: '{}', bar_opacity_percent: {}, bar_height_px: {}, reveal: '{}', fade: {}, show_ms: {}, seek: '{}', normalize: '{}'",
+                player.bar_style, player.bar_opacity_percent, player.bar_height_px, player.reveal, player.fade, player.show_ms, player.seek, player.normalize
             ));
             let sound = &new.fullscreen.sound;
             changes.push(format!(

@@ -9,6 +9,27 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ## [Unreleased]
 
+### Added
+
+- Settings > Multiview > Player: Normalize volume, the normalization every video starts with. The filter menu of a video starts
+  from it; a choice there overrides it for that video in its view only (a duplicated tile takes it over), and its reset button
+  goes back to the default.
+
+### Changed
+
+- The filter menu shows which filter is on: every filter keeps its icon, a filter that is on shows its icon and "On" (or its
+  value) in orange, and every filter has a reset button at the right that is enabled only while the filter is on. The rotations
+  are three entries (90 degrees right, 180 degrees, 90 degrees left); a click on the one that is on turns the picture back.
+  Mirror and Deinterlace have icons. Nothing in the menu moves when a filter changes.
+- The filter menu and the "..." menu are as wide as their entries need (up to a generous limit), each submenu with its own
+  width.
+
+### Fixed
+
+- Mirror did nothing with hardware decoding: like in RustCut the flip is a filter on decoded frames, so while a video is
+  mirrored its player copies the frames back (`hwdec=auto-copy`); without a mirror the faster decoding stays. The mirror now
+  always swaps left and right on screen, also on a rotated video.
+
 ## [0.6.11] - 2026-11-06
 
 ### Added

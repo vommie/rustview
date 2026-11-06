@@ -79,6 +79,7 @@ export component MultiviewVideoBar inherits Rectangle {
     function menu-entry(id: int) { root.send(31, 0, 0, id, ""); }
     function menu-slider(id: int, share: float, phase: int) { root.send(33, share, phase, id, ""); }
     function filter-button() { root.send(34, 0, 0, 0, ""); }
+    function menu-reset(id: int) { root.send(35, 0, 0, id, ""); }
 
     // One "point" of the default bar (30 px high): every size below is a multiple of it.
     property <length> pt: root.bar.bar-height / 30;
@@ -199,10 +200,8 @@ export component MultiviewVideoBar inherits Rectangle {
     property <length> volume-center: root.has-speaker ? root.speaker-center : root.more-center;
     property <length> volume-x: root.canvas-x(root.volume-center - root.volume-width / 2, root.volume-width);
     property <length> volume-y: Math.max(4px - root.y, root.bar-top - BarPopupMetrics.volume-height(root.pt));
-    property <length> menu-width: 250px;
     property <bool> menu-shown: (root.bar.menu-open == 1 && root.has-more) || (root.bar.menu-open == 2 && root.has-filter);
     property <length> menu-center: root.bar.menu-open == 2 ? root.filter-center : root.more-center;
-    property <length> menu-x: root.canvas-x(root.menu-center - root.menu-width / 2, root.menu-width);
     property <bool> popup-open: root.bar.ab-popup > 0 || root.bar.volume-open || root.bar.menu-open > 0;
     property <length> bar-top: root.height - root.bar.bar-height;
     property <length> ab-strip-top: root.bar-top - root.bar.ab-strip-height;
@@ -688,9 +687,9 @@ export component MultiviewVideoBar inherits Rectangle {
         height: root.height;
 
         menu := MultiviewBarMenu {
-            x: root.menu-x;
+            x: root.canvas-x(root.menu-center - self.width / 2, self.width);
             y: Math.max(4px - root.y, root.bar-top - self.content-height);
-            width: root.menu-width;
+            width: self.natural-width;
             items: root.bar.menu-items;
             // As tall as the room above the bar allows (no scroll bar where the canvas has room).
             max-content-height: Math.max(160px, root.bar-top + root.y - 8px);
@@ -699,6 +698,7 @@ export component MultiviewVideoBar inherits Rectangle {
             active-id: root.bar.menu-active-id;
             item-clicked(id) => { root.menu-entry(id); }
             item-slider(id, share, phase) => { root.menu-slider(id, share, phase); }
+            item-reset(id) => { root.menu-reset(id); }
         }
 
         sub := MultiviewBarMenu {
@@ -706,26 +706,28 @@ export component MultiviewVideoBar inherits Rectangle {
             visible: root.bar.menu-sub-items.length > 0;
             x: self.left >= 4px - root.x ? self.left : menu.x + menu.width + 2px;
             y: Math.max(4px - root.y, menu.y + menu.content-height - menu.caret-height - self.content-height);
-            width: root.menu-width;
+            width: self.natural-width;
             items: root.bar.menu-sub-items;
             max-content-height: Math.max(160px, root.bar-top + root.y - 8px);
             show-caret: false;
             active-id: root.bar.menu-sub-active-id;
             item-clicked(id) => { root.menu-entry(id); }
             item-slider(id, share, phase) => { root.menu-slider(id, share, phase); }
+            item-reset(id) => { root.menu-reset(id); }
         }
 
         MultiviewBarMenu {
             property <length> left: Math.min(sub.x, menu.x) - self.width - 2px;
             visible: root.bar.menu-sub2-items.length > 0;
-            x: self.left >= 4px - root.x ? self.left : Math.max(sub.x, menu.x) + root.menu-width + 2px;
+            x: self.left >= 4px - root.x ? self.left : Math.max(sub.x + sub.width, menu.x + menu.width) + 2px;
             y: Math.max(4px - root.y, sub.y + sub.content-height - self.content-height);
-            width: root.menu-width;
             items: root.bar.menu-sub2-items;
             max-content-height: Math.max(160px, root.bar-top + root.y - 8px);
+            width: self.natural-width;
             show-caret: false;
             item-clicked(id) => { root.menu-entry(id); }
             item-slider(id, share, phase) => { root.menu-slider(id, share, phase); }
+            item-reset(id) => { root.menu-reset(id); }
         }
     }
 }

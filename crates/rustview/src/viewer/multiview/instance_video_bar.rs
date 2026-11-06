@@ -22,7 +22,7 @@ use super::video_bar::time_text;
 use super::video_bar::view::{DragPhase, VideoBarInput, VideoBarTarget, VideoBarView};
 use super::video_bar::volume::{self, VolumeIcon};
 use super::video_filter::menu as filter_menu;
-use super::video_filter::{FilterChange, KNOB_RANGE, VideoFilters};
+use super::video_filter::{FilterChange, KNOB_RANGE, VideoFilters, default_normalize};
 use super::volume_feedback::VolumeInput;
 use crate::viewer::ab_repeat::prefs as ab_prefs;
 use crate::viewer::mpv_engine::SeekPrecision;
@@ -151,6 +151,7 @@ impl MultiviewInstance {
                 | VideoBarInput::MoreButton
                 | VideoBarInput::FilterButton
                 | VideoBarInput::Menu(_)
+                | VideoBarInput::MenuReset(_)
                 | VideoBarInput::MenuSlider {
                     phase: DragPhase::Press,
                     ..
@@ -176,6 +177,12 @@ impl MultiviewInstance {
             VideoBarInput::Menu(action) => return self.menu_action(index, action, prefs) || selected,
             VideoBarInput::MenuSlider { action, share, phase } => {
                 return self.menu_slider(index, action, share, phase) || selected;
+            }
+            VideoBarInput::MenuReset(action) => {
+                return action
+                    .reset_part()
+                    .is_some_and(|part| self.change_filters(index, FilterChange::Reset(part)))
+                    || selected;
             }
             _ => {}
         }
@@ -268,6 +275,7 @@ impl MultiviewInstance {
             | VideoBarInput::Speaker
             | VideoBarInput::Ab(_)
             | VideoBarInput::Menu(_)
+            | VideoBarInput::MenuReset(_)
             | VideoBarInput::MenuSlider { .. } => Ok(()),
         };
         if let Err(e) = result {
@@ -513,6 +521,7 @@ fn bar_view(
     let times = time_text::texts(position, track.duration_secs(), ms);
     let volume_icon = VolumeIcon::of(playback.volume, video.last_mute);
     let keys = key_labels::filters();
+    let default_normalize = default_normalize();
     let menu = match video.bar.popup {
         Some(BarPopup::More { path }) => more_menu::build(&MoreInput {
             fit,
@@ -523,10 +532,11 @@ fn bar_view(
             muted: video.last_mute,
             ab: ab.as_ref(),
             filters,
+            default_normalize,
             keys: &keys,
             path,
         }),
-        Some(BarPopup::Filters { path }) => filter_menu::button_menu(filters, &keys, path),
+        Some(BarPopup::Filters { path }) => filter_menu::button_menu(filters, &keys, default_normalize, path),
         _ => MenuLevels::default(),
     };
     VideoBarView {
@@ -544,6 +554,6 @@ fn bar_view(
         popup: video.bar.popup,
         ab_bubble: popups::ab_bubble_open(),
         menu,
-        filter_count: filters.active_count(),
+        filter_count: filters.active_count(default_normalize),
     }
 }

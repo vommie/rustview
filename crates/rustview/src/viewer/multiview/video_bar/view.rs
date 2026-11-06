@@ -165,6 +165,8 @@ pub enum VideoBarInput {
     FilterButton,
     /// An entry of the open menu.
     Menu(MenuAction),
+    /// The reset button of an entry of the open menu (a filter, a slider, a group).
+    MenuReset(MenuAction),
     /// A slider of the open menu is pressed, dragged or let go at `share` of its width (a right click: `share` 0.5).
     MenuSlider {
         action: MenuAction,
@@ -214,6 +216,7 @@ impl VideoBarInput {
             Self::FilterButton => "filters",
             Self::Menu(_) => "menu entry",
             Self::MenuSlider { .. } => "menu slider",
+            Self::MenuReset(_) => "menu reset",
             Self::ClosePopups => "close popups",
         }
     }
@@ -285,6 +288,7 @@ impl VideoBarInput {
                 .zip(DragPhase::from_code(phase))
                 .map(|(action, phase)| Self::MenuSlider { action, share, phase }),
             34 => Some(Self::FilterButton),
+            35 => MenuAction::from_code(index).map(Self::MenuReset),
             _ => None,
         }
     }
@@ -364,6 +368,14 @@ mod tests {
             })
         );
         assert_eq!(VideoBarInput::from_event(event(34)), Some(VideoBarInput::FilterButton));
+        let reset = VideoBarEvent {
+            index: MenuAction::Mirror.code(),
+            ..event(35)
+        };
+        assert_eq!(
+            VideoBarInput::from_event(reset),
+            Some(VideoBarInput::MenuReset(MenuAction::Mirror))
+        );
         assert_eq!(
             VideoBarInput::from_event(event(32)),
             Some(VideoBarInput::Ab(AbInput::MenuRefresh))

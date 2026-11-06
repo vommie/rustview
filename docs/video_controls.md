@@ -97,17 +97,36 @@ them without an import cycle).
 ## Video filters (questionnaire `2026-11-05-rustview-videofilter`, built in 0.6.11)
 
 The filter button (between the A-B group and the speaker; icon `adjustments-horizontal`) opens a menu like a context menu:
-Image (Rotate Right, Rotate Left, Rotate 180 Degrees, Mirror, Deinterlace, Adjust Picture > the sliders Gamma, Brightness,
-Contrast, Saturation from -100 to 100 and Reset Picture), Sound (Normalize Volume > Off, Loudness, Dynamic, Speech, Compressor,
-RustCut's four kinds) and All Filters Off. Rotation and mirroring combine; a filter entry leaves the menu open for the next one.
-While a filter is on the button is orange (`Theme.filter-active`) with the number of filters; inside "..." the entry reads
-"Filters (N)" with the groups Image and Sound, and "..." carries the number. A slider is dragged, takes the wheel (10 per notch)
-and a right click sets 0.
+Image (Rotate 90 Right, Rotate 180, Rotate 90 Left, Mirror, Deinterlace, Adjust Picture > the sliders Gamma, Brightness,
+Contrast, Saturation from -100 to 100), Sound (Normalize Volume > Off, Loudness, Dynamic, Speech, Compressor, RustCut's four
+kinds; the default of the settings is named) and Reset All Filters. Rotation and mirroring combine; a filter entry leaves the
+menu open for the next one. While a filter is on the button is orange (`Theme.filter-active`) with the number of filters; inside
+"..." the entry "Filters" shows "N on" with the groups Image and Sound, and "..." carries the number.
+
+**Filter rows (user requests 2026-11-06).** Every filter is a row of kind 7 (`ui/multiview_bar_menu_rows.slint`): its icon,
+label, key, a value column ("On", "1 on", the normalization, a slider's value) and a reset button, then the slot of the submenu
+chevron. A filter that is on shows icon and value in the filter color; its reset button is enabled (text color, hover) only
+then, else it is faint and takes no click. The value column is as wide as the widest value any row of the menu can show
+(`value_template`, measured by `MultiviewBarMenu`), so the reset buttons of a menu stand in one column at its right edge and
+nothing moves when a value changes. The rotations are three rows (one of them can be on; a click on it turns back). A slider is
+dragged, takes the wheel (10 per notch), a right click or its reset button sets 0.
+
+**Widths.** `MultiviewBarMenu.natural-width` lays every row out invisibly (`BarMenuRowMeasure`, the same columns) and takes the
+widest, between 150 and 440 px; the "..." menu, the filter menu and each of their submenus use it, so every level is as wide as
+its own entries.
+
+**Default normalization.** Settings > Multiview > Player > Normalize volume (`fullscreen.player.normalize`, "off" by default)
+is what every video plays (`video_filter::default_normalize`); `VideoFilters::normalize` is this video's override (`None` =
+the default) and counts as a filter only while it differs from the default. A change of the setting reaches every running video
+without an override at once (`apply_default_normalize`, over `ViewerTabManager::all_instances`).
 
 - **Only for now** (user decision): filters belong to the tile (`TileState::filters`) and are never stored; a duplicate takes
   them over (`instance_clone.rs`), a tile that takes over another medium's player drops them (`reload_video`), a merge keeps them.
 - **mpv:** rotation = `video-rotate` (mpv adds it to the file's rotation and reports the sum in `video-params/rotate`, so the
-  tile is probed again when that report arrives: aspect, zoom, texture), mirror = `@rv-mirror:lavfi=[hflip]` in `vf`, the
+  tile is probed again when that report arrives: aspect, zoom, texture), mirror = `@rv-mirror:lavfi=[hflip]` in `vf` (like
+  RustCut; `vflip` while the whole rotation, file plus own, is a quarter turn, so it always swaps left and right on screen; a
+  libavfilter filter needs frames in memory, so while it is on the player decodes with `hwdec=auto-copy` and goes back to
+  `auto-safe` after it: without that the mirror did nothing with VAAPI), the
   sliders = `gamma`/`brightness`/`contrast`/`saturation`, deinterlacing = `deinterlace`, normalization = `@rv-norm:lavfi=[...]`
   in `af` (RustCut's graphs). The labeled filters are added and removed by label, so the user's own `vf`/`af` stay; only the
   settings that changed are sent (`video_filter::mpv::changes`).

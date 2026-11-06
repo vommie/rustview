@@ -78,6 +78,7 @@ export component SettingsPageMultiview inherits VerticalLayout {
     in-out property <bool> player-fade: true;
     in-out property <bool> player-show-ms: false;
     in-out property <int> player-seek-idx: 0;
+    in-out property <int> player-normalize-idx: 0;
     in property <PlayerBarLimits> player-limits;
     // Jump keys of the video player
     in-out property <int> video-jump-secs: 5;
@@ -419,6 +420,7 @@ export component SettingsPageMultiview inherits VerticalLayout {
         fade <=> root.player-fade;
         show-ms <=> root.player-show-ms;
         seek-idx <=> root.player-seek-idx;
+        normalize-idx <=> root.player-normalize-idx;
         limits: root.player-limits;
     }
 

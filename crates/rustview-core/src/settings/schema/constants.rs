@@ -592,6 +592,10 @@ pub const DEFAULT_FULLSCREEN_PLAYER_SHOW_MS: bool = false;
 /// configured, its `hr-seek` option).
 pub const DEFAULT_FULLSCREEN_PLAYER_SEEK: &str = "exact";
 
+/// The volume normalization every video starts with (Settings > Multiview > Player): "off", "loudness", "dynamic", "speech"
+/// or "compressor" (`RustCut`'s four kinds).
+pub const DEFAULT_FULLSCREEN_PLAYER_NORMALIZE: &str = "off";
+
 /// How long the bar fades in or out.
 /// How long a key that moves a video (jumps, frame steps, the A-B repeat keys) shows its control bar, in milliseconds.
 pub const MULTIVIEW_VIDEO_BAR_PULSE_MS: u64 = 1500;

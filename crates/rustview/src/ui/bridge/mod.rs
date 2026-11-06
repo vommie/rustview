@@ -274,6 +274,7 @@ impl UiBridge {
         prefs::apply(&app_settings.fullscreen);
         zoom_prefs::apply(&app_settings.fullscreen);
         crate::viewer::multiview::video_bar::prefs::apply(&app_settings.fullscreen.player);
+        crate::viewer::multiview::video_filter::apply_default_normalize(&app_settings.fullscreen.player.normalize, &[]);
         {
             // The A-B bubble of a collapsed video bar: its last state, and its toggles stored quietly (UI state, no change hooks).
             let store = settings.clone();

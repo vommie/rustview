@@ -218,8 +218,8 @@ fn sync_lists(view: &VideoBarView, slot: &mut Slot) {
     slot.last = Some(view.clone());
 }
 
-/// An entry of a bar's menu as a row of `MultiviewBarMenu` (the rows of a context menu, plus the slider of kind 6 with its
-/// value as a share of its width and as text).
+/// An entry of a bar's menu as a row of `MultiviewBarMenu`: the rows of a context menu, plus the slider (kind 6, its value as
+/// a share of its width) and the filter row (kind 7, `is_checked` = on), both with a value column and a reset button.
 fn menu_item(entry: &MenuEntry) -> ContextMenuItemModel {
     let (kind, checked) = match entry.kind {
         EntryKind::Action => (0, false),
@@ -229,30 +229,26 @@ fn menu_item(entry: &MenuEntry) -> ContextMenuItemModel {
         EntryKind::Header => (4, false),
         EntryKind::Submenu => (5, false),
         EntryKind::Slider(_) => (6, false),
+        EntryKind::Filter(on) => (7, on),
     };
-    let (value, value_text) = match entry.kind {
-        EntryKind::Slider(value) => (
-            (value + KNOB_RANGE).az::<f32>() / (2 * KNOB_RANGE).az::<f32>(),
-            if value > 0 {
-                format!("+{value}")
-            } else {
-                value.to_string()
-            }
-            .into(),
-        ),
-        _ => (0.0, slint::SharedString::default()),
+    let value = match entry.kind {
+        EntryKind::Slider(value) => (value + KNOB_RANGE).az::<f32>() / (2 * KNOB_RANGE).az::<f32>(),
+        _ => 0.0,
     };
     ContextMenuItemModel {
         id: entry.action.map_or(-1, MenuAction::code),
         value,
-        value_text,
+        value_text: entry.value.as_str().into(),
+        value_template: entry.value_template.as_str().into(),
+        resettable: entry.reset.is_some(),
+        reset_enabled: entry.reset == Some(true),
         text: entry.text.as_str().into(),
         shortcut: entry.shortcut.as_str().into(),
         icon: crate::icons::to_slint(entry.icon),
         kind,
         is_checked: checked,
         is_enabled: entry.enabled,
-        has_submenu: entry.kind == EntryKind::Submenu,
+        has_submenu: matches!(entry.action, Some(MenuAction::Open(_))),
         tooltip: entry.tooltip.as_str().into(),
         ..ContextMenuItemModel::default()
     }

@@ -75,6 +75,9 @@ impl CtxMenuDispatcher {
             hold: item.hold,
             value: 0.0,
             value_text: slint::SharedString::default(),
+            value_template: slint::SharedString::default(),
+            resettable: false,
+            reset_enabled: false,
         }
     }
 

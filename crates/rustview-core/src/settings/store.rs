@@ -25,8 +25,8 @@ use super::schema::{
     MIN_FULLSCREEN_ZOOM_MINIMAP_SECS, MIN_FULLSCREEN_ZOOM_OUT_PERCENT, MIN_FULLSCREEN_ZOOM_STEP_PERCENT,
 };
 use super::schema::{
-    DEFAULT_FULLSCREEN_PLAYER_BAR_REVEAL, DEFAULT_FULLSCREEN_PLAYER_BAR_STYLE, DEFAULT_FULLSCREEN_PLAYER_SEEK,
-    MAX_FULLSCREEN_PLAYER_BAR_HEIGHT_PX, MAX_FULLSCREEN_PLAYER_BAR_OPACITY_PERCENT,
+    DEFAULT_FULLSCREEN_PLAYER_BAR_REVEAL, DEFAULT_FULLSCREEN_PLAYER_BAR_STYLE, DEFAULT_FULLSCREEN_PLAYER_NORMALIZE,
+    DEFAULT_FULLSCREEN_PLAYER_SEEK, MAX_FULLSCREEN_PLAYER_BAR_HEIGHT_PX, MAX_FULLSCREEN_PLAYER_BAR_OPACITY_PERCENT,
     MIN_FULLSCREEN_PLAYER_BAR_HEIGHT_PX, MIN_FULLSCREEN_PLAYER_BAR_OPACITY_PERCENT,
 };
 use super::schema::{
@@ -497,6 +497,15 @@ impl SettingsStore {
         } else {
             DEFAULT_FULLSCREEN_PLAYER_SEEK.to_string()
         };
+        let normalize = player.normalize.trim().to_lowercase();
+        player.normalize = if matches!(
+            normalize.as_str(),
+            "off" | "loudness" | "dynamic" | "speech" | "compressor"
+        ) {
+            normalize
+        } else {
+            DEFAULT_FULLSCREEN_PLAYER_NORMALIZE.to_string()
+        };
     }
 }
 
@@ -583,6 +592,15 @@ mod added_settings_tests {
         let mut unknown: AppSettings = serde_json::from_str(r#"{"fullscreen": {"player": {"seek": "warp"}}}"#).unwrap();
         SettingsStore::validate_and_sanitize(&mut unknown);
         assert_eq!(unknown.fullscreen.player.seek, "exact");
+        // Added in 0.6.12: an old file has no normalization (off), an unknown one is off, a known one stays.
+        assert_eq!(unknown.fullscreen.player.normalize, "off");
+        let mut loud: AppSettings =
+            serde_json::from_str(r#"{"fullscreen": {"player": {"normalize": " Speech "}}}"#).unwrap();
+        SettingsStore::validate_and_sanitize(&mut loud);
+        assert_eq!(loud.fullscreen.player.normalize, "speech");
+        let mut odd: AppSettings = serde_json::from_str(r#"{"fullscreen": {"player": {"normalize": "max"}}}"#).unwrap();
+        SettingsStore::validate_and_sanitize(&mut odd);
+        assert_eq!(odd.fullscreen.player.normalize, "off");
     }
 
     #[test]

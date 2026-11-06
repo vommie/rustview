@@ -10,8 +10,8 @@ use super::time_text::TimeTexts;
 use super::view::{AbButton, AbInput, VideoBarInput};
 use super::volume::VolumeIcon;
 use crate::icons::Icon;
-use crate::viewer::multiview::video_filter::VideoFilters;
 use crate::viewer::multiview::video_filter::menu::{self as filter_menu, FilterKeys};
+use crate::viewer::multiview::video_filter::{Normalize, VideoFilters};
 
 /// The input of the bar an entry of the "..." menu stands for (`None`: it opens a popup or a submenu, or it is a filter).
 pub fn input(action: MenuAction) -> Option<VideoBarInput> {
@@ -40,6 +40,8 @@ pub struct MoreInput<'a> {
     pub muted: bool,
     pub ab: Option<&'a AbBarView>,
     pub filters: &'a VideoFilters,
+    /// The normalization of Settings > Multiview > Player.
+    pub default_normalize: Normalize,
     pub keys: &'a FilterKeys,
     pub path: MenuPath,
 }
@@ -93,16 +95,16 @@ pub fn build(input: &MoreInput) -> MenuLevels {
         }
         entries.push(MenuEntry::separator());
     }
-    entries.push(MenuEntry::submenu(
-        MenuSub::Filters,
-        filter_menu::title_with_count(input.filters),
-        Some(Icon::VideoFilter),
+    entries.push(filter_menu::more_entry(
+        input.filters,
+        input.default_normalize,
         input.path,
-        0,
     ));
     let (sub, sub2) = match input.path.at(0) {
         Some(MenuSub::AbRepeat) => (input.ab.map(ab_entries).unwrap_or_default(), Vec::new()),
-        Some(MenuSub::Filters) => filter_menu::more_levels(input.filters, input.keys, input.path),
+        Some(MenuSub::Filters) => {
+            filter_menu::more_levels(input.filters, input.keys, input.default_normalize, input.path)
+        }
         _ => (Vec::new(), Vec::new()),
     };
     MenuLevels { entries, sub, sub2 }
@@ -194,6 +196,7 @@ mod tests {
             muted: false,
             ab,
             filters: &filters,
+            default_normalize: Normalize::Off,
             keys: &FilterKeys::default(),
             path,
         })
@@ -218,7 +221,13 @@ mod tests {
             actions(&filters_only.entries),
             [Some(MenuAction::Open(MenuSub::Filters))]
         );
-        assert_eq!(filters_only.entries[0].text, "Filters (1)");
+        assert_eq!(
+            (
+                filters_only.entries[0].text.as_str(),
+                filters_only.entries[0].value.as_str()
+            ),
+            ("Filters", "1 on")
+        );
         let ab = ab();
         let closed = menu(BarFit::More, Some(&ab), MenuPath::default());
         assert_eq!(
@@ -261,7 +270,7 @@ mod tests {
             levels
                 .sub2
                 .iter()
-                .any(|e| e.action == Some(MenuAction::Mirror) && e.kind == EntryKind::Check(true))
+                .any(|e| e.action == Some(MenuAction::Mirror) && e.kind == EntryKind::Filter(true))
         );
         assert!(levels.sub2.iter().any(|e| matches!(e.kind, EntryKind::Slider(0))));
     }

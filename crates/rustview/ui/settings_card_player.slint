@@ -46,6 +46,7 @@ export component SettingsCardPlayer inherits VerticalLayout {
     in-out property <bool> fade: true;
     in-out property <bool> show-ms: false;
     in-out property <int> seek-idx: 0; // 0 = exact, 1 = like mpv's controller, 2 = keyframes, 3 = as mpv is configured
+    in-out property <int> normalize-idx: 0; // 0 = off, 1 = loudness, 2 = dynamic, 3 = speech, 4 = compressor
     in property <PlayerBarLimits> limits: { min-opacity: 20, max-opacity: 100, min-height: 20, max-height: 64 };
 
     SettingsCard {
@@ -106,6 +107,17 @@ export component SettingsCardPlayer inherits VerticalLayout {
                 width: 220px;
                 model: ["Exact", "Like mpv's controller", "Keyframes (fastest)", "As mpv is configured"];
                 current-index <=> root.seek-idx;
+            }
+        }
+
+        SettingsOptionRow {
+            label: "Normalize volume";
+            tooltip: "The volume normalization every video starts with (as in RustCut). Loudness: every video equally loud. Dynamic: quiet parts louder. Speech: voices clear and even. Compressor: loud peaks quieter. The filter menu of a video can choose another one for that video in its view.";
+
+            ComboBox {
+                width: 220px;
+                model: ["Off", "Loudness", "Dynamic", "Speech", "Compressor"];
+                current-index <=> root.normalize-idx;
             }
         }
 

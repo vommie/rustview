@@ -5,6 +5,12 @@ use super::MpvPlayer;
 use crate::viewer::multiview::video_filter::mpv::MpvSetting;
 
 impl MpvPlayer {
+    /// The rotation the file asks for (`video-dec-params/rotate`: without `RustView`'s own rotation), 0 while unknown. Read
+    /// only when a filter changes.
+    pub fn file_rotation(&self) -> i64 {
+        self.mpv.get_property::<i64>("video-dec-params/rotate").unwrap_or(0)
+    }
+
     /// Applies `settings` (the changes of a tile's filters). A failure is logged and the rest goes on.
     pub fn apply_filter_settings(&self, settings: &[MpvSetting]) {
         for setting in settings {

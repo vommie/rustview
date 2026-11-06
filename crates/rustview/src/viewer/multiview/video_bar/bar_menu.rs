@@ -3,7 +3,7 @@
 //! Every entry reports its action's code (`MenuAction::code`), a slider also its value.
 
 use crate::icons::Icon;
-use crate::viewer::multiview::video_filter::{FilterChange, Knob, Normalize};
+use crate::viewer::multiview::video_filter::{FilterChange, FilterPart, Knob, Normalize};
 
 /// The submenus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -65,17 +65,18 @@ pub enum MenuAction {
     AbClear,
     AbSave,
     AbLoad,
-    RotateRight,
-    RotateLeft,
-    Rotate180,
+    /// A rotation entry: this many degrees clockwise (90, 180, 270), or none again when it is the one shown.
+    Rotation(u16),
     Mirror,
     Deinterlace,
     /// A slider of the picture adjustments.
     Knob(Knob),
-    ResetPicture,
     Normalize(Normalize),
     AllFiltersOff,
 }
+
+/// The rotation entries of the filter menus.
+pub const ROTATIONS: [u16; 3] = [90, 180, 270];
 
 const SUBS: [MenuSub; 5] = [
     MenuSub::AbRepeat,
@@ -85,7 +86,7 @@ const SUBS: [MenuSub; 5] = [
     MenuSub::FilterSound,
 ];
 
-const PLAIN: [MenuAction; 16] = [
+const PLAIN: [MenuAction; 12] = [
     MenuAction::Milliseconds,
     MenuAction::Volume,
     MenuAction::Mute,
@@ -95,19 +96,16 @@ const PLAIN: [MenuAction; 16] = [
     MenuAction::AbClear,
     MenuAction::AbSave,
     MenuAction::AbLoad,
-    MenuAction::RotateRight,
-    MenuAction::RotateLeft,
-    MenuAction::Rotate180,
     MenuAction::Mirror,
     MenuAction::Deinterlace,
-    MenuAction::ResetPicture,
     MenuAction::AllFiltersOff,
 ];
 
-/// The codes of the actions with a value: submenus from 100, knobs from 200, normalizations from 300.
+/// The codes of the actions with a value: submenus from 100, knobs from 200, normalizations from 300, rotations from 400.
 const SUB_BASE: i32 = 100;
 const KNOB_BASE: i32 = 200;
 const NORMALIZE_BASE: i32 = 300;
+const ROTATION_BASE: i32 = 400;
 
 fn position<T: PartialEq>(list: &[T], item: &T) -> i32 {
     list.iter()
@@ -126,27 +124,41 @@ impl MenuAction {
             Self::Open(sub) => SUB_BASE + position(&SUBS, &sub),
             Self::Knob(knob) => KNOB_BASE + position(&Knob::ALL, &knob),
             Self::Normalize(normalize) => NORMALIZE_BASE + position(&Normalize::ALL, &normalize),
+            Self::Rotation(degrees) => ROTATION_BASE + position(&ROTATIONS, &degrees),
             plain => position(&PLAIN, &plain),
+        }
+    }
+
+    /// What the reset button of the entry puts back (`None`: the entry has none).
+    pub fn reset_part(self) -> Option<FilterPart> {
+        match self {
+            Self::Rotation(_) => Some(FilterPart::Rotation),
+            Self::Mirror => Some(FilterPart::Mirror),
+            Self::Deinterlace => Some(FilterPart::Deinterlace),
+            Self::Knob(knob) => Some(FilterPart::Knob(knob)),
+            Self::Open(MenuSub::FilterPicture) => Some(FilterPart::Picture),
+            Self::Open(MenuSub::FilterSound) => Some(FilterPart::Normalize),
+            Self::Open(MenuSub::FilterImage) => Some(FilterPart::Image),
+            Self::Open(MenuSub::Filters) | Self::AllFiltersOff => Some(FilterPart::All),
+            _ => None,
         }
     }
 
     /// The change of the video filters the entry stands for (`None`: no filter, or a slider, which reports its value).
     pub fn filter_change(self) -> Option<FilterChange> {
         match self {
-            Self::RotateRight => Some(FilterChange::Rotate(90)),
-            Self::RotateLeft => Some(FilterChange::Rotate(-90)),
-            Self::Rotate180 => Some(FilterChange::Rotate(180)),
+            Self::Rotation(degrees) => Some(FilterChange::ToggleRotation(degrees)),
             Self::Mirror => Some(FilterChange::ToggleMirror),
             Self::Deinterlace => Some(FilterChange::ToggleDeinterlace),
-            Self::ResetPicture => Some(FilterChange::ResetPicture),
             Self::Normalize(normalize) => Some(FilterChange::Normalize(normalize)),
-            Self::AllFiltersOff => Some(FilterChange::AllOff),
+            Self::AllFiltersOff => Some(FilterChange::Reset(FilterPart::All)),
             _ => None,
         }
     }
 
     pub fn from_code(code: i32) -> Option<Self> {
         match code {
+            c if c >= ROTATION_BASE => at(&ROTATIONS, c, ROTATION_BASE).map(Self::Rotation),
             c if c >= NORMALIZE_BASE => at(&Normalize::ALL, c, NORMALIZE_BASE).map(Self::Normalize),
             c if c >= KNOB_BASE => at(&Knob::ALL, c, KNOB_BASE).map(Self::Knob),
             c if c >= SUB_BASE => at(&SUBS, c, SUB_BASE).map(Self::Open),
@@ -165,8 +177,11 @@ pub enum EntryKind {
     /// A line that only tells something (the times, a group's name).
     Header,
     Submenu,
-    /// A slider from -`KNOB_RANGE` to `KNOB_RANGE`.
+    /// A slider from -`KNOB_RANGE` to `KNOB_RANGE` (with a reset button).
     Slider(i32),
+    /// A filter: its icon stays, while it is on (`true`) the icon and the value are in the filter color; a value column and a
+    /// reset button follow (`MenuEntry::value`, `reset`).
+    Filter(bool),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -180,6 +195,12 @@ pub struct MenuEntry {
     pub tooltip: String,
     /// The submenu of this entry is open (it stays highlighted).
     pub open: bool,
+    /// The value column of a filter or slider (the text, and the widest text it can have, so the column never changes
+    /// width while the value changes).
+    pub value: String,
+    pub value_template: String,
+    /// The reset button of a filter or slider: `Some(enabled)` (enabled only while the filter is on).
+    pub reset: Option<bool>,
 }
 
 impl MenuEntry {
@@ -193,6 +214,9 @@ impl MenuEntry {
             enabled: true,
             tooltip: String::new(),
             open: false,
+            value: String::new(),
+            value_template: String::new(),
+            reset: None,
         }
     }
 
@@ -206,6 +230,9 @@ impl MenuEntry {
             enabled: false,
             tooltip: String::new(),
             open: false,
+            value: String::new(),
+            value_template: String::new(),
+            reset: None,
         }
     }
 
@@ -225,8 +252,30 @@ impl MenuEntry {
         }
     }
 
+    /// The entry of a filter group's submenu: a filter row (`active`: a filter of the group is on) that opens it.
+    pub fn filter_submenu(
+        sub: MenuSub,
+        text: impl Into<String>,
+        icon: Option<Icon>,
+        (path, level): (MenuPath, usize),
+        active: bool,
+    ) -> Self {
+        Self {
+            open: path.at(level) == Some(sub),
+            ..Self::new(MenuAction::Open(sub), EntryKind::Filter(active), text, icon)
+        }
+    }
+
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
+        self
+    }
+
+    /// The value column and the reset button of a filter or slider (`template`: the widest value it can show).
+    pub fn with_value(mut self, value: impl Into<String>, template: &str, resettable: bool) -> Self {
+        self.value = value.into();
+        template.clone_into(&mut self.value_template);
+        self.reset = Some(resettable);
         self
     }
 
@@ -274,6 +323,7 @@ mod tests {
         all.extend(SUBS.map(MenuAction::Open));
         all.extend(Knob::ALL.map(MenuAction::Knob));
         all.extend(Normalize::ALL.map(MenuAction::Normalize));
+        all.extend(ROTATIONS.map(MenuAction::Rotation));
         let mut codes = std::collections::HashSet::new();
         for action in all {
             let code = action.code();
@@ -283,6 +333,12 @@ mod tests {
         assert_eq!(MenuAction::from_code(-1), None);
         assert_eq!(MenuAction::from_code(99), None);
         assert_eq!(MenuAction::from_code(199), None);
+        assert_eq!(MenuAction::Rotation(90).reset_part(), Some(FilterPart::Rotation));
+        assert_eq!(
+            MenuAction::Open(MenuSub::FilterSound).reset_part(),
+            Some(FilterPart::Normalize)
+        );
+        assert_eq!(MenuAction::Open(MenuSub::AbRepeat).reset_part(), None);
     }
 
     #[test]

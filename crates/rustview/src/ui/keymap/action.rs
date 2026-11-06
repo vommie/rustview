@@ -7,7 +7,7 @@ use crate::ui::tabs::grid::mark::{GridKey, Step};
 use crate::viewer::multiview::command::{AbKey, PlayerCommand};
 use crate::viewer::multiview::media_actions::MediaActionId;
 use crate::viewer::multiview::primary_actions::PrimaryActionId;
-use crate::viewer::multiview::video_filter::FilterChange;
+use crate::viewer::multiview::video_filter::{FilterChange, FilterPart};
 
 /// The keys cannot be changed (Esc, the cursor keys of Browse, type-ahead find); the page shows them with a lock.
 pub const FIXED: u8 = 1;
@@ -184,7 +184,7 @@ actions! {
     PlayerMirror: Player, "player.filter_mirror", "Filters: mirror (on top of the rotation)", [];
     PlayerGamma: Player, "player.filter_gamma", "Filters: gamma up by 10 (after 100 back to 0)", [];
     PlayerDeinterlace: Player, "player.filter_deinterlace", "Filters: deinterlace (on or off)", [];
-    PlayerFiltersOff: Player, "player.filters_off", "Filters: all filters off", [];
+    PlayerFiltersOff: Player, "player.filters_off", "Filters: reset all filters", [];
     AbSetA: AbRepeat, "ab_repeat.set_a", "Set A (the start of the repeat)", ["Home"];
     AbSetB: AbRepeat, "ab_repeat.set_b", "Set B (the end of the repeat)", ["End"];
     AbClear: AbRepeat, "ab_repeat.clear", "Clear A and B", ["Control+Delete"];
@@ -306,7 +306,7 @@ impl Action {
             Self::PlayerMirror => PlayerCommand::Filter(FilterChange::ToggleMirror),
             Self::PlayerGamma => PlayerCommand::Filter(FilterChange::CycleGamma),
             Self::PlayerDeinterlace => PlayerCommand::Filter(FilterChange::ToggleDeinterlace),
-            Self::PlayerFiltersOff => PlayerCommand::Filter(FilterChange::AllOff),
+            Self::PlayerFiltersOff => PlayerCommand::Filter(FilterChange::Reset(FilterPart::All)),
             Self::AbSetA => PlayerCommand::Ab(AbKey::SetA),
             Self::AbSetB => PlayerCommand::Ab(AbKey::SetB),
             Self::AbClear => PlayerCommand::Ab(AbKey::Clear),
