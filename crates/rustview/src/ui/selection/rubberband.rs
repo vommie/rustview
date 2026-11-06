@@ -313,7 +313,7 @@ impl RubberbandAutoScroller {
     {
         let window_h = window.window().size().height.az::<f32>();
         let viewport_top = MEDIA_HEADER_BAR_HEIGHT_PX; // ~28px header
-        let viewport_bottom = window_h - 28.0; // ~28px status bar
+        let viewport_bottom = window_h - 26.0; // the status bar (26 px, `ui/status_bar.slint`)
         self.update_cursor_in(view_y, viewport_top, viewport_bottom, on_tick);
     }
 

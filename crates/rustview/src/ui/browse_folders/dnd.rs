@@ -17,7 +17,7 @@ use std::sync::Arc;
 /// The toolbar strip above the Browse view (`main.slint`); the top bar's height comes from the window (`center-frame-y`).
 const MEDIA_TOOLBAR_HEIGHT_PX: f32 = 26.0;
 /// Height of the status bar below the Browse view.
-const STATUS_BAR_HEIGHT_PX: f32 = 28.0;
+const STATUS_BAR_HEIGHT_PX: f32 = 26.0;
 
 /// Scrolls the Browse view while a medium is dragged near its top or bottom edge, so that a folder row that is out of sight can be
 /// reached; the drop target follows the scroll although the pointer rests.

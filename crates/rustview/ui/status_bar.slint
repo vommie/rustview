@@ -21,7 +21,8 @@ export component StatusBarSeparator inherits VerticalLayout {
 /// Spacer: Expands to push all progress bars and status metrics flush to the right.
 /// Zone 2 (Right): Dynamic progress bars + structured info badges (all right-aligned).
 export component StatusBar inherits Rectangle {
-    height: 28px;
+    // RustCut's status line height (`Theme.status-bar-height` there).
+    height: 26px;
     background: Theme.surface;
 
     // View Mode Context Property (Browse View vs. Tab Viewer View)

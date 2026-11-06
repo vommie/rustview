@@ -89,6 +89,8 @@ export component Button inherits Rectangle {
     in property <IconId> icon: IconId.none;
     in property <bool> enabled: true;
     in property <bool> primary;
+    // The window's main button (RustCut's bold "Close").
+    in property <bool> bold;
     callback clicked();
 
     height: SettingsMetrics.control-height;
@@ -121,6 +123,7 @@ export component Button inherits Rectangle {
         if root.text != "": Text {
             text: root.text;
             font-size: 12px;
+            font-weight: root.bold ? 700 : 400;
             color: root.enabled ? (root.primary ? Theme.primary : Theme.text) : Theme.text-muted;
             vertical-alignment: center;
         }
