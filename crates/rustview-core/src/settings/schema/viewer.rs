@@ -125,12 +125,15 @@ impl AbRepeatSettings {
 #[serde(default)]
 pub struct ViewerTabSettings {
     pub show_rating_badge: bool,
+    /// Where media tabs show their close button (`VIEWER_TAB_CLOSE_BUTTON_MODES`, added in 0.6.14).
+    pub close_buttons: String,
 }
 
 impl Default for ViewerTabSettings {
     fn default() -> Self {
         Self {
             show_rating_badge: DEFAULT_VIEWER_SHOW_TAB_RATING_BADGE,
+            close_buttons: super::DEFAULT_VIEWER_TAB_CLOSE_BUTTONS.to_owned(),
         }
     }
 }

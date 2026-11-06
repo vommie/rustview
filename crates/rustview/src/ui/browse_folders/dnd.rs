@@ -14,8 +14,8 @@ use rustview_core::util::cast::Az;
 use slint::ComponentHandle;
 use std::sync::Arc;
 
-/// Height of the bars above the Browse view in the main window (`main.slint` adds it to every point it reports).
-const BROWSE_VIEW_TOP_PX: f32 = 64.0;
+/// The toolbar strip above the Browse view (`main.slint`); the top bar's height comes from the window (`center-frame-y`).
+const MEDIA_TOOLBAR_HEIGHT_PX: f32 = 26.0;
 /// Height of the status bar below the Browse view.
 const STATUS_BAR_HEIGHT_PX: f32 = 28.0;
 
@@ -49,7 +49,7 @@ impl BrowseDragScroller {
             self.inner.stop();
             return;
         }
-        let top = BROWSE_VIEW_TOP_PX + MEDIA_HEADER_BAR_HEIGHT_PX;
+        let top = window.get_center_frame_y() + MEDIA_TOOLBAR_HEIGHT_PX + MEDIA_HEADER_BAR_HEIGHT_PX;
         let bottom = window_h - STATUS_BAR_HEIGHT_PX;
 
         let weak = window.as_weak();

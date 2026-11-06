@@ -1,18 +1,27 @@
+// The top bar of the main window, RustCut's tabs (questionnaire 2026-11-06-rustview-rustcut-look): on a bar darker than
+// the window, Browse and Tab-Grid are the first, fixed tabs (their own group, a thin line after them), then the media
+// tabs; the active tab has the window's color and merges into it. The Settings button sits at the right end.
+
 import { Theme } from "styles.slint";
 import { IconId } from "icons.slint";
-import { ToolbarButton } from "toolbar_button.slint";
-import { ToolbarSeparator, ToolbarSpacer } from "panel_toolbar.slint";
-import { MediaTabBar } from "tab_bar.slint";
+import { MediaTabBar, PinnedTab, TabBarMetrics, TabCloseButtons } from "tab_bar.slint";
 import { TabItemModel } from "types.slint";
+import { DockBarButton } from "dock_tab_bar.slint";
 
 export component TopToolbar inherits Rectangle {
-    height: 38px;
-    background: Theme.surface;
+    height: TabBarMetrics.bar-height;
+    background: Theme.chrome;
 
     in property <bool> is-browse-active: true;
     in property <bool> is-tab-grid-active: false;
     in property <[TabItemModel]> tabs: [];
     in property <bool> show-tab-rating-badge: false;
+    in property <TabCloseButtons> tab-close-buttons: TabCloseButtons.every-tab;
+    in property <int> tab-overflow-count: 0;
+    in property <length> tab-overflow-x: 0px;
+    in property <bool> tab-overflow-open: false;
+    out property <length> overflow-button-x: tab-bar.overflow-button-x;
+    out property <length> overflow-button-y: tab-bar.overflow-button-y;
 
     // Tab Drag & Drop State
     in property <bool> is-dragging-tab: false;
@@ -32,21 +41,14 @@ export component TopToolbar inherits Rectangle {
     callback tab-closed(int /* tab_id */);
     callback tab-context-menu(int /* tab_id */, length /* x */, length /* y */);
     callback tab-wheel-scrolled(bool /* is_next */);
+    callback tab-bar-resized(length /* width */);
+    callback tab-overflow-clicked();
 
     callback tab-drag-started(int /* tab_id */, int /* source_index */, length /* mouse_x */, length /* tab_width */);
     callback tab-drag-moved(length /* mouse_x */, length /* view_width */);
     callback tab-drag-ended(int /* tab_id */, int /* target_index */);
-    callback tab-drag-cancelled(int /* tab_id */);
 
-    public function scroll-tab-bar-by(dx: length) {
-        tab-bar.scroll-by(dx);
-    }
-
-    public function scroll-tab-into-view(tab-x: length, tab-width: length) {
-        tab-bar.scroll-tab-into-view(tab-x, tab-width);
-    }
-
-    // Bottom border separator line
+    // The window's top edge below the bar; the active tab covers it.
     Rectangle {
         y: parent.height - 1px;
         height: 1px;
@@ -54,43 +56,57 @@ export component TopToolbar inherits Rectangle {
     }
 
     HorizontalLayout {
-        padding-left: 8px;
-        padding-right: 8px;
-        spacing: 6px;
+        padding-left: 4px;
+        padding-right: 4px;
+        spacing: 2px;
 
-        // 1. Permanent Browse button strictly on the far left
-        ToolbarButton {
-            text: "Browse";
-            icon: IconId.library-browse;
-            tooltip: "Switch to Library Media Browser";
-            is-active: root.is-browse-active;
-            height: 28px;
-            y: (parent.height - self.height) / 2;
-            clicked => { root.browse-clicked(); }
+        // The fixed tabs: the library and the overview of all tabs.
+        VerticalLayout {
+            alignment: end;
+
+            PinnedTab {
+                title: "Browse";
+                icon: IconId.library-browse;
+                tooltip: "The library: folders, media and the search";
+                active: root.is-browse-active;
+                clicked => { root.browse-clicked(); }
+            }
         }
 
-        ToolbarSeparator {}
+        VerticalLayout {
+            alignment: end;
 
-        // 2. Permanent Tab-Grid button to the right of Browse
-        ToolbarButton {
-            text: "Tab-Grid";
-            icon: IconId.view-tab-grid;
-            tooltip: "Masonry overview of all open tabs (Left-click: Open tab, Middle-click: Fullscreen)";
-            is-active: root.is-tab-grid-active;
-            height: 28px;
-            y: (parent.height - self.height) / 2;
-            clicked => { root.tab-grid-clicked(); }
+            PinnedTab {
+                title: "Tab-Grid";
+                icon: IconId.view-tab-grid;
+                tooltip: "All open tabs side by side (click opens a tab, middle-click shows it in the fullscreen)";
+                active: root.is-tab-grid-active;
+                clicked => { root.tab-grid-clicked(); }
+            }
         }
 
-        ToolbarSeparator {}
+        // The line between the fixed tabs and the media tabs.
+        VerticalLayout {
+            alignment: center;
+            padding-left: 4px;
+            padding-right: 4px;
+            padding-top: 4px;
 
-        // 3. Embedded MediaTabBar with integrated Drag & Drop Reordering and Mouse Wheel Tab Cycling
+            Rectangle {
+                width: 1px;
+                height: 14px;
+                background: Theme.border;
+            }
+        }
+
         tab-bar := MediaTabBar {
             horizontal-stretch: 1;
-            height: 28px;
-            y: (parent.height - self.height) / 2;
             tabs: root.tabs;
             show-rating-badge: root.show-tab-rating-badge;
+            close-buttons: root.tab-close-buttons;
+            overflow-count: root.tab-overflow-count;
+            overflow-x: root.tab-overflow-x;
+            overflow-open: root.tab-overflow-open;
 
             is-dragging-tab: root.is-dragging-tab;
             drag-ghost-x: root.drag-ghost-x;
@@ -106,32 +122,22 @@ export component TopToolbar inherits Rectangle {
             tab-closed(id) => { root.tab-closed(id); }
             tab-context-menu(id, x, y) => { root.tab-context-menu(id, self.x + x, self.y + y); }
             tab-wheel-scrolled(is-next) => { root.tab-wheel-scrolled(is-next); }
+            resized(w) => { root.tab-bar-resized(w); }
+            overflow-clicked => { root.tab-overflow-clicked(); }
 
-            tab-drag-started(id, s-idx, mx, tw) => {
-                root.tab-drag-started(id, s-idx, mx, tw);
-            }
-            tab-drag-moved(mx, vw) => {
-                root.tab-drag-moved(mx, vw);
-            }
-            tab-drag-ended(id, t-idx) => {
-                root.tab-drag-ended(id, t-idx);
-            }
-            tab-drag-cancelled(id) => {
-                root.tab-drag-cancelled(id);
-            }
+            tab-drag-started(id, s-idx, mx, tw) => { root.tab-drag-started(id, s-idx, mx, tw); }
+            tab-drag-moved(mx, vw) => { root.tab-drag-moved(mx, vw); }
+            tab-drag-ended(id, t-idx) => { root.tab-drag-ended(id, t-idx); }
         }
 
-        ToolbarSeparator {}
+        VerticalLayout {
+            alignment: center;
 
-        // 4. Settings Button strictly on the far right
-        ToolbarButton {
-            text: "Settings";
-            icon: IconId.settings;
-            tooltip: "Application configuration and settings";
-            font-size: 12px;
-            height: 28px;
-            y: (parent.height - self.height) / 2;
-            clicked => { root.settings-clicked(); }
+            DockBarButton {
+                icon: IconId.settings;
+                tooltip: "Settings";
+                clicked => { root.settings-clicked(); }
+            }
         }
     }
 }

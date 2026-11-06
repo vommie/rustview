@@ -299,6 +299,9 @@ impl UiBridge {
         window.set_active_view_mode(0);
         window.set_tabs(ModelRc::new(VecModel::from(vec![])));
         window.set_viewer_show_tab_rating_badge(app_settings.viewer.tabs.show_rating_badge);
+        window.set_tab_close_buttons(crate::ui::tabs::strip_layout::close_buttons(
+            &app_settings.viewer.tabs.close_buttons,
+        ));
 
         window.set_is_virtual_folder(false);
         window.set_is_virtual_folder_btn_enabled(false);

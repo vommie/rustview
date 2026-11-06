@@ -1,5 +1,4 @@
-use crate::viewer::{MediaTabSession, TabId};
-use rustview_core::util::cast::Az;
+use crate::viewer::TabId;
 use slint::Timer;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -26,14 +25,6 @@ pub struct TabSlotInfo {
 pub struct TabDndGeometry;
 
 impl TabDndGeometry {
-    /// Calculates the estimated rendered width in pixels of a tab item given its title, format, and rating badge state.
-    pub fn estimate_tab_width(title: &str, has_rating_badge: bool) -> f32 {
-        let char_count = title.chars().count().az::<f32>();
-        let text_w = (char_count * 7.5).min(180.0);
-        let base_w = if has_rating_badge { 77.0 } else { 57.0 };
-        (base_w + text_w).clamp(70.0, 240.0)
-    }
-
     /// Computes unshifted horizontal slots (`start_x`, width, `center_x`) for all tabs in sequence.
     pub fn compute_tab_slots(tab_ids: &[TabId], widths: &[f32], spacing: f32, padding_start: f32) -> Vec<TabSlotInfo> {
         let mut slots = Vec::with_capacity(tab_ids.len());
@@ -52,29 +43,6 @@ impl TabDndGeometry {
         }
 
         slots
-    }
-
-    /// Computes the exact horizontal slot geometry (`start_x`, width) for a specific tab ID among open sessions.
-    pub fn find_tab_slot_geometry(
-        tabs: &[MediaTabSession],
-        target_tab_id: TabId,
-        show_rating_badge: bool,
-    ) -> Option<(f32, f32)> {
-        const SPACING: f32 = 4.0f32; // spacing: 4px in tab-layout
-
-        let mut current_x = 2.0f32; // padding-left: 2px in tab-layout
-        for session in tabs {
-            let has_rating = show_rating_badge && session.record.rating > 0;
-            let width = Self::estimate_tab_width(&session.title, has_rating);
-
-            if session.id == target_tab_id {
-                return Some((current_x, width));
-            }
-
-            current_x += width + SPACING;
-        }
-
-        None
     }
 
     /// Determines the active target slot index with hysteresis protection to eliminate flickering around midpoint boundaries.

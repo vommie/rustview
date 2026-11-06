@@ -19,8 +19,15 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   layout is remembered (`view.dock` in `settings.json`); Settings > Debug > Reset Layout restores the default. No migration:
   the first start takes the sidebars of the older settings (widths, tab order, folded Info and Tag History) as they were.
 
+- `viewer.tabs.close_buttons` (`every_tab`, `active_and_hovered`, `none`; default `every_tab`): where media tabs show
+  their close button.
+
 ### Changed
 
+- The top bar has RustCut's tabs: Browse and Tab-Grid are the first, fixed tabs, a thin line separates them from the media
+  tabs, and the active tab merges into the window. Media tabs share the bar's width; when even narrow tabs do not fit, a
+  "+n" button lists the others (a scrolling list under the button; the wheel still goes through all tabs). Settings is
+  the gear at the right end. The toolbar buttons of the panels are framed buttons like RustCut's.
 - Tooltips are RustCut's bubbles: a small tail points at the element, the bubble moves to the other side or along the
   window's edge when there is no room, glides from button to button and shows at once while one just closed; keys show
   as key caps on a line of their own. The default delay is 600 ms like RustCut's (a delay set in the settings stays).

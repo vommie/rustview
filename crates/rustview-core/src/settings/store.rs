@@ -293,6 +293,9 @@ impl SettingsStore {
         ) {
             settings.viewer.background_mode = DEFAULT_VIEWER_BACKGROUND_MODE.to_string();
         }
+        if !super::schema::VIEWER_TAB_CLOSE_BUTTON_MODES.contains(&settings.viewer.tabs.close_buttons.as_str()) {
+            super::schema::DEFAULT_VIEWER_TAB_CLOSE_BUTTONS.clone_into(&mut settings.viewer.tabs.close_buttons);
+        }
 
         // Fullscreen Sanitization
         settings.fullscreen.specific_monitor = settings.fullscreen.specific_monitor.trim().to_string();

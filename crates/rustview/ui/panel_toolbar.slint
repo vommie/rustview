@@ -34,17 +34,17 @@ export component ToolbarSpacer inherits Rectangle {
     background: transparent;
 }
 
-/// Unified horizontal toolbar for panels, docks, and sidebars.
-/// Styled with an elevated surface background (Theme.surface-variant) to visually signal an interactive action strip.
+/// Unified horizontal toolbar for panels, docks, and sidebars: a row of framed buttons right on the panel, like RustCut's
+/// panel toolbars (no strip of its own).
 export component PanelToolbar inherits Rectangle {
     in property <length> toolbar-height: 26px;
-    in property <color> toolbar-background: Theme.surface-variant;
-    in property <color> toolbar-border-color: Theme.border;
-    in property <length> toolbar-border-width: 1px;
-    in property <length> corner-radius: 4px;
-    in property <length> padding-horizontal: 4px;
-    in property <length> padding-vertical: 2px;
-    in property <length> item-spacing: 2px;
+    in property <color> toolbar-background: transparent;
+    in property <color> toolbar-border-color: transparent;
+    in property <length> toolbar-border-width: 0px;
+    in property <length> corner-radius: 0px;
+    in property <length> padding-horizontal: 0px;
+    in property <length> padding-vertical: 1px;
+    in property <length> item-spacing: 4px;
 
     height: root.toolbar-height;
     vertical-stretch: 0;

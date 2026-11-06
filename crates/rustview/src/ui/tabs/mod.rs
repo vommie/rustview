@@ -4,6 +4,7 @@ pub mod grid_bridge;
 pub mod grid_keys;
 pub mod icon;
 pub mod merge_limit;
+pub mod strip_layout;
 pub mod tab_selection;
 pub mod unsaved_marks;
 
@@ -29,6 +30,7 @@ mod merge;
 mod navigation;
 mod open;
 mod selection_ui;
+mod strip_ui;
 
 /// Parameter bundle for concluding a tab drag & drop session.
 pub struct TabDragEndParams<'a> {
@@ -89,11 +91,15 @@ impl BridgeViewerTabs {
                     shift_x: 0.0,
                     is_placeholder: false,
                     has_unsaved,
+                    x: 0.0,
+                    width: 0.0,
+                    shown: true,
                 }
             })
             .collect();
 
         window.set_tabs(ModelRc::new(VecModel::from(tab_models)));
+        Self::apply_strip_layout(window, state);
         window.set_has_tab_selection(!selection.is_empty());
         window.set_is_browse_active(is_browse);
         window.set_is_tab_grid_active(is_tab_grid);
@@ -129,8 +135,6 @@ impl BridgeViewerTabs {
             window.set_viewer_resolution(res_str.into());
 
             Self::sync_panels(window, tab_manager, library, state);
-
-            Self::scroll_active_tab_into_view(window, tab_manager, settings);
         } else {
             window.set_viewer_tab_id(-1);
             {

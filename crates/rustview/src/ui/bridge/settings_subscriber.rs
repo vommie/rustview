@@ -147,6 +147,7 @@ impl UiBridge {
                     };
                     window.set_viewer_background_mode(bg_mode_idx);
                     window.set_viewer_show_tab_rating_badge(new_clone.viewer.tabs.show_rating_badge);
+                    window.set_tab_close_buttons(crate::ui::tabs::strip_layout::close_buttons(&new_clone.viewer.tabs.close_buttons));
                 }
 
                 if diff_clone.debug_settings_changed {

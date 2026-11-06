@@ -13,6 +13,7 @@ import { TagHistoryPanel } from "tag_history_panel.slint";
 import { DockSidebar, DockPeek } from "dock_sidebar.slint";
 import { DockOverlay } from "dock_overlay.slint";
 import { DockPanelSlot } from "dock_panels.slint";
+import { TabOverflowMenu, TabBarMetrics, TabCloseButtons } from "tab_bar.slint";
 import { Dock, DockMetrics, RailPeek } from "dock_types.slint";
 import { VirtualizedMediaGrid } from "media_grid.slint";
 import { ThumbnailBadgeConfig, ThumbnailBadgeOverflowMode } from "thumbnail_badge_types.slint";
@@ -31,6 +32,7 @@ import { EmptyStateView } from "empty_state_view.slint";
 import { TabGridView } from "tab_grid_view.slint";
 
 export { SettingsWindow } from "settings_window.slint";
+export { TabCloseButtons } from "tab_bar.slint";
 export { Dock, DockMetrics, RailPeek, DockGroupView, DockTabView, DockRailItem, DockPanelPlace } from "dock_types.slint";
 export { LogWindow, LogLineView } from "log_window.slint";
 export { FormatRowView, UnsupportedFormatView } from "settings_format_row.slint";
@@ -374,6 +376,13 @@ export component MainWindow inherits Window {
     callback tab-closed(int /* tab_id */);
     callback tab-context-menu(int /* tab_id */, length /* x */, length /* y */);
     callback tab-wheel-scrolled(bool /* is_next */);
+    // The media tabs' strip of the top bar (`src/ui/tabs/strip_layout.rs`): its width, the tabs behind "+n", the close
+    // buttons (Settings > Viewer > Tabs).
+    callback tab-bar-resized(length /* width */);
+    in property <int> tab-overflow-count: 0;
+    in property <length> tab-overflow-x: 0px;
+    in-out property <bool> tab-overflow-open: false;
+    in property <TabCloseButtons> tab-close-buttons: TabCloseButtons.every-tab;
 
     // Tab Grid View Callbacks
     callback tab-grid-item-left-clicked(int /* tab_id */);
@@ -508,13 +517,7 @@ export component MainWindow inherits Window {
     callback sidebar-right-resized(length /* new_width */);
     callback sidebar-right-resize-finished(length /* final_width */);
 
-    public function scroll-tab-bar-by(dx: length) {
-        top-toolbar.scroll-tab-bar-by(dx);
-    }
 
-    public function scroll-tab-into-view(tab-x: length, tab-width: length) {
-        top-toolbar.scroll-tab-into-view(tab-x, tab-width);
-    }
 
     public function scroll-folder-tree-by(dy: length) {
         folder-panel.scroll-by(dy);
@@ -574,7 +577,7 @@ export component MainWindow inherits Window {
     /// that happens while the pointer rests.
     pure public function drag-row-id-at(window-x: length, window-y: length) -> int {
         let view-x = window-x - left-sidebar.width - resizer_left.width;
-        let view-y = window-y - 64px - 28px;
+        let view-y = window-y - top-toolbar.height - 26px - 28px;
         if root.is-table-view {
             return table-view.row-id-at-viewport(view-x, view-y);
         } else {
@@ -692,6 +695,10 @@ export component MainWindow inherits Window {
             is-tab-grid-active: root.is-tab-grid-active;
             tabs: root.tabs;
             show-tab-rating-badge: root.viewer-show-tab-rating-badge;
+            tab-close-buttons: root.tab-close-buttons;
+            tab-overflow-count: root.tab-overflow-count;
+            tab-overflow-x: root.tab-overflow-x;
+            tab-overflow-open: root.tab-overflow-open;
 
             is-dragging-tab: root.is-dragging-tab;
             drag-ghost-x: root.drag-ghost-x;
@@ -720,9 +727,8 @@ export component MainWindow inherits Window {
             tab-drag-ended(id, t-idx) => {
                 root.tab-drag-ended(id, t-idx);
             }
-            tab-drag-cancelled(id) => {
-                root.tab-drag-cancelled(id);
-            }
+            tab-bar-resized(w) => { root.tab-bar-resized(w); }
+            tab-overflow-clicked => { root.tab-overflow-open = !root.tab-overflow-open; }
         }
 
         HorizontalLayout {
@@ -852,23 +858,23 @@ export component MainWindow inherits Window {
                         }
                         item-context-menu(id, x, y) => {
                             if id >= 0 {
-                                root.media-context-menu(id, x + left-sidebar.width + resizer_left.width, y + 64px);
+                                root.media-context-menu(id, x + left-sidebar.width + resizer_left.width, y + top-toolbar.height + 26px);
                             } else {
-                                root.folder-row-context-menu(id, x + left-sidebar.width + resizer_left.width, y + 64px);
+                                root.folder-row-context-menu(id, x + left-sidebar.width + resizer_left.width, y + top-toolbar.height + 26px);
                             }
                         }
                         item-hover-changed(id, hover) => { root.media-hover-changed(id, hover); }
                         sort-clicked(idx) => { root.sort-column-clicked(idx); }
                         background-clicked => { root.background-clicked(); }
                         background-context-menu(x, y) => {
-                            root.browse-background-context-menu(x + left-sidebar.width + resizer_left.width, y + 64px);
+                            root.browse-background-context-menu(x + left-sidebar.width + resizer_left.width, y + top-toolbar.height + 26px);
                         }
                         item-drag-started(id, x, y) => {
                             if id >= 0 {
-                                root.media-drag-started(id, x + left-sidebar.width + resizer_left.width, y + 64px);
+                                root.media-drag-started(id, x + left-sidebar.width + resizer_left.width, y + top-toolbar.height + 26px);
                             }
                         }
-                        item-drag-moved(x, y) => { root.media-drag-moved(x + left-sidebar.width + resizer_left.width, y + 64px); }
+                        item-drag-moved(x, y) => { root.media-drag-moved(x + left-sidebar.width + resizer_left.width, y + top-toolbar.height + 26px); }
                         item-drag-ended => { root.media-drag-ended(); }
                         item-drag-over-row(id) => { root.media-drag-over-row(id); }
 
@@ -932,9 +938,9 @@ export component MainWindow inherits Window {
                         }
                         item-context-menu(id, x, y) => {
                             if id >= 0 {
-                                root.media-context-menu(id, x + left-sidebar.width + resizer_left.width, y + 64px);
+                                root.media-context-menu(id, x + left-sidebar.width + resizer_left.width, y + top-toolbar.height + 26px);
                             } else {
-                                root.folder-row-context-menu(id, x + left-sidebar.width + resizer_left.width, y + 64px);
+                                root.folder-row-context-menu(id, x + left-sidebar.width + resizer_left.width, y + top-toolbar.height + 26px);
                             }
                         }
                         sort-clicked(idx) => { root.sort-column-clicked(idx); }
@@ -942,14 +948,14 @@ export component MainWindow inherits Window {
                         column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
                         background-clicked => { root.background-clicked(); }
                         background-context-menu(x, y) => {
-                            root.browse-background-context-menu(x + left-sidebar.width + resizer_left.width, y + 64px);
+                            root.browse-background-context-menu(x + left-sidebar.width + resizer_left.width, y + top-toolbar.height + 26px);
                         }
                         item-drag-started(id, x, y) => {
                             if id >= 0 {
-                                root.media-drag-started(id, x + left-sidebar.width + resizer_left.width, y + 64px);
+                                root.media-drag-started(id, x + left-sidebar.width + resizer_left.width, y + top-toolbar.height + 26px);
                             }
                         }
-                        item-drag-moved(x, y) => { root.media-drag-moved(x + left-sidebar.width + resizer_left.width, y + 64px); }
+                        item-drag-moved(x, y) => { root.media-drag-moved(x + left-sidebar.width + resizer_left.width, y + top-toolbar.height + 26px); }
                         item-drag-ended => { root.media-drag-ended(); }
                         item-drag-over-row(id) => { root.media-drag-over-row(id); }
 
@@ -1035,7 +1041,7 @@ export component MainWindow inherits Window {
                         selection-cleared => { root.tab-selection-cleared(); }
                         item-middle-clicked(id) => { root.open-tab-fullscreen(id); }
                         item-close-clicked(id) => { root.tab-grid-item-close-clicked(id); }
-                        item-context-menu(id, x, y) => { root.tab-context-menu(id, x, y + 38px); }
+                        item-context-menu(id, x, y) => { root.tab-context-menu(id, x, y + top-toolbar.height); }
                         columns-changed(c) => { root.tab-grid-columns-changed(c); }
                         auto-columns-toggled(a) => { root.tab-grid-auto-columns-toggled(a); }
                         close-all-clicked => { root.tab-grid-close-all-clicked(); }
@@ -1094,6 +1100,20 @@ export component MainWindow inherits Window {
             generate-max: root.generate-total;
             active-workers: root.active-workers;
         }
+    }
+
+    // The tabs behind "+n" (a bubble under the button).
+    if root.tab-overflow-open && root.tab-overflow-count > 0: TabOverflowMenu {
+        tabs: root.tabs;
+        anchor-x: top-toolbar.overflow-button-x;
+        anchor-y: top-toolbar.overflow-button-y;
+        anchor-width: TabBarMetrics.overflow-width;
+        anchor-height: TabBarMetrics.tab-height;
+        tab-picked(id) => {
+            root.tab-overflow-open = false;
+            root.tab-selected(id);
+        }
+        dismissed => { root.tab-overflow-open = false; }
     }
 
     // A collapsed sidebar's group over the center (rail icons; RustCut's P9.9): hovering or clicking an icon shows it,

@@ -64,22 +64,23 @@ export component ToolbarToggleButton inherits Rectangle {
     width: root.button-width > 0px
         ? root.button-width
         : ((!root.has-text && root.has-icon)
-            ? self.height
+            ? 26px
             : (root.text-content-width + (root.has-icon ? (root.icon-size + 4px) : 0px) + (root.padding-horizontal * 2)));
-    height: 100%;
+    height: 24px;
     horizontal-stretch: 0;
-    border-radius: 3px;
+    border-radius: 4px;
 
+    // RustCut's `IconButton` look: a framed button on the panel, blue tint while on.
     background: !root.is-enabled ? transparent : (
-        root.is-active ? Theme.surface-selected : (
+        root.is-active ? Theme.primary.with-alpha(0.22) : (
             touch-area.pressed ? Theme.surface-selected : (
-                touch-area.has-hover ? Theme.surface-hover : transparent
+                touch-area.has-hover ? Theme.surface-hover : Theme.surface
             )
         )
     );
 
-    border-width: (root.is-active || (touch-area.has-hover && root.is-enabled)) ? 1px : 0px;
-    border-color: !root.is-enabled ? transparent : (root.is-active ? Theme.primary : Theme.border);
+    border-width: 1px;
+    border-color: root.is-active && root.is-enabled ? Theme.primary : Theme.border;
 
     tooltip-host := TooltipHost {
         text: root.tooltip;
@@ -120,7 +121,7 @@ export component ToolbarToggleButton inherits Rectangle {
     // Disabled state dims through the color alpha, never through `opacity` (an opacity layer would resample the icon).
     property <color> content-color: !root.is-enabled ? Theme.text-muted.transparentize(0.6) : (
         root.is-active ? Theme.primary : (
-            touch-area.has-hover ? Theme.text : Theme.text-muted
+            Theme.text
         )
     );
 

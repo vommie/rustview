@@ -134,6 +134,10 @@ export struct TabItemModel {
     is_placeholder: bool,
     /// A picture of the tab has unsaved edits (a dot next to the title).
     has_unsaved: bool,
+    // Its place in the strip of the top bar (`src/ui/tabs/strip_layout.rs`); hidden tabs wait behind "+n".
+    x: length,
+    width: length,
+    shown: bool,
 }
 
 /// Dynamic Model for a single tile item positioned within the TabGridView Masonry layout.

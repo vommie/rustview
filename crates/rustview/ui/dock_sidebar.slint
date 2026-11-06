@@ -195,6 +195,14 @@ component DockRail inherits Rectangle {
     in property <int> side;
     in property <[DockRailItem]> items;
 
+    // RustView: the rail's inner edge is a line like the resizer bar of an expanded sidebar (the view next to it has the
+    // rail's color; RustCut's rail borders on the darker video).
+    Rectangle {
+        x: root.side == 0 ? parent.width - 1px : 0px;
+        width: 1px;
+        background: Theme.border;
+    }
+
     // Whether the pointer is over this rail (the shown group stays while it is over rail or group); a parent touch
     // area keeps its hover while the pointer is over the icons.
     TouchArea {

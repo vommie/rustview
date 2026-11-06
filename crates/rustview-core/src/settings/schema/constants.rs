@@ -425,6 +425,9 @@ pub const MIN_AB_REPEAT_PAGE_SIZE: u32 = 5;
 pub const MAX_AB_REPEAT_PAGE_SIZE: u32 = 50;
 
 pub const DEFAULT_VIEWER_SHOW_TAB_RATING_BADGE: bool = false;
+/// Close buttons on media tabs (added in 0.6.14): `every_tab`, `active_and_hovered` or `none`.
+pub const DEFAULT_VIEWER_TAB_CLOSE_BUTTONS: &str = "every_tab";
+pub const VIEWER_TAB_CLOSE_BUTTON_MODES: [&str; 3] = ["every_tab", "active_and_hovered", "none"];
 
 pub const DEFAULT_VIEWER_BACKGROUND_MODE: &str = "Dark";
 

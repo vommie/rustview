@@ -171,6 +171,8 @@ pub struct UiState {
     pub active_tab_dialog_target: Option<TabId>,
     /// The tabs picked with Ctrl/Shift+click in the tab bar and the tab grid (menu entries act on them).
     pub tab_selection: TabSelection,
+    /// The width of the media tabs' strip in the top bar (reported by Slint, `tabs::strip_layout`).
+    pub tab_bar_width: f32,
     /// The tab whose grid item carries the keyboard mark (Settings > Hotkeys > Tab-Grid); `None` until an arrow key is pressed
     /// in the grid, and again whenever the grid opens.
     pub tab_grid_mark: Option<TabId>,
@@ -252,6 +254,7 @@ impl Default for UiState {
             active_associated_apps: Vec::new(),
             active_tab_dialog_target: None,
             tab_selection: TabSelection::default(),
+            tab_bar_width: 1000.0,
             tab_grid_mark: None,
             active_favorite_target: None,
             selected_favorite_path: None,

@@ -123,11 +123,16 @@ impl BridgeViewerTabs {
             );
         });
 
+        let win_strip = window.clone_strong();
+        let st_strip = state.clone();
+        window.on_tab_bar_resized(move |width| {
+            Self::handle_tab_bar_resized(width, &win_strip, &st_strip);
+        });
+
         let win_dmove = window.clone_strong();
         let st_dmove = state.clone();
-        let scroller_dmove = tab_autoscroller.clone();
-        window.on_tab_drag_moved(move |mouse_x, view_w| {
-            Self::handle_tab_drag_moved(mouse_x, view_w, &win_dmove, &st_dmove, &scroller_dmove);
+        window.on_tab_drag_moved(move |mouse_x, _view_width| {
+            Self::handle_tab_drag_moved(mouse_x, &win_dmove, &st_dmove);
         });
 
         let win_dend = window.clone_strong();

@@ -42,6 +42,9 @@ export component TabFace inherits Rectangle {
     // A framed panel below (the dialogs, user decision 2026-10-27, A): the selected tab has the frame's line on top and
     // at its sides and opens into the panel, like a file card's tab; no curves.
     in property <bool> outlined;
+    // RustView: room at the right end for elements its user puts there (the close button of a media tab).
+    in property <length> trailing: 0px;
+    out property <length> content-width: content.preferred-width;
 
     if root.active && root.outlined: Rectangle {
         border-top-left-radius: TabMetrics.radius;
@@ -111,9 +114,9 @@ export component TabFace inherits Rectangle {
     Rectangle {
         opacity: root.enabled ? 1 : 0.4;
 
-    HorizontalLayout {
+    content := HorizontalLayout {
         padding-left: root.show-title ? 10px : 0px;
-        padding-right: root.show-title ? 10px : 0px;
+        padding-right: (root.show-title ? 10px : 0px) + root.trailing;
         spacing: 6px;
         alignment: root.show-title ? start : center;
 

@@ -1,12 +1,73 @@
+// The tabs of the top bar, drawn like RustCut's (`TabFace`, questionnaire 2026-11-06-rustview-rustcut-look): the active
+// tab has the window's color and merges into the window below; Browse and Tab-Grid are fixed tabs of their own group;
+// the media tabs share the bar's width (`src/ui/tabs/strip_layout.rs` places them) and the ones that do not fit wait
+// behind a "+n" button whose list (`TabOverflowMenu`) shows them. Clicks, Ctrl/Shift selection, the wheel, the middle
+// button, the context menu and dragging work as before.
+
 import { Theme } from "styles.slint";
 import { TabItemModel } from "types.slint";
 import { AppIcon, IconId, IconLookup, IconSize, IconSlot } from "icons.slint";
-import { SmoothScrollArea } from "smooth_scroll_view.slint";
 import { TooltipHost } from "tooltips.slint";
+import { TabFace, TabMetrics } from "panel_tabs.slint";
+import { SmoothScrollArea } from "smooth_scroll_view.slint";
+import { TipArrow } from "global_tooltip_layer.slint";
+import { TipSide } from "tooltips.slint";
+
+export global TabBarMetrics {
+    out property <length> bar-height: 30px;
+    out property <length> tab-height: 26px;
+    out property <length> overflow-width: 34px;
+}
+
+/// Close buttons on media tabs (Settings > Viewer > Tabs, `viewer.tabs.close_buttons`).
+export enum TabCloseButtons { every-tab, active-and-hovered, none }
+
+/// The close button inside a media tab.
+component TabCloseButton inherits Rectangle {
+    callback clicked();
+    callback pressed();
+
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    background: touch.pressed ? Theme.surface-selected : (touch.has-hover ? Theme.surface-hover : transparent);
+
+    host := TooltipHost {
+        text: "Close this tab";
+        shortcut: "Middle-click a tab also closes it";
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                host.on-hover-leave();
+                root.pressed();
+            }
+        }
+        clicked => { root.clicked(); }
+        changed has-hover => {
+            if self.has-hover {
+                host.on-hover-enter(self.mouse-x, self.mouse-y);
+            } else {
+                host.on-hover-leave();
+            }
+        }
+    }
+
+    AppIcon {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        icon: IconId.close;
+        size: IconSize.sm;
+        color: touch.has-hover ? Theme.text : Theme.text-muted;
+    }
+}
 
 export component TabItemView inherits Rectangle {
     in property <TabItemModel> tab;
     in property <bool> show-rating-badge: false;
+    in property <TabCloseButtons> close-buttons: TabCloseButtons.every-tab;
     in-out property <length> shift-x: 0px;
     in property <bool> is-placeholder: false;
 
@@ -20,41 +81,51 @@ export component TabItemView inherits Rectangle {
     callback drag-started(length /* press_x */, length /* press_y */, length /* item_width */);
     callback drag-moved(length /* mouse_x */, length /* mouse_y */);
     callback drag-ended();
-    callback drag-cancelled();
 
-    width: content-layout.preferred-width;
+    property <bool> shows-close: root.close-buttons == TabCloseButtons.every-tab
+        || (root.close-buttons == TabCloseButtons.active-and-hovered && (root.tab.is-active || tab-touch.has-hover));
+    property <bool> shows-rating: root.show-rating-badge && root.tab.rating > 0;
+    // The room the badges and the close button take at the right end.
+    property <length> trailing: (root.tab.has-unsaved ? 14px : 0px) + (root.shows-rating ? 22px : 0px)
+        + (root.close-buttons != TabCloseButtons.none ? 22px : 0px);
+
     height: 26px;
     background: transparent;
 
-    inner-card := Rectangle {
+    card := Rectangle {
         x: root.shift-x;
         width: 100%;
         height: 100%;
-        border-radius: 4px;
-
-        // Smooth horizontal push-away animation for reordering
         animate x { duration: 180ms; easing: ease-out; }
-
-        // Placeholder dimming during active drag
         opacity: root.is-placeholder ? 0.22 : 1.0;
         animate opacity { duration: 120ms; }
 
-        // Theme-adaptive background supporting both inactive and active hover states; a selected tab (Ctrl/Shift+click) is drawn
-        // like an active one with the accent color as its border.
-        background: (root.tab.is-active || root.tab.is-selected)
-            ? (tab-touch.has-hover ? Theme.surface-selected-hover : Theme.surface-selected)
-            : (tab-touch.has-hover ? Theme.surface-hover : Theme.surface-variant);
+        TabFace {
+            title: root.tab.title;
+            icon: root.tab.icon;
+            active: root.tab.is-active;
+            hovered: tab-touch.has-hover;
+            panel: Theme.background;
+            trailing: root.trailing - (root.close-buttons != TabCloseButtons.none ? 4px : 0px);
+        }
 
-        border-width: root.tab.is-selected ? 2px : 1px;
-        border-color: root.tab.is-selected
-            ? Theme.accent
-            : (root.tab.is-active
-                ? (tab-touch.has-hover ? Theme.accent : Theme.primary)
-                : (tab-touch.has-hover ? Theme.primary : Theme.border));
+        // A tab of the multi-selection (Ctrl/Shift+click): a frame in the accent color.
+        if root.tab.is-selected: Rectangle {
+            x: 2px;
+            y: 3px;
+            width: parent.width - 4px;
+            height: parent.height - 6px;
+            border-radius: 5px;
+            border-width: 1px;
+            border-color: Theme.accent;
+            background: Theme.accent.with-alpha(0.12);
+        }
 
         tooltip-host := TooltipHost {
             text: root.tab.title;
-            shortcut: root.tab.is-active ? "Active Tab (Ctrl+click to select several, Scroll to cycle, Drag to reorder, Right-click for menu)" : "Click to view (Ctrl/Shift+click to select several, Scroll to cycle, Drag to reorder, Middle-click to close)";
+            shortcut: root.tab.is-active
+                ? "The shown tab. Ctrl or Shift+click selects several, the wheel goes through the tabs, drag to reorder, right-click for its menu"
+                : "Click to show it. Ctrl or Shift+click selects several, the wheel goes through the tabs, drag to reorder, middle-click closes it";
             is-enabled: !root.is-placeholder;
         }
 
@@ -123,33 +194,17 @@ export component TabItemView inherits Rectangle {
             }
         }
 
-        content-layout := HorizontalLayout {
-            padding-left: 8px;
-            padding-right: 6px;
-            spacing: 6px;
-            alignment: center;
-
-            // 1. Media Type Vector Icon (image / video / Multiview)
-            IconSlot {
-                icon: root.tab.icon;
-                size: IconSize.md;
-                color: root.tab.is-active ? Theme.primary : (tab-touch.has-hover ? Theme.text : Theme.text-muted);
-            }
-
-            // 2. Title: Uniform regular weight (400) preventing tab width jitter
-            Text {
-                text: root.tab.title;
-                font-size: 11px;
-                font-weight: 400;
-                color: root.tab.is-active ? Theme.primary : Theme.text;
-                vertical-alignment: center;
-                overflow: elide;
-                max-width: 180px;
-            }
+        // The badges and the close button at the right end, vertically centered.
+        HorizontalLayout {
+            x: parent.width - self.preferred-width - 4px;
+            width: self.preferred-width;
+            spacing: 4px;
+            alignment: end;
 
             // Unsaved picture edits in this tab: a dot in the accent color.
-            if root.tab.has-unsaved : VerticalLayout {
+            if root.tab.has-unsaved: VerticalLayout {
                 alignment: center;
+
                 Rectangle {
                     width: 8px;
                     height: 8px;
@@ -158,46 +213,119 @@ export component TabItemView inherits Rectangle {
                 }
             }
 
-            // 3. Dedicated Rating SVG Icon Badge (Icons API)
-            if root.show-rating-badge && root.tab.rating > 0 : IconSlot {
+            if root.shows-rating: IconSlot {
                 icon: IconLookup.rating(root.tab.rating);
                 size: IconSize.md;
             }
 
-            // 4. Vertically Centered Close Button
-            Rectangle {
-                width: 18px;
-                height: 18px;
-                border-radius: 9px;
-                y: (parent.height - self.height) / 2;
-                background: close-touch.has-hover ? #f38ba833 : transparent;
+            if root.close-buttons != TabCloseButtons.none: VerticalLayout {
+                alignment: center;
 
-                close-touch := TouchArea {
-                    mouse-cursor: pointer;
-                    pointer-event(event) => {
-                        if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                // The room stays while the button is hidden, so the title never moves under the pointer.
+                Rectangle {
+                    width: 18px;
+                    height: 18px;
+
+                    if root.shows-close: TabCloseButton {
+                        pressed => { tab-touch.close-clicked-recently = true; }
+                        clicked => {
                             tab-touch.close-clicked-recently = true;
+                            root.close-clicked();
                         }
                     }
-                    clicked => {
-                        tab-touch.close-clicked-recently = true;
-                        root.close-clicked();
-                    }
-                }
-
-                AppIcon {
-                    x: (parent.width - self.width) / 2;
-                    y: (parent.height - self.height) / 2;
-                    icon: IconId.close;
-                    size: IconSize.sm;
-                    color: close-touch.has-hover ? #f38ba8 : Theme.text-muted;
                 }
             }
         }
     }
 }
 
-/// Floating visual ghost tab item following cursor during drag operations.
+/// A fixed tab of the first group (Browse, Tab-Grid): no close button, not movable.
+export component PinnedTab inherits Rectangle {
+    in property <string> title;
+    in property <IconId> icon;
+    in property <bool> active;
+    in property <string> tooltip;
+    callback clicked();
+
+    width: face.content-width;
+    height: TabBarMetrics.tab-height;
+
+    face := TabFace {
+        title: root.title;
+        icon: root.icon;
+        active: root.active;
+        hovered: touch.has-hover;
+        panel: Theme.background;
+    }
+
+    host := TooltipHost {
+        text: root.tooltip;
+    }
+
+    touch := TouchArea {
+        mouse-cursor: root.active ? MouseCursor.default : MouseCursor.pointer;
+        clicked => {
+            host.on-hover-leave();
+            root.clicked();
+        }
+        changed has-hover => {
+            if self.has-hover {
+                host.on-hover-enter(self.mouse-x, self.mouse-y);
+            } else {
+                host.on-hover-leave();
+            }
+        }
+    }
+}
+
+/// The "+n" button: the tabs that do not fit (RustCut's `DockOverflow`).
+component TabOverflowButton inherits Rectangle {
+    in property <int> count;
+    in property <bool> open;
+    callback clicked();
+
+    width: TabBarMetrics.overflow-width;
+    height: TabBarMetrics.tab-height;
+
+    host := TooltipHost {
+        text: root.count == 1 ? "1 more tab" : root.count + " more tabs";
+        shortcut: "Click for the list; the wheel over the tabs still goes through all of them";
+    }
+
+    pill := Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: Math.max(24px, label.preferred-width + 12px);
+        height: 18px;
+        border-radius: 9px;
+        background: root.open || touch.has-hover ? Theme.surface-selected : Theme.surface-hover;
+
+        label := Text {
+            text: "+" + root.count;
+            font-size: 10px;
+            font-weight: 600;
+            color: Theme.text;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    touch := TouchArea {
+        clicked => {
+            host.on-hover-leave();
+            root.clicked();
+        }
+        changed has-hover => {
+            if self.has-hover {
+                host.on-hover-enter(self.mouse-x, self.mouse-y);
+            } else {
+                host.on-hover-leave();
+            }
+        }
+    }
+}
+
+/// The dragged tab under the cursor (RustCut's `DockTabGhost`: no shadow).
 export component GhostTabPreview inherits Rectangle {
     in property <string> title: "";
     in property <string> format-str: "";
@@ -205,22 +333,20 @@ export component GhostTabPreview inherits Rectangle {
     in property <int> rating: 0;
     in property <bool> is-active: false;
     in property <bool> show-rating-badge: false;
+    in property <length> tab-width: 160px;
 
-    width: ghost-layout.preferred-width;
-    height: 26px;
-    border-radius: 4px;
+    width: root.tab-width;
+    height: TabBarMetrics.tab-height;
+    border-radius: TabMetrics.radius;
     background: Theme.surface-selected-hover;
-    border-width: 1.5px;
-    border-color: Theme.accent;
-    drop-shadow-blur: 14px;
-    drop-shadow-color: #000000cc;
-    drop-shadow-offset-y: 3px;
+    border-width: 1px;
+    border-color: Theme.primary;
+    clip: true;
 
-    ghost-layout := HorizontalLayout {
-        padding-left: 8px;
-        padding-right: 8px;
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
         spacing: 6px;
-        alignment: center;
 
         IconSlot {
             icon: root.icon;
@@ -232,13 +358,13 @@ export component GhostTabPreview inherits Rectangle {
             text: root.title;
             font-size: 11px;
             font-weight: 700;
-            color: Theme.accent;
+            color: Theme.text;
             vertical-alignment: center;
+            horizontal-stretch: 1;
             overflow: elide;
-            max-width: 180px;
         }
 
-        if root.show-rating-badge && root.rating > 0 : IconSlot {
+        if root.show-rating-badge && root.rating > 0: IconSlot {
             icon: IconLookup.rating(root.rating);
             size: IconSize.md;
         }
@@ -248,6 +374,13 @@ export component GhostTabPreview inherits Rectangle {
 export component MediaTabBar inherits Rectangle {
     in property <[TabItemModel]> tabs: [];
     in property <bool> show-rating-badge: false;
+    in property <TabCloseButtons> close-buttons: TabCloseButtons.every-tab;
+    in property <int> overflow-count: 0;
+    in property <length> overflow-x: 0px;
+    in property <bool> overflow-open: false;
+    // The "+n" button in window coordinates (its list is drawn by the main window, above everything).
+    out property <length> overflow-button-x: overflow.absolute-position.x;
+    out property <length> overflow-button-y: overflow.absolute-position.y;
 
     // Tab Drag & Drop State
     in property <bool> is-dragging-tab: false;
@@ -265,96 +398,194 @@ export component MediaTabBar inherits Rectangle {
     callback tab-closed(int /* tab_id */);
     callback tab-context-menu(int /* tab_id */, length /* x */, length /* y */);
     callback tab-wheel-scrolled(bool /* is_next */);
+    // The strip's width (Rust places the tabs in it).
+    callback resized(length /* width */);
+    callback overflow-clicked();
 
     callback tab-drag-started(int /* tab_id */, int /* source_index */, length /* mouse_x */, length /* tab_width */);
     callback tab-drag-moved(length /* mouse_x */, length /* view_width */);
     callback tab-drag-ended(int /* tab_id */, int /* target_index */);
-    callback tab-drag-cancelled(int /* tab_id */);
 
     background: transparent;
-    clip: true;
+    clip: false;
 
-    public function scroll-by(dx: length) {
-        scroll-area.handle-scroll(dx, 0px);
-    }
+    changed width => { root.resized(self.width); }
+    init => { root.resized(self.width); }
 
-    public function scroll-tab-into-view(tab-x: length, tab-width: length) {
-        scroll-area.scroll-into-view-horizontal(tab-x, tab-width);
-    }
-
-    scroll-area := SmoothScrollArea {
-        width: 100%;
-        height: 100%;
-        enable-horizontal: true;
-        enable-vertical: false;
-        content-width: tab-layout.preferred-width;
-        content-height: self.height;
-
-        // A click on the free space of the bar ends the multi-selection.
-        background-clicked => { root.tab-selection-cleared(); }
-
-        tab-layout := HorizontalLayout {
-            padding-left: 2px;
-            padding-right: 2px;
-            spacing: 4px;
-            alignment: start;
-
-            for tab[idx] in root.tabs : TabItemView {
-                tab: tab;
-                show-rating-badge: root.show-rating-badge;
-                shift-x: tab.shift_x;
-                is-placeholder: tab.is_placeholder;
-
-                scrolled(dx, dy) => {
-                    if root.tabs.length > 1 {
-                        if dy > 0px {
-                            root.tab-wheel-scrolled(false);
-                        } else if dy < 0px {
-                            root.tab-wheel-scrolled(true);
-                        } else if dx != 0px {
-                            scroll-area.handle-scroll(dx, dy);
-                        }
-                    } else {
-                        scroll-area.handle-scroll(dx, dy);
-                    }
-                }
-
-                clicked => { root.tab-selected(tab.id); }
-                multi-clicked(ctrl, shift) => { root.tab-multi-selected(tab.id, ctrl, shift); }
-                middle-clicked => { root.tab-closed(tab.id); }
-                close-clicked => { root.tab-closed(tab.id); }
-                context-menu-requested(mx, my) => {
-                    root.tab-context-menu(tab.id, self.x + mx + scroll-area.clamped-x, self.y + my);
-                }
-
-                drag-started(press-x, press-y, item-w) => {
-                    let global-x = self.x + press-x + scroll-area.clamped-x;
-                    root.tab-drag-started(tab.id, idx, global-x, item-w);
-                }
-                drag-moved(mx, my) => {
-                    let global-x = self.x + mx + scroll-area.clamped-x;
-                    root.tab-drag-moved(global-x, root.width);
-                }
-                drag-ended => {
-                    root.tab-drag-ended(tab.id, -1);
-                }
-                drag-cancelled => {
-                    root.tab-drag-cancelled(tab.id);
-                }
+    // The free space: a click ends the multi-selection, the wheel goes through the tabs.
+    TouchArea {
+        clicked => { root.tab-selection-cleared(); }
+        scroll-event(event) => {
+            if root.tabs.length > 1 && event.delta-y != 0px {
+                root.tab-wheel-scrolled(event.delta-y < 0px);
+                return accept;
             }
+            return reject;
         }
     }
 
-    // Floating Ghost Tab Preview Overlay
-    if root.is-dragging-tab : GhostTabPreview {
-        x: Math.max(2px, Math.min(parent.width - self.width - 2px, root.drag-ghost-x));
-        y: (parent.height - self.height) / 2;
+    for tab[idx] in root.tabs: TabItemView {
+        x: tab.x;
+        y: root.height - self.height;
+        width: tab.width;
+        visible: tab.shown;
+        tab: tab;
+        show-rating-badge: root.show-rating-badge;
+        close-buttons: root.close-buttons;
+        shift-x: tab.shift_x;
+        is-placeholder: tab.is_placeholder;
+
+        scrolled(dx, dy) => {
+            if root.tabs.length > 1 && dy != 0px {
+                root.tab-wheel-scrolled(dy < 0px);
+            }
+        }
+
+        clicked => { root.tab-selected(tab.id); }
+        multi-clicked(ctrl, shift) => { root.tab-multi-selected(tab.id, ctrl, shift); }
+        middle-clicked => { root.tab-closed(tab.id); }
+        close-clicked => { root.tab-closed(tab.id); }
+        context-menu-requested(mx, my) => {
+            root.tab-context-menu(tab.id, self.x + mx, self.y + my);
+        }
+
+        drag-started(press-x, press-y, item-w) => {
+            root.tab-drag-started(tab.id, idx, self.x + press-x, item-w);
+        }
+        drag-moved(mx, my) => {
+            root.tab-drag-moved(self.x + mx, root.width);
+        }
+        drag-ended => {
+            root.tab-drag-ended(tab.id, -1);
+        }
+    }
+
+    overflow := TabOverflowButton {
+        x: root.overflow-x;
+        y: root.height - self.height;
+        visible: root.overflow-count > 0;
+        count: root.overflow-count;
+        open: root.overflow-open;
+        clicked => { root.overflow-clicked(); }
+    }
+
+    if root.is-dragging-tab: GhostTabPreview {
+        x: Math.max(0px, Math.min(parent.width - self.width, root.drag-ghost-x));
+        y: root.height - self.height;
         title: root.drag-ghost-title;
         format-str: root.drag-ghost-format;
         icon: root.drag-ghost-icon;
         rating: root.drag-ghost-rating;
         is-active: root.drag-ghost-is-active;
         show-rating-badge: root.show-rating-badge;
+        tab-width: root.tabs.length > 0 ? root.tabs[0].width : 160px;
         z: 100;
+    }
+}
+
+/// The list of the tabs behind "+n": a bubble under the button with a tail pointing at it, scrolling when it is long.
+/// A click on a tab shows it; a click anywhere else closes the list.
+export component TabOverflowMenu inherits Rectangle {
+    in property <[TabItemModel]> tabs;
+    // The "+n" button in window coordinates.
+    in property <length> anchor-x;
+    in property <length> anchor-y;
+    in property <length> anchor-width;
+    in property <length> anchor-height;
+    callback tab-picked(int /* tab_id */);
+    callback dismissed();
+
+    property <length> menu-width: 260px;
+    property <length> row-height: 26px;
+    property <length> list-height: Math.min(root.height * 0.6, rows.preferred-height + 8px);
+    property <length> menu-x: Math.max(6px, Math.min(root.width - root.menu-width - 6px,
+        root.anchor-x + root.anchor-width / 2 - root.menu-width / 2));
+    property <length> menu-y: root.anchor-y + root.anchor-height + 7px;
+
+    // A click outside closes the list.
+    TouchArea {
+        clicked => { root.dismissed(); }
+    }
+
+    bubble := Rectangle {
+        x: root.menu-x;
+        y: root.menu-y;
+        width: root.menu-width;
+        height: root.list-height;
+        background: Theme.surface;
+        border-radius: 6px;
+        border-width: 1px;
+        border-color: Theme.surface-selected;
+
+        TipArrow {
+            side: TipSide.below;
+            arrow: root.anchor-x + root.anchor-width / 2 - root.menu-x;
+            fill: Theme.surface;
+            stroke: Theme.surface-selected;
+            bubble-width: bubble.width;
+            bubble-height: bubble.height;
+        }
+
+        // Clicks inside the bubble never reach the backdrop.
+        TouchArea { }
+
+        SmoothScrollArea {
+            x: 1px;
+            y: 1px;
+            width: parent.width - 2px;
+            height: parent.height - 2px;
+            enable-horizontal: false;
+            enable-vertical: true;
+            content-width: self.width;
+            content-height: rows.preferred-height;
+
+            rows := VerticalLayout {
+                padding: 4px;
+                spacing: 1px;
+
+                for tab in root.tabs: Rectangle {
+                    visible: !tab.shown;
+                    height: tab.shown ? 0px : root.row-height;
+                    border-radius: 4px;
+                    background: row-touch.has-hover ? Theme.surface-hover : transparent;
+
+                    row-touch := TouchArea {
+                        clicked => { root.tab-picked(tab.id); }
+                    }
+
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        spacing: 6px;
+
+                        IconSlot {
+                            icon: tab.icon;
+                            size: IconSize.md;
+                            color: row-touch.has-hover ? Theme.text : Theme.text-muted;
+                        }
+
+                        Text {
+                            text: tab.title;
+                            font-size: 11px;
+                            color: Theme.text;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                            overflow: elide;
+                        }
+
+                        if tab.has-unsaved: VerticalLayout {
+                            alignment: center;
+
+                            Rectangle {
+                                width: 8px;
+                                height: 8px;
+                                border-radius: 4px;
+                                background: Theme.accent;
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }

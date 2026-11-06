@@ -4,14 +4,15 @@ use super::{BridgeViewerTabs, TabDragEndParams};
 use crate::ui::MainWindow;
 use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
-use crate::ui::tabs::dnd::{TabDndAutoScroller, TabDndGeometry, TabDndSession};
+use crate::ui::tabs::dnd::{TabDndGeometry, TabDndSession};
 use crate::ui::tabs::grid_bridge::BridgeTabGrid;
 use crate::ui::tabs::icon::tab_icon;
+use crate::ui::tabs::strip_layout::{StripLayout, TAB_SPACING};
 use crate::viewer::{TabId, ViewerTabManager};
 use parking_lot::RwLock;
 use rustview_core::settings::LogObscurer;
 use rustview_core::util::cast::WrappingAs;
-use slint::{ComponentHandle, Model};
+use slint::Model;
 use std::sync::Arc;
 
 impl BridgeViewerTabs {
@@ -38,20 +39,14 @@ impl BridgeViewerTabs {
         let tab_ids: Vec<TabId> = tabs.iter().map(|t| t.id).collect();
 
         let tab_models = window.get_tabs();
-        let mut widths = Vec::with_capacity(total_tabs);
-        for i in 0..total_tabs {
-            let w = if i == source_index && tab_width > 20.0 {
-                tab_width
-            } else if let Some(t_session) = tabs.get(i) {
-                let has_rating = window.get_viewer_show_tab_rating_badge() && t_session.record.rating > 0;
-                TabDndGeometry::estimate_tab_width(&t_session.title, has_rating)
-            } else {
-                120.0
-            };
-            widths.push(w);
-        }
-
-        let slots = TabDndGeometry::compute_tab_slots(&tab_ids, &widths, 4.0, 2.0);
+        // Every tab has the strip's width; the places are exact (`strip_layout`), a hidden tab continues the row.
+        let layout = {
+            let active = tabs.iter().position(|t| Some(t.id) == tab_manager.active_tab_id());
+            StripLayout::new(total_tabs, active, state.read().tab_bar_width)
+        };
+        let widths = vec![layout.tab_width; total_tabs];
+        let first_x = layout.x(0);
+        let slots = TabDndGeometry::compute_tab_slots(&tab_ids, &widths, TAB_SPACING, first_x);
         let grab_offset = if let Some(s) = slots.get(source_index) {
             (mouse_x - s.start_x).clamp(0.0, s.width)
         } else {
@@ -90,13 +85,7 @@ impl BridgeViewerTabs {
     }
 
     /// Handles pointer movement during tab drag: calculates target slot and applies smooth displacement to neighbor tabs.
-    pub fn handle_tab_drag_moved(
-        mouse_x: f32,
-        view_width: f32,
-        window: &MainWindow,
-        state: &Arc<RwLock<UiState>>,
-        autoscroller: &TabDndAutoScroller,
-    ) {
+    pub fn handle_tab_drag_moved(mouse_x: f32, window: &MainWindow, state: &Arc<RwLock<UiState>>) {
         let (drag_tab_id, source_idx, cur_target_idx, ghost_x, shifts) = {
             let mut st = state.write();
             let Some(ref mut session) = st.active_tab_dnd_session else {
@@ -113,8 +102,12 @@ impl BridgeViewerTabs {
             );
 
             session.target_index = new_target_idx;
-            let shifts =
-                TabDndGeometry::compute_shift_offsets(&session.slots, session.source_index, new_target_idx, 4.0);
+            let shifts = TabDndGeometry::compute_shift_offsets(
+                &session.slots,
+                session.source_index,
+                new_target_idx,
+                TAB_SPACING,
+            );
 
             (
                 session.dragged_tab_id,
@@ -142,13 +135,6 @@ impl BridgeViewerTabs {
                 }
             }
         }
-
-        let win_weak = window.as_weak();
-        autoscroller.update_cursor(mouse_x, view_width, move |dx| {
-            if let Some(w) = win_weak.upgrade() {
-                w.invoke_scroll_tab_bar_by(dx);
-            }
-        });
 
         tracing::trace!(
             tab_id = drag_tab_id,

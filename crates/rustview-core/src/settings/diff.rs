@@ -624,6 +624,13 @@ impl SettingsDiff {
             ));
         }
 
+        if old.viewer.tabs.close_buttons != new.viewer.tabs.close_buttons {
+            changes.push(format!(
+                "Viewer: tabs.close_buttons ({} -> {})",
+                old.viewer.tabs.close_buttons, new.viewer.tabs.close_buttons
+            ));
+        }
+
         if old.viewer.background_mode != new.viewer.background_mode {
             changes.push(format!(
                 "Viewer: background_mode ({} -> {})",

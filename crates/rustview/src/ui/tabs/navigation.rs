@@ -7,7 +7,6 @@ use crate::ui::multiview::MultiviewHandle;
 use crate::ui::multiview::tab_host;
 use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
-use crate::ui::tabs::dnd::TabDndGeometry;
 use crate::viewer::ViewerTabManager;
 use parking_lot::RwLock;
 use rustview_core::library::Library;
@@ -51,33 +50,6 @@ impl BridgeViewerTabs {
             window.set_active_view_mode(1);
             Self::sync_ui(window, tab_manager, library, settings, state);
             fullscreen.sync_tab(tab_manager);
-        }
-    }
-
-    /// Ensures the active tab item is fully visible in the tab bar by scrolling the tab bar horizontally if needed.
-    pub fn scroll_active_tab_into_view(
-        window: &MainWindow,
-        tab_manager: &ViewerTabManager,
-        settings: &SettingsManager,
-    ) {
-        let Some(active_id) = tab_manager.active_tab_id() else {
-            return;
-        };
-
-        let tabs = tab_manager.list_tabs();
-        if tabs.len() <= 1 {
-            return;
-        }
-
-        let show_rating = settings.get().viewer.tabs.show_rating_badge;
-        if let Some((tab_x, tab_w)) = TabDndGeometry::find_tab_slot_geometry(&tabs, active_id, show_rating) {
-            tracing::debug!(
-                active_id,
-                tab_x,
-                tab_w,
-                "[BridgeViewerTabs: ScrollIntoView] Scrolling tab bar to ensure active tab is visible"
-            );
-            window.invoke_scroll_tab_into_view(tab_x, tab_w);
         }
     }
 
