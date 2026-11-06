@@ -35,6 +35,7 @@ pub mod state;
 pub mod status_bar;
 pub mod tabs;
 pub mod tags;
+pub mod theme;
 pub mod thumbnail_badges;
 pub mod thumbnail_regeneration;
 pub mod tooltip;

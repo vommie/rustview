@@ -11,7 +11,7 @@ export component ThumbnailPipelineProgress inherits HorizontalLayout {
     in property <int> preload-current: 0;
     in property <int> preload-total: 0;
     in property <string> preload-label-prefix: "Cached: ";
-    in property <color> preload-fill-color: #89dceb88;
+    in property <color> preload-fill-color: Theme.status-pending.with-alpha(0.533);
     in property <length> preload-bar-width: 150px;
 
     // Phase 2: Missing Thumbnail Generation API
@@ -20,7 +20,7 @@ export component ThumbnailPipelineProgress inherits HorizontalLayout {
     in property <int> generate-total: 0;
     in property <int> active-workers: 0;
     in property <string> generate-label-prefix: "Gen: ";
-    in property <color> generate-fill-color: #f9e2af88;
+    in property <color> generate-fill-color: Theme.accent.with-alpha(0.533);
     in property <length> generate-bar-width: 175px;
 
     // Common Geometry
@@ -41,7 +41,7 @@ export component ThumbnailPipelineProgress inherits HorizontalLayout {
         bar-height: root.bar-height;
         bar-radius: 0px;
         fill-color: root.preload-fill-color;
-        bar-border-color: #89dcebaa;
+        bar-border-color: Theme.status-pending.with-alpha(0.667);
         overlay-text: root.preload-label-prefix + root.preload-current + "/" + root.preload-total;
         overlay-text-color: #ffffff;
         clicked => { root.preload-bar-clicked(); }
@@ -57,7 +57,7 @@ export component ThumbnailPipelineProgress inherits HorizontalLayout {
         bar-height: root.bar-height;
         bar-radius: 0px;
         fill-color: root.generate-fill-color;
-        bar-border-color: #f9e2afaa;
+        bar-border-color: Theme.accent.with-alpha(0.667);
         overlay-text: root.generate-label-prefix + root.generate-current + "/" + root.generate-total + (root.active-workers > 0 ? (" (" + root.active-workers + " th)") : "");
         overlay-text-color: #ffffff;
         clicked => { root.generate-bar-clicked(); }

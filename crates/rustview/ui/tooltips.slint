@@ -1,3 +1,4 @@
+import { Theme } from "styles.slint";
 // The tooltips, RustCut's bubbles (RustCut's `ui/tooltip.slint`, which grew out of this file; same author, kept alike):
 // one bubble per window, drawn by `GlobalTooltipLayer` (global_tooltip_layer.slint) on top of everything (no popup
 // window, so it never grabs the pointer). An element embeds a `TooltipHost` (or wraps its children in a `TooltipArea`):
@@ -14,11 +15,11 @@ export global TooltipSettings {
     in-out property <duration> default-delay: 600ms;
     // After a tooltip closed, the next one within this time shows at once (moving along a row of buttons).
     out property <duration> warm-up: 700ms;
-    out property <color> background: #181825f4;
-    out property <color> border: #45475acc;
-    out property <color> text: #cdd6f4;
-    out property <color> muted: #a6adc8;
-    out property <color> accent: #f9e2af;
+    out property <color> background: Theme.background.with-alpha(0.957);
+    out property <color> border: Theme.surface-selected.with-alpha(0.8);
+    out property <color> text: Theme.text;
+    out property <color> muted: Theme.text-muted;
+    out property <color> accent: Theme.accent;
     out property <length> font-size: 12px;
     out property <length> small-font-size: 11px;
     out property <length> padding-h: 9px;

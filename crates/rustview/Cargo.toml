@@ -63,6 +63,7 @@ glow.workspace = true
 khronos-egl.workspace = true
 ashpd.workspace = true
 async-io.workspace = true
+futures-lite.workspace = true
 base64.workspace = true
 
 [build-dependencies]

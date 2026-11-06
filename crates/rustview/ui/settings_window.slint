@@ -84,6 +84,8 @@ export component SettingsWindow inherits Window {
     in-out property <int> thumbnail-badge-overflow-idx: 0; // 0=hide, 1=wrap
     in-out property <bool> enable-hover-previews: true;
     in-out property <bool> enable-tooltips: true;
+    in-out property <int> appearance-theme-idx: 0;
+    changed appearance-theme-idx => { root.mark-edited(); }
     in-out property <int> tooltip-delay-ms: 750;
 
     // Type-ahead find options
@@ -563,6 +565,7 @@ export component SettingsWindow inherits Window {
                             thumbnail-badge-overflow-idx <=> root.thumbnail-badge-overflow-idx;
                             enable-hover-previews <=> root.enable-hover-previews;
                             enable-tooltips <=> root.enable-tooltips;
+                            theme-idx <=> root.appearance-theme-idx;
                             tooltip-delay-ms <=> root.tooltip-delay-ms;
                             type-ahead-enabled <=> root.type-ahead-enabled;
                             type-ahead-timeout-ms <=> root.type-ahead-timeout-ms;

@@ -471,3 +471,50 @@ export component Slider inherits Rectangle {
         }
     }
 }
+
+/// Two or three short choices side by side (RustCut's `SegmentedChoice`), as wide as a control column.
+export component SegmentedChoice inherits Rectangle {
+    in property <[string]> items;
+    in-out property <int> current;
+    in property <bool> enabled: true;
+    callback selected(int);
+
+    width: SettingsMetrics.control-width;
+    height: SettingsMetrics.control-height;
+    horizontal-stretch: 0;
+    border-radius: 4px;
+    background: Theme.surface;
+    border-width: 1px;
+    border-color: Theme.border;
+    clip: true;
+
+    HorizontalLayout {
+        padding: 1px;
+        spacing: 1px;
+
+        for item[i] in root.items: Rectangle {
+            horizontal-stretch: 1;
+            border-radius: 3px;
+            background: i == root.current ? Theme.primary.with-alpha(0.22) : (touch.has-hover && root.enabled ? Theme.surface-hover : transparent);
+            border-width: i == root.current ? 1px : 0px;
+            border-color: Theme.primary;
+
+            touch := TouchArea {
+                enabled: root.enabled;
+                clicked => {
+                    root.current = i;
+                    root.selected(i);
+                }
+            }
+
+            Text {
+                text: item;
+                font-size: 12px;
+                font-weight: i == root.current ? 700 : 400;
+                color: !root.enabled ? Theme.text-muted : (i == root.current ? Theme.primary : Theme.text);
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+}

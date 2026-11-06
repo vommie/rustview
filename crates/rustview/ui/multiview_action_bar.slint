@@ -1,4 +1,4 @@
-import { Theme } from "styles.slint";
+import { Theme, MediaTheme } from "styles.slint";
 import { ContextMenuItemModel } from "types.slint";
 import { MultiviewBarButtonView } from "multiview_types.slint";
 import { MultiviewBar } from "multiview_bar.slint";
@@ -138,15 +138,15 @@ export component MultiviewActionBar inherits Rectangle {
         width: root.pill-width;
         height: root.pill-height;
         border-radius: root.pill-height / 2;
-        background: Theme.surface;
+        background: MediaTheme.surface;
         border-width: 1px;
-        border-color: Theme.border;
+        border-color: MediaTheme.border;
 
         Text {
             text: Math.round(root.bar.zoom-permille / 10.0) + "%";
             font-size: 10px;
             font-weight: 700;
-            color: Theme.text;
+            color: MediaTheme.text;
             horizontal-alignment: center;
             vertical-alignment: center;
         }

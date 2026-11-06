@@ -201,6 +201,11 @@ impl SettingsDialogController {
         );
         window.set_enable_hover_previews(settings.appearance.enable_hover_previews);
         window.set_enable_tooltips(settings.appearance.enable_tooltips);
+        window.set_appearance_theme_idx(
+            rustview_core::settings::theme::ThemeMode::from_name(&settings.appearance.theme)
+                .index()
+                .saturating_as::<i32>(),
+        );
         window.set_tooltip_delay_ms(settings.appearance.tooltip_delay_ms.saturating_as::<i32>());
         // The window reacts to later changes of these two; the values it opens with are set here.
         let tooltips = window.global::<TooltipSettings>();

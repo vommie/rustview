@@ -5287,7 +5287,7 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
 name = "rustview"
-version = "0.6.14"
+version = "0.6.15"
 dependencies = [
  "arboard",
  "ashpd",
@@ -5300,6 +5300,7 @@ dependencies = [
  "fast_image_resize",
  "freedesktop-desktop-entry",
  "freedesktop-icons",
+ "futures-lite",
  "glow",
  "image",
  "khronos-egl",
@@ -5336,7 +5337,7 @@ dependencies = [
 
 [[package]]
 name = "rustview-core"
-version = "0.6.14"
+version = "0.6.15"
 dependencies = [
  "atomic-write-file",
  "avif-parse",

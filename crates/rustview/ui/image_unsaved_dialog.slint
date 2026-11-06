@@ -166,7 +166,7 @@ export component ImageUnsavedDialog inherits Window {
                                                     ? (picture.needs-export ? picture.description + " - saved as a new file (the format cannot be written)" : picture.description)
                                                     : picture.description + " - changes discarded";
                                                 font-size: 11px;
-                                                color: picture.save ? (picture.needs-export ? #fab387 : Theme.text-muted) : Theme.status-corrupt;
+                                                color: picture.save ? (picture.needs-export ? Theme.status-warn : Theme.text-muted) : Theme.status-corrupt;
                                                 overflow: elide;
                                             }
 

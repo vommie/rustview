@@ -133,28 +133,50 @@ fn entries() -> Vec<Rc<Entry>> {
 }
 
 /// Announces a window dialogs can be opened from (main window, fullscreen); once, after it is created.
-pub fn register_parent<C: ComponentHandle + 'static>(window: &C, role: Role) {
+pub fn register_parent<C: ComponentHandle + 'static>(window: &C, role: Role)
+where
+    for<'a> crate::ui::Theme<'a>: slint::Global<'a, C>,
+    for<'a> crate::ui::Palette<'a>: slint::Global<'a, C>,
+{
+    crate::ui::theme::install(window);
     add(window, role, false);
 }
 
 /// Prepares a modal dialog window; once, right after it is created.
-pub fn install<C: ComponentHandle + 'static>(dialog: &C) {
+pub fn install<C: ComponentHandle + 'static>(dialog: &C)
+where
+    for<'a> crate::ui::Theme<'a>: slint::Global<'a, C>,
+    for<'a> crate::ui::Palette<'a>: slint::Global<'a, C>,
+{
     install_as(dialog, Role::Dialog, true);
 }
 
 /// Prepares a window that dialogs open from and that is itself shown as a modal child of the window it was opened from (the
 /// settings window, `role`); once, right after it is created. It is shown with [`show`].
-pub fn install_window<C: ComponentHandle + 'static>(window: &C, role: Role) {
+pub fn install_window<C: ComponentHandle + 'static>(window: &C, role: Role)
+where
+    for<'a> crate::ui::Theme<'a>: slint::Global<'a, C>,
+    for<'a> crate::ui::Palette<'a>: slint::Global<'a, C>,
+{
     install_as(window, role, true);
 }
 
 /// Prepares a dialog window that only stays above its parent and leaves the parent usable (the color picker, whose colors
 /// the parent shows live); once, right after it is created.
-pub fn install_transient<C: ComponentHandle + 'static>(dialog: &C) {
+pub fn install_transient<C: ComponentHandle + 'static>(dialog: &C)
+where
+    for<'a> crate::ui::Theme<'a>: slint::Global<'a, C>,
+    for<'a> crate::ui::Palette<'a>: slint::Global<'a, C>,
+{
     install_as(dialog, Role::Dialog, false);
 }
 
-fn install_as<C: ComponentHandle + 'static>(dialog: &C, role: Role, modal: bool) {
+fn install_as<C: ComponentHandle + 'static>(dialog: &C, role: Role, modal: bool)
+where
+    for<'a> crate::ui::Theme<'a>: slint::Global<'a, C>,
+    for<'a> crate::ui::Palette<'a>: slint::Global<'a, C>,
+{
+    crate::ui::theme::install(dialog);
     let entry = add(dialog, role, modal);
     let (weak_entry, weak_dialog) = (Rc::downgrade(&entry), dialog.as_weak());
     let installed = dialog.window().set_rendering_notifier(move |state, _| {

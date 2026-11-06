@@ -1,4 +1,4 @@
-import { Theme } from "styles.slint";
+import { Theme, MediaTheme } from "styles.slint";
 
 /// The zoom slider that hangs below the media bar of an image, and above the minimap (inside the speech bubble of
 /// `MultiviewBarMenu`).
@@ -65,7 +65,7 @@ export component MultiviewZoomSlider inherits Rectangle {
         width: root.track-w;
         height: 4px;
         border-radius: 2px;
-        background: Theme.surface-selected;
+        background: MediaTheme.surface-selected;
     }
 
     // From the middle to the handle: the way the zoom went.
@@ -75,7 +75,7 @@ export component MultiviewZoomSlider inherits Rectangle {
         width: Math.abs(root.position - root.reset-position) * root.track-w;
         height: 4px;
         border-radius: 2px;
-        background: Theme.primary;
+        background: MediaTheme.primary;
     }
 
     // The marks: the reset is the strongest (rank 0), whole 100% steps and the ends are lines (1), 50% steps are shorter lines (2),
@@ -89,7 +89,7 @@ export component MultiviewZoomSlider inherits Rectangle {
         width: self.rank == 0 ? 2px : (self.rank == 3 ? 2px : 1px);
         height: self.rank == 0 ? 10px : (self.rank == 1 ? 7px : (self.rank == 2 ? 5px : 2px));
         border-radius: self.rank == 3 ? 1px : 0px;
-        background: self.rank == 0 ? Theme.text : Theme.text-muted;
+        background: self.rank == 0 ? MediaTheme.text : MediaTheme.text-muted;
     }
 
     // A click on the middle tick resets.
@@ -109,9 +109,9 @@ export component MultiviewZoomSlider inherits Rectangle {
         width: root.handle-size;
         height: root.handle-size;
         border-radius: root.handle-size / 2;
-        background: root.active ? Theme.text : Theme.primary;
+        background: root.active ? MediaTheme.text : MediaTheme.primary;
         border-width: 2px;
-        border-color: Theme.surface;
+        border-color: MediaTheme.surface;
     }
 
     // Dragging, the wheel and the double click.

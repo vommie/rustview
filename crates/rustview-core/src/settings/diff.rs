@@ -20,6 +20,8 @@ pub struct SettingsDiff {
     // Appearance & Grid Subsystem
     pub appearance_grid_changed: bool,
     pub tooltip_settings_changed: bool,
+    /// Settings > Appearance > Theme (added in 0.6.15).
+    pub theme_changed: bool,
     pub type_ahead_changed: bool,
     pub hover_previews_changed: bool,
 
@@ -84,6 +86,7 @@ impl SettingsDiff {
 
         let folder_expansion_changed = old.folders.expanded_folder_ids != new.folders.expanded_folder_ids;
 
+        let theme_changed = old.appearance.theme != new.appearance.theme;
         let appearance_grid_changed = old.appearance.default_thumbnail_size != new.appearance.default_thumbnail_size
             || old.appearance.thumbnail_aspect_ratio != new.appearance.thumbnail_aspect_ratio
             || old.appearance.show_filenames != new.appearance.show_filenames
@@ -159,6 +162,7 @@ impl SettingsDiff {
             || folder_expansion_changed
             || appearance_grid_changed
             || tooltip_settings_changed
+            || theme_changed
             || type_ahead_changed
             || hover_previews_changed
             || performance_cache_changed
@@ -186,6 +190,7 @@ impl SettingsDiff {
             folder_expansion_changed,
             appearance_grid_changed,
             tooltip_settings_changed,
+            theme_changed,
             type_ahead_changed,
             hover_previews_changed,
             performance_cache_changed,
@@ -502,6 +507,13 @@ impl SettingsDiff {
             changes.push(format!(
                 "View: is_inspector_collapsed ({} -> {})",
                 old.view.is_inspector_collapsed, new.view.is_inspector_collapsed
+            ));
+        }
+
+        if old.appearance.theme != new.appearance.theme {
+            changes.push(format!(
+                "Appearance: theme ({} -> {})",
+                old.appearance.theme, new.appearance.theme
             ));
         }
 

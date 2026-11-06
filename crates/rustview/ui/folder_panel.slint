@@ -17,7 +17,7 @@ export component FolderItemRow inherits Rectangle {
     property <bool> is-drop-target: root.folder.id == root.drop-target-folder-id && !root.folder.is-deleted;
 
     height: 24px;
-    background: root.is-drop-target ? #89b4fa44 : (
+    background: root.is-drop-target ? Theme.primary.with-alpha(0.267) : (
         root.folder.is-selected ? Theme.surface-selected : (
             ftouch.has-hover ? Theme.surface-hover : transparent
         )

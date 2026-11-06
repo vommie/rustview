@@ -11,6 +11,11 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ### Added
 
+- A light theme (Catppuccin Latte, the same colors as RustCut's): Settings > Appearance > Theme chooses System, Dark or
+  Light. System follows KDE's color scheme through the desktop portal (on X11 and Wayland) and switches at once when it
+  changes; without an answer the app stays dark. New setting `appearance.theme` (`system` by default; older settings files
+  start with it). The bars, menus and sliders over pictures and videos stay dark in both themes.
+
 - The sidebars are a dock like RustCut's: every panel (Folders, Favorites, Info, Tag & Rate, Tag History) is a tab in a group,
   and a tab can be dragged into another group, into a new group above or below one, or to the other sidebar. A click on the
   active tab or the chevron folds a group to its tab bar, the maximize button (or a double click on the bar) lets a group fill

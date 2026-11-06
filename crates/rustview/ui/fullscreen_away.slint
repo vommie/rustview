@@ -1,4 +1,4 @@
-import { Theme } from "styles.slint";
+import { Theme, MediaTheme } from "styles.slint";
 import { AppIcon, IconId, IconSize } from "icons.slint";
 
 /// The stand-in for a video whose player is in the fullscreen window right now (its video is drawn in the fullscreen window's GL context and cannot be in two places, so the
@@ -47,7 +47,7 @@ export component AwayBadge inherits Rectangle {
 /// The whole inner area of the tab view while its tab is shown in the fullscreen window: the tab is locked and its media (the players
 /// and windows, a Multiview as a whole) are over there, so the area says so instead of showing a stale or empty picture.
 export component AwayPanel inherits Rectangle {
-    background: Theme.background;
+    background: MediaTheme.background;
 
     TouchArea {
         // Nothing below the panel can be used while the tab is away.
@@ -84,14 +84,14 @@ export component AwayPanel inherits Rectangle {
             text: "Shown in fullscreen";
             font-size: 15px;
             font-weight: 700;
-            color: Theme.text;
+            color: MediaTheme.text;
             horizontal-alignment: center;
         }
 
         Text {
             text: "This tab is open in the fullscreen window. Close the fullscreen to continue here.";
             font-size: 12px;
-            color: Theme.text-muted;
+            color: MediaTheme.text-muted;
             horizontal-alignment: center;
             wrap: word-wrap;
         }

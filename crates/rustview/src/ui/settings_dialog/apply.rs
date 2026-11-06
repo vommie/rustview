@@ -67,6 +67,10 @@ impl SettingsDialogController {
                 .to_string();
         current.appearance.enable_hover_previews = w.get_enable_hover_previews();
         current.appearance.enable_tooltips = w.get_enable_tooltips();
+        let theme = rustview_core::settings::theme::ThemeMode::from_index(
+            usize::try_from(w.get_appearance_theme_idx()).unwrap_or(0),
+        );
+        theme.name().clone_into(&mut current.appearance.theme);
         current.appearance.tooltip_delay_ms = w.get_tooltip_delay_ms().clamp(50, 2000).saturating_as::<u32>();
         current.appearance.type_ahead_enabled = w.get_type_ahead_enabled();
         current.appearance.type_ahead_timeout_ms = w

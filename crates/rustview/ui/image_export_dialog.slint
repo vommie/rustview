@@ -259,7 +259,7 @@ export component ImageExportDialog inherits Window {
                     if root.note != "" : InlineNotice {
                         icon: IconId.status-warning;
                         text: root.note;
-                        color: #fab387;
+                        color: Theme.status-warn;
                     }
 
                     VerticalLayout {
@@ -525,7 +525,7 @@ export component ImageExportDialog inherits Window {
                     for warning in root.warnings : InlineNotice {
                         icon: IconId.status-warning;
                         text: warning;
-                        color: #fab387;
+                        color: Theme.status-warn;
                     }
 
                     if root.folder-notice != "" && root.error == "" : InlineNotice {

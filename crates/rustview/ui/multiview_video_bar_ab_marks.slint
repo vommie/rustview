@@ -3,7 +3,7 @@
 // label of the saved repeat under the pointer. Everything follows the progress bar (`track-x`, `track-w`); the element covers
 // the whole bar component, so its coordinates are the bar's.
 
-import { Theme } from "styles.slint";
+import { Theme, MediaTheme } from "styles.slint";
 import { AbColors } from "multiview_video_bar_ab.slint";
 import { MultiviewVideoBarView } from "multiview_video_bar_view.slint";
 
@@ -58,8 +58,8 @@ export component AbMarks inherits Rectangle {
         : root.ab-r-x - root.ab-r-w / 2;
     property <length> ab-a-left: Math.round(Math.clamp(root.ab-a-first ? root.ab-l-left : root.ab-r-left, 0px, Math.max(0px, root.width - root.ab-a-w)) / 1px) * 1px;
     property <length> ab-b-left: Math.round(Math.clamp(root.ab-a-first ? root.ab-r-left : root.ab-l-left, 0px, Math.max(0px, root.width - root.ab-b-w)) / 1px) * 1px;
-    property <color> ab-a-color: root.bar.ab-a-look == 1 ? Theme.accent : Theme.primary;
-    property <color> ab-b-color: root.bar.ab-b-look == 1 ? Theme.accent : Theme.primary;
+    property <color> ab-a-color: root.bar.ab-a-look == 1 ? MediaTheme.accent : MediaTheme.primary;
+    property <color> ab-b-color: root.bar.ab-b-look == 1 ? MediaTheme.accent : MediaTheme.primary;
 
 
     // The strip of saved repeats: a tab that grows out of the bar over the progress bar, its flanks curving into the bar. It
@@ -241,7 +241,7 @@ export component AbMarks inherits Rectangle {
         label-text := Text {
             text: root.bar.ab-label-text;
             font-size: root.ab-font;
-            color: Theme.text;
+            color: MediaTheme.text;
             horizontal-alignment: center;
             vertical-alignment: center;
         }

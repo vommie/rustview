@@ -36,11 +36,11 @@ export component MediaTableRow inherits Rectangle {
 
     height: root.row-height;
     // Strict Priority: Drop target > Selected > Pending External Stub > Deleted > Corrupted > Normal
-    background: root.is-drop-target ? #89b4fa44 : item.is-selected ? Theme.surface-selected : (
+    background: root.is-drop-target ? Theme.primary.with-alpha(0.267) : item.is-selected ? Theme.surface-selected : (
         row-touch.has-hover ? Theme.surface-hover : (
-            item.is-pending ? #89dceb15 : (
-                item.is-deleted ? #31324450 : (
-                    item.is-corrupted ? #f38ba818 : transparent
+            item.is-pending ? Theme.status-pending.with-alpha(0.082) : (
+                item.is-deleted ? Theme.surface-hover.with-alpha(0.314) : (
+                    item.is-corrupted ? Theme.status-corrupt.with-alpha(0.094) : transparent
                 )
             )
         )
@@ -126,7 +126,7 @@ export component MediaTableRow inherits Rectangle {
 
                 if item.is-folder : IconSlot {
                     icon: item.is-folder-up ? IconId.folder-up : IconId.folder;
-                    color: root.is-drop-target ? Theme.accent : (item.is-deleted ? #6c7086 : (item.is-folder-up ? Theme.text-muted : Theme.primary));
+                    color: root.is-drop-target ? Theme.accent : (item.is-deleted ? Theme.status-deleted : (item.is-folder-up ? Theme.text-muted : Theme.primary));
                     size: IconSize.md;
                 }
 
@@ -134,9 +134,9 @@ export component MediaTableRow inherits Rectangle {
                     text: item.filename;
                     font-weight: root.is-drop-target ? 700 : 400;
                     color: root.is-drop-target ? Theme.accent : item.is-selected ? Theme.primary : (
-                        item.is-pending ? #89dceb : (
-                            item.is-deleted ? #6c7086 : (
-                                item.is-corrupted ? #f38ba8 : Theme.text
+                        item.is-pending ? Theme.status-pending : (
+                            item.is-deleted ? Theme.status-deleted : (
+                                item.is-corrupted ? Theme.status-corrupt : Theme.text
                             )
                         )
                     );
@@ -382,9 +382,9 @@ export component MediaTableRow inherits Rectangle {
 
                 Text {
                     text: item.flags_str;
-                    color: item.is-pending ? #89dceb : (
-                        item.is-deleted ? #6c7086 : (
-                            item.is-corrupted ? #f38ba8 : #a6e3a1
+                    color: item.is-pending ? Theme.status-pending : (
+                        item.is-deleted ? Theme.status-deleted : (
+                            item.is-corrupted ? Theme.status-corrupt : Theme.status-ok
                         )
                     );
                     font-weight: (item.is-pending || item.is-deleted || item.is-corrupted) ? 700 : 400;

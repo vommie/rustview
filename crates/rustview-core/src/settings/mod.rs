@@ -5,6 +5,7 @@ pub mod page_reset;
 pub mod registry;
 pub mod schema;
 pub mod store;
+pub mod theme;
 
 pub use diff::SettingsDiff;
 pub use memory_budget::{MemoryPlan, MemoryWarning, SystemMemory};

@@ -125,6 +125,8 @@ pub struct AppearanceSettings {
     pub thumbnail_badge_overflow: String,
     pub enable_hover_previews: bool,
     pub dark_theme: bool,
+    /// Added in 0.6.15: "system" (follow the desktop), "dark" or "light" (`settings::theme::ThemeMode`).
+    pub theme: String,
     pub enable_tooltips: bool,
     pub tooltip_delay_ms: u32,
 
@@ -162,6 +164,7 @@ impl Default for AppearanceSettings {
             thumbnail_badge_overflow: DEFAULT_THUMBNAIL_BADGE_OVERFLOW.to_string(),
             enable_hover_previews: DEFAULT_ENABLE_HOVER_PREVIEWS,
             dark_theme: DEFAULT_DARK_THEME,
+            theme: crate::settings::theme::ThemeMode::default().name().to_owned(),
             enable_tooltips: DEFAULT_ENABLE_TOOLTIPS,
             tooltip_delay_ms: DEFAULT_TOOLTIP_DELAY_MS,
             type_ahead_enabled: DEFAULT_TYPE_AHEAD_ENABLED,

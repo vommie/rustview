@@ -1,5 +1,6 @@
 pub mod app_dirs;
 pub mod clipboard;
+pub mod color_scheme;
 pub mod desktop;
 pub mod diagnostics;
 pub mod display;

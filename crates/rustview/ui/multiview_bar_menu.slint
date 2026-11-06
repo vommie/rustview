@@ -1,4 +1,4 @@
-import { Theme } from "styles.slint";
+import { Theme, MediaTheme } from "styles.slint";
 import { ContextMenuItemModel } from "types.slint";
 import { ContextMenuItemRow } from "context_menu.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
@@ -12,7 +12,7 @@ export component MultiviewBarMenu inherits Rectangle {
     in property <[ContextMenuItemModel]> items;
     in property <length> anchor-x: 0px;
     // The body's fill: slightly see-through by default; the minimap's slider bubble sits on the picture and is opaque.
-    in property <color> fill: Theme.surface.with-alpha(0.9);
+    in property <color> fill: MediaTheme.surface.with-alpha(0.9);
     // The caret is under the bubble and points down (a bubble that sits above its opener) instead of up.
     in property <bool> caret-down: false;
     in property <length> max-content-height: 300px;
@@ -79,7 +79,7 @@ export component MultiviewBarMenu inherits Rectangle {
         background: root.fill;
         border-radius: root.corner-radius;
         border-width: 1px;
-        border-color: Theme.border;
+        border-color: MediaTheme.border;
         clip: true;
 
         TouchArea { }
@@ -159,7 +159,7 @@ export component MultiviewBarMenu inherits Rectangle {
         viewbox-width: 14;
         viewbox-height: 8;
         commands: "M 0 7.5 L 7 0.5 L 14 7.5";
-        stroke: Theme.border;
+        stroke: MediaTheme.border;
         stroke-width: 1px;
     }
 
@@ -184,7 +184,7 @@ export component MultiviewBarMenu inherits Rectangle {
         viewbox-width: 14;
         viewbox-height: 8;
         commands: "M 0 0.5 L 7 7.5 L 14 0.5";
-        stroke: Theme.border;
+        stroke: MediaTheme.border;
         stroke-width: 1px;
     }
 }

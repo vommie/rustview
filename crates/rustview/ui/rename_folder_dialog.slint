@@ -94,10 +94,10 @@ export component RenameFolderDialog inherits Window {
 
                     // Real-time Conflict Alert & Quick Resolution Action
                     if root.has-conflict : Rectangle {
-                        background: #f9e2af18;
+                        background: Theme.accent.with-alpha(0.094);
                         border-radius: 4px;
                         border-width: 1px;
-                        border-color: #f9e2af44;
+                        border-color: Theme.accent.with-alpha(0.267);
 
                         VerticalLayout {
                             padding: 8px;
@@ -105,7 +105,7 @@ export component RenameFolderDialog inherits Window {
 
                             InlineNotice {
                                 text: root.conflict-message;
-                                color: #f9e2af;
+                                color: Theme.accent;
                             }
 
                             HorizontalLayout {
@@ -132,7 +132,7 @@ export component RenameFolderDialog inherits Window {
                     if root.error-message != "" : Text {
                         text: root.error-message;
                         font-size: 11px;
-                        color: #ff5555;
+                        color: Theme.status-corrupt;
                         wrap: word-wrap;
                     }
                 }

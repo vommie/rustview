@@ -50,7 +50,7 @@ export component MissingFolderDeleteDialog inherits Window {
                     DialogHeading {
                         icon: IconId.status-warning;
                         text: "Folder Not Found on Disk";
-                        color: #fab387;
+                        color: Theme.status-warn;
                     }
 
                     Text {
@@ -69,10 +69,10 @@ export component MissingFolderDeleteDialog inherits Window {
                     }
 
                     Rectangle {
-                        background: #fab38718;
+                        background: Theme.status-warn.with-alpha(0.094);
                         border-radius: 4px;
                         border-width: 1px;
-                        border-color: #fab38744;
+                        border-color: Theme.status-warn.with-alpha(0.267);
 
                         VerticalLayout {
                             padding: 8px;
@@ -82,7 +82,7 @@ export component MissingFolderDeleteDialog inherits Window {
                                 text: "Database records available for cleanup:";
                                 font-size: 11px;
                                 font-weight: 700;
-                                color: #fab387;
+                                color: Theme.status-warn;
                             }
 
                             BulletItem {
@@ -107,7 +107,7 @@ export component MissingFolderDeleteDialog inherits Window {
                     if root.error-message != "" : Text {
                         text: root.error-message;
                         font-size: 11px;
-                        color: #ff5555;
+                        color: Theme.status-corrupt;
                         wrap: word-wrap;
                     }
                 }

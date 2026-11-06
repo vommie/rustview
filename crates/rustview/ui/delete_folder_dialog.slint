@@ -51,7 +51,7 @@ export component DeleteFolderDialog inherits Window {
                     DialogHeading {
                         icon: IconId.status-warning;
                         text: "Delete Folder";
-                        color: #f38ba8;
+                        color: Theme.status-corrupt;
                     }
 
                     Text {
@@ -62,10 +62,10 @@ export component DeleteFolderDialog inherits Window {
                     }
 
                     Rectangle {
-                        background: #f38ba818;
+                        background: Theme.status-corrupt.with-alpha(0.094);
                         border-radius: 4px;
                         border-width: 1px;
-                        border-color: #f38ba844;
+                        border-color: Theme.status-corrupt.with-alpha(0.267);
 
                         VerticalLayout {
                             padding: 8px;
@@ -75,7 +75,7 @@ export component DeleteFolderDialog inherits Window {
                                 text: "Contents to be deleted:";
                                 font-size: 11px;
                                 font-weight: 700;
-                                color: #f38ba8;
+                                color: Theme.status-corrupt;
                             }
 
                             BulletItem {
@@ -93,7 +93,7 @@ export component DeleteFolderDialog inherits Window {
                     if root.missing-note != "" : Text {
                         text: root.missing-note;
                         font-size: 11px;
-                        color: #f9e2af;
+                        color: Theme.accent;
                         wrap: word-wrap;
                     }
 
@@ -107,7 +107,7 @@ export component DeleteFolderDialog inherits Window {
                     if root.error-message != "" : Text {
                         text: root.error-message;
                         font-size: 11px;
-                        color: #ff5555;
+                        color: Theme.status-corrupt;
                         wrap: word-wrap;
                     }
                 }

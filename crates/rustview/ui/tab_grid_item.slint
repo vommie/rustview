@@ -126,7 +126,7 @@ export component TabGridItemView inherits Rectangle {
                         height: 16px;
                         border-radius: 8px;
                         y: (parent.height - self.height) / 2;
-                        background: close-touch.has-hover ? #f38ba833 : transparent;
+                        background: close-touch.has-hover ? Theme.status-corrupt.with-alpha(0.2) : transparent;
 
                         close-touch := TouchArea {
                             mouse-cursor: pointer;
@@ -140,7 +140,7 @@ export component TabGridItemView inherits Rectangle {
                             y: (parent.height - self.height) / 2;
                             icon: IconId.close;
                             size: IconSize.xs;
-                            color: close-touch.has-hover ? #f38ba8 : Theme.text-muted;
+                            color: close-touch.has-hover ? Theme.status-corrupt : Theme.text-muted;
                         }
                     }
                 }
@@ -167,7 +167,7 @@ export component TabGridItemView inherits Rectangle {
                         border-radius: 22px;
                         background: Theme.corrupt-bg;
                         border-width: 1px;
-                        border-color: #f38ba844;
+                        border-color: Theme.status-corrupt.with-alpha(0.267);
 
                         AppIcon {
                             icon: IconId.status-warning;

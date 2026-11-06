@@ -50,7 +50,7 @@ export component MissingFileDialog inherits Window {
                     DialogHeading {
                         icon: IconId.status-warning;
                         text: "File Not Found on Disk";
-                        color: #fab387;
+                        color: Theme.status-warn;
                     }
 
                     Text {
@@ -64,10 +64,10 @@ export component MissingFileDialog inherits Window {
 
                     // Single File Presentation Card with selectable read-only LineEdit path
                     if !root.has-multiple : Rectangle {
-                        background: #fab38718;
+                        background: Theme.status-warn.with-alpha(0.094);
                         border-radius: 4px;
                         border-width: 1px;
-                        border-color: #fab38744;
+                        border-color: Theme.status-warn.with-alpha(0.267);
 
                         VerticalLayout {
                             padding: 10px;

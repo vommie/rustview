@@ -193,10 +193,10 @@ export component StatusBar inherits Rectangle {
                 alignment: center;
                 Rectangle {
                     height: 18px;
-                    background: #89b4fa1a;
+                    background: Theme.primary.with-alpha(0.102);
                     border-radius: 0px;
                     border-width: 1px;
-                    border-color: #89b4fa55;
+                    border-color: Theme.primary.with-alpha(0.333);
 
                     HorizontalLayout {
                         padding-left: 6px;
@@ -222,10 +222,10 @@ export component StatusBar inherits Rectangle {
                 alignment: center;
                 Rectangle {
                     height: 18px;
-                    background: #cba6f71a;
+                    background: Theme.status-info.with-alpha(0.102);
                     border-radius: 0px;
                     border-width: 1px;
-                    border-color: #cba6f766;
+                    border-color: Theme.status-info.with-alpha(0.4);
 
                     HorizontalLayout {
                         padding-left: 6px;
@@ -237,7 +237,7 @@ export component StatusBar inherits Rectangle {
                             text: "Selected: " + (root.selection-folders > 0 ? (root.selection-folders + (root.selection-folders == 1 ? " folder" : " folders") + (root.selection-count > 0 ? ", " : "")) : "") + (root.selection-count > 0 ? (root.selection-count + (root.total-items > 0 ? (" of " + root.total-items) : "")) : "") + (root.selection-size-str != "" ? (" (" + root.selection-size-str + ")") : "");
                             font-size: 10.5px;
                             font-weight: 700;
-                            color: #cba6f7;
+                            color: Theme.status-info;
                             vertical-alignment: center;
                         }
                     }

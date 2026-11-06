@@ -3,7 +3,7 @@
 // progress bar are drawn by the bar itself (`multiview_video_bar.slint`; they follow the progress bar). Every size comes from
 // `pt` (one point of the default bar) or from Rust (`placement::AbRoom`, `placement::ab_popup_height`).
 
-import { Theme } from "styles.slint";
+import { Theme, MediaTheme } from "styles.slint";
 import { AppIcon, IconId } from "icons.slint";
 import { HoldConfirm, HoldLogic, HoldRing } from "hold.slint";
 import { TooltipHost } from "tooltips.slint";
@@ -12,7 +12,7 @@ import { AbMenuRowView, AbStripSegmentView } from "multiview_video_bar_view.slin
 
 export { AbMenuRowView, AbStripSegmentView }
 
-/// The colors of saved repeats (yellow, `Theme.accent`, is the active A-B and never one of them).
+/// The colors of saved repeats (yellow, `MediaTheme.accent`, is the active A-B and never one of them).
 export global AbColors {
     out property <[color]> palette: [#f38ba8, #a6e3a1, #fab387, #cba6f7, #94e2d5, #f5c2e7, #89dceb, #eba0ac];
     out property <color> grey: #9399b2;
@@ -25,7 +25,7 @@ export global AbColors {
 /// An icon button of the group: its color says its state, a disabled one takes no pointer and shows no hover.
 component AbButton inherits Rectangle {
     in property <IconId> icon;
-    in property <color> tint: Theme.text;
+    in property <color> tint: MediaTheme.text;
     in property <bool> enabled: true;
     // A popup of this button is open: highlighted like an opener.
     in property <bool> open;
@@ -47,7 +47,7 @@ component AbButton inherits Rectangle {
         y: (parent.height - self.height) / 2;
         icon: root.icon;
         size: root.icon-size;
-        color: !root.enabled ? Theme.text-muted.with-alpha(0.45) : touch.has-hover && !root.open ? root.tint.brighter(0.25) : root.tint;
+        color: !root.enabled ? MediaTheme.text-muted.with-alpha(0.45) : touch.has-hover && !root.open ? root.tint.brighter(0.25) : root.tint;
     }
 
     if root.badge > 0 : Rectangle {
@@ -56,7 +56,7 @@ component AbButton inherits Rectangle {
         height: Math.round(11 * root.pt / 1px) * 1px;
         width: Math.max(self.height, badge-text.preferred-width + Math.round(5 * root.pt / 1px) * 1px);
         border-radius: self.height / 2;
-        background: Theme.primary;
+        background: MediaTheme.primary;
 
         badge-text := Text {
             text: root.badge > 99 ? "99+" : "\{root.badge}";
@@ -135,7 +135,7 @@ component AbLoopButton inherits Rectangle {
         y: (parent.height - self.height) / 2;
         icon: root.look == 0 ? IconId.ab-loop-off : IconId.ab-loop;
         size: root.icon-size;
-        color: root.look == 0 ? Theme.text-muted.with-alpha(0.45) : root.look == 2 ? Theme.accent : Theme.primary;
+        color: root.look == 0 ? MediaTheme.text-muted.with-alpha(0.45) : root.look == 2 ? MediaTheme.accent : MediaTheme.primary;
     }
 
     Timer {
@@ -219,7 +219,7 @@ export component AbGroup inherits Rectangle {
     border-color: Colors.white.with-alpha(0.14);
 
     pure function point-tint(look: int) -> color {
-        return look == 1 ? Theme.accent : look == 2 ? Theme.primary : Theme.text;
+        return look == 1 ? MediaTheme.accent : look == 2 ? MediaTheme.primary : MediaTheme.text;
     }
 
     HorizontalLayout {
@@ -285,7 +285,7 @@ export component AbGroup inherits Rectangle {
                 icon-size: root.icon-size;
                 enabled: root.save-enabled || root.save-open;
                 open: root.save-open;
-                tint: root.save-open ? Theme.accent : Theme.text;
+                tint: root.save-open ? MediaTheme.accent : MediaTheme.text;
                 tip: root.save-tip;
                 clicked => { root.button(4); }
             }
@@ -302,7 +302,7 @@ export component AbGroup inherits Rectangle {
                 enabled: root.load-count > 0 || root.load-open;
                 open: root.load-open;
                 badge: root.load-count;
-                tint: root.load-open ? Theme.accent : Theme.text;
+                tint: root.load-open ? MediaTheme.accent : MediaTheme.text;
                 tip: root.load-tip;
                 clicked => { root.button(5); }
             }
@@ -337,9 +337,9 @@ component AbTextField inherits Rectangle {
     callback escaped();
 
     border-radius: Math.round(4 * root.pt / 1px) * 1px;
-    background: Theme.background;
+    background: MediaTheme.background;
     border-width: 1px;
-    border-color: input.has-focus ? Theme.primary : Theme.border;
+    border-color: input.has-focus ? MediaTheme.primary : MediaTheme.border;
 
     public function focus-input() {
         input.focus();
@@ -361,8 +361,8 @@ component AbTextField inherits Rectangle {
             vertical-alignment: center;
             single-line: true;
             font-size: root.font-size;
-            color: Theme.text;
-            selection-background-color: Theme.primary.with-alpha(0.4);
+            color: MediaTheme.text;
+            selection-background-color: MediaTheme.primary.with-alpha(0.4);
             text <=> root.text;
             edited => { root.edited(self.text); }
             accepted => { root.accepted(self.text); }
@@ -375,7 +375,7 @@ component AbTextField inherits Rectangle {
         height: parent.height;
         text: root.placeholder;
         font-size: root.font-size;
-        color: Theme.text-muted.with-alpha(0.6);
+        color: MediaTheme.text-muted.with-alpha(0.6);
         vertical-alignment: center;
         overflow: elide;
     }
@@ -390,7 +390,7 @@ export component AbSaveBubble inherits Rectangle {
     in property <string> hint;
     in property <length> caret-center;
     in-out property <string> text;
-    in property <color> fill: Theme.surface;
+    in property <color> fill: MediaTheme.surface;
     callback edited(string);
     callback commit(string);
     callback cancel();
@@ -412,7 +412,7 @@ export component AbSaveBubble inherits Rectangle {
         border-radius: Math.round(6 * root.pt / 1px) * 1px;
         background: root.fill;
         border-width: 1px;
-        border-color: Theme.border;
+        border-color: MediaTheme.border;
 
         VerticalLayout {
             padding: root.pad;
@@ -435,7 +435,7 @@ export component AbSaveBubble inherits Rectangle {
                 Rectangle {
                     width: root.line + Math.round(10 * root.pt / 1px) * 1px;
                     border-radius: Math.round(4 * root.pt / 1px) * 1px;
-                    background: save-touch.has-hover ? Theme.primary.brighter(0.15) : Theme.primary;
+                    background: save-touch.has-hover ? MediaTheme.primary.brighter(0.15) : MediaTheme.primary;
 
                     AppIcon {
                         x: (parent.width - self.width) / 2;
@@ -466,7 +466,7 @@ export component AbSaveBubble inherits Rectangle {
             if root.hint != "" : Text {
                 text: root.hint;
                 font-size: root.font-size - 1px;
-                color: Theme.accent;
+                color: MediaTheme.accent;
                 overflow: elide;
             }
         }
@@ -572,7 +572,7 @@ component AbMenuRow inherits Rectangle {
     callback delete();
 
     border-radius: Math.round(4 * root.pt / 1px) * 1px;
-    background: root.entry.current ? Theme.accent.with-alpha(0.16) : pick-touch.has-hover ? Colors.white.with-alpha(0.06) : transparent;
+    background: root.entry.current ? MediaTheme.accent.with-alpha(0.16) : pick-touch.has-hover ? Colors.white.with-alpha(0.06) : transparent;
 
     pick-touch := TouchArea {
         mouse-cursor: pointer;
@@ -599,7 +599,7 @@ component AbMenuRow inherits Rectangle {
             width: Math.round(18 * root.pt / 1px) * 1px;
             text: "\{root.entry.number}";
             font-size: root.font-size - 1px;
-            color: Theme.text-muted;
+            color: MediaTheme.text-muted;
             horizontal-alignment: right;
             vertical-alignment: center;
         }
@@ -609,7 +609,7 @@ component AbMenuRow inherits Rectangle {
             min-width: Math.round(60 * root.pt / 1px) * 1px;
             text: root.entry.name;
             font-size: root.font-size;
-            text-color: root.entry.current ? Theme.accent : Theme.text;
+            text-color: root.entry.current ? MediaTheme.accent : MediaTheme.text;
         }
 
         if root.renaming : VerticalLayout {
@@ -650,7 +650,7 @@ component AbMenuRow inherits Rectangle {
         Text {
             text: root.entry.times;
             font-size: root.font-size - 1px;
-            color: Theme.text-muted;
+            color: MediaTheme.text-muted;
             vertical-alignment: center;
         }
 
@@ -658,7 +658,7 @@ component AbMenuRow inherits Rectangle {
             min-width: Math.round(34 * root.pt / 1px) * 1px;
             text: root.entry.length;
             font-size: root.font-size - 1px;
-            color: Theme.text-muted;
+            color: MediaTheme.text-muted;
             horizontal-alignment: right;
             vertical-alignment: center;
         }
@@ -700,7 +700,7 @@ export component AbLoadMenu inherits Rectangle {
     in property <int> renaming: -1;
     in property <string> rename-text;
     in property <length> caret-center;
-    in property <color> fill: Theme.surface;
+    in property <color> fill: MediaTheme.surface;
     callback query-edited(string);
     callback page-step(int);
     callback pick(int);
@@ -736,7 +736,7 @@ export component AbLoadMenu inherits Rectangle {
         border-radius: Math.round(6 * root.pt / 1px) * 1px;
         background: root.fill;
         border-width: 1px;
-        border-color: Theme.border;
+        border-color: MediaTheme.border;
 
         VerticalLayout {
             padding: root.pad;
@@ -784,7 +784,7 @@ export component AbLoadMenu inherits Rectangle {
                     horizontal-stretch: 1;
                     text: root.status;
                     font-size: root.font-size - 1px;
-                    color: Theme.text-muted;
+                    color: MediaTheme.text-muted;
                     vertical-alignment: center;
                     overflow: elide;
                 }
@@ -802,7 +802,7 @@ export component AbLoadMenu inherits Rectangle {
                 if !root.scroll && root.pages > 1 : Text {
                     text: "Page " + (root.page + 1) + " of " + root.pages;
                     font-size: root.font-size - 1px;
-                    color: Theme.text-muted;
+                    color: MediaTheme.text-muted;
                     vertical-alignment: center;
                 }
 

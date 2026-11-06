@@ -1,4 +1,4 @@
-import { Theme } from "styles.slint";
+import { Theme, MediaTheme } from "styles.slint";
 import { AppIcon, IconId, IconSize } from "icons.slint";
 import { TooltipArea } from "tooltips.slint";
 import { ButtonFeedbackOverlay } from "button_feedback.slint";
@@ -20,9 +20,9 @@ component MultiviewBarButton inherits Rectangle {
     width: root.size + (root.action.split ? root.arrow-width : 0px);
     height: root.size;
     border-radius: 6px;
-    background: root.action.attention ? Theme.accent.with-alpha(0.7)
-        : root.emphasized ? (area.has-hover || arrow.has-hover || root.open ? Theme.primary.brighter(15%) : Theme.primary)
-        : (root.open ? Theme.primary.with-alpha(0.28) : (area.has-hover ? Theme.surface-hover : transparent));
+    background: root.action.attention ? MediaTheme.accent.with-alpha(0.7)
+        : root.emphasized ? (area.has-hover || arrow.has-hover || root.open ? MediaTheme.primary.brighter(15%) : MediaTheme.primary)
+        : (root.open ? MediaTheme.primary.with-alpha(0.28) : (area.has-hover ? MediaTheme.surface-hover : transparent));
     animate background { duration: 90ms; }
     // The one place a bar button fades with opacity: the Save button going away after a save (an icon cannot be faded by its
     // color without Slint drawing the raw black SVG at the end).
@@ -45,10 +45,10 @@ component MultiviewBarButton inherits Rectangle {
             y: (parent.height - self.height) / 2;
             icon: root.action.icon;
             size: IconSize.lg;
-            color: root.action.attention || root.emphasized ? Theme.background
-                : root.action.emphasis == 3 ? Theme.text-muted.with-alpha(0.6)
-                : root.action.emphasis == 2 ? Theme.text-muted
-                : (!root.action.enabled ? Theme.text-muted.with-alpha(0.5) : ((root.action.toggle && root.action.active) || root.open || area.has-hover ? Theme.primary : Theme.text));
+            color: root.action.attention || root.emphasized ? MediaTheme.background
+                : root.action.emphasis == 3 ? MediaTheme.text-muted.with-alpha(0.6)
+                : root.action.emphasis == 2 ? MediaTheme.text-muted
+                : (!root.action.enabled ? MediaTheme.text-muted.with-alpha(0.5) : ((root.action.toggle && root.action.active) || root.open || area.has-hover ? MediaTheme.primary : MediaTheme.text));
         }
 
         ButtonFeedbackOverlay {
@@ -62,7 +62,7 @@ component MultiviewBarButton inherits Rectangle {
         y: 6px;
         width: 1px;
         height: root.height - 12px;
-        background: Theme.background.with-alpha(0.35);
+        background: MediaTheme.background.with-alpha(0.35);
     }
 
     arrow := TooltipArea {
@@ -82,7 +82,7 @@ component MultiviewBarButton inherits Rectangle {
             y: (parent.height - self.height) / 2;
             icon: IconId.chevron-down;
             size: IconSize.md;
-            color: root.emphasized ? Theme.background : Theme.text;
+            color: root.emphasized ? MediaTheme.background : MediaTheme.text;
         }
     }
 }
@@ -122,10 +122,10 @@ export component MultiviewBar inherits Rectangle {
 
     width: root.actions.length * root.button-size + (root.split-index >= 0 ? root.arrow-width : 0px) + Math.max(root.actions.length - 1, 0) * root.button-spacing + 2 * root.inset;
     height: root.button-size + 2 * root.inset;
-    background: Theme.surface.with-alpha(0.7);
+    background: MediaTheme.surface.with-alpha(0.7);
     border-radius: 8px;
     border-width: 1px;
-    border-color: Theme.border;
+    border-color: MediaTheme.border;
 
     // The bar is solid for the pointer: a click between its buttons or a wheel over it does not reach the medium below.
     TouchArea {

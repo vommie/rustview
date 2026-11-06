@@ -1,4 +1,4 @@
-import { Theme } from "styles.slint";
+import { Theme, MediaTheme } from "styles.slint";
 import { AppIcon, IconId } from "icons.slint";
 import { AbColors, AbGroup, AbLoadMenu, AbSaveBubble } from "multiview_video_bar_ab.slint";
 import { AbMenuRowView, AbStripSegmentView, MultiviewVideoBarView, VideoBarSpanView } from "multiview_video_bar_view.slint";
@@ -272,7 +272,7 @@ export component MultiviewVideoBar inherits Rectangle {
                 height: root.btn;
                 text: root.bar.current-text;
                 font-size: root.font-size;
-                text-color: Theme.text;
+                text-color: MediaTheme.text;
                 alignment: right;
                 clicked => { root.toggle-ms(); }
             }
@@ -293,7 +293,7 @@ export component MultiviewVideoBar inherits Rectangle {
                         x: span.from * parent.width;
                         width: (span.to - span.from) * parent.width;
                         height: 100%;
-                        background: span.kind == 0 ? Theme.primary : Theme.text-muted;
+                        background: span.kind == 0 ? MediaTheme.primary : MediaTheme.text-muted;
                     }
 
                     // The current A-B over the progress, translucent yellow (stronger while it loops), so the progress
@@ -302,7 +302,7 @@ export component MultiviewVideoBar inherits Rectangle {
                         x: root.bar.ab-span-from * parent.width;
                         width: Math.max(2px, (root.bar.ab-span-to - root.bar.ab-span-from) * parent.width);
                         height: 100%;
-                        background: Theme.accent.with-alpha(root.bar.ab-span-looping ? 0.8 : 0.5);
+                        background: MediaTheme.accent.with-alpha(root.bar.ab-span-looping ? 0.8 : 0.5);
                     }
 
                     if root.bar.ab-shown && root.bar.ab-dim : Rectangle {
@@ -363,7 +363,7 @@ export component MultiviewVideoBar inherits Rectangle {
                 height: root.btn;
                 text: root.bar.remaining-text;
                 font-size: root.font-size;
-                text-color: Theme.text-muted;
+                text-color: MediaTheme.text-muted;
                 alignment: left;
                 clicked => { root.toggle-ms(); }
             }
@@ -404,7 +404,7 @@ export component MultiviewVideoBar inherits Rectangle {
                 pt: root.pt;
                 icon: root.bar.ab-loop-look == 0 ? IconId.ab-loop-off : IconId.ab-loop;
                 icon-size: root.icon-size;
-                tint: root.bar.ab-loop-look == 2 ? Theme.accent : root.bar.ab-loop-look == 1 ? Theme.primary : Theme.text;
+                tint: root.bar.ab-loop-look == 2 ? MediaTheme.accent : root.bar.ab-loop-look == 1 ? MediaTheme.primary : MediaTheme.text;
                 open: root.bar.ab-bubble;
                 tip: root.bar.ab-bubble ? "Hide the A-B repeat buttons" : "Show the A-B repeat buttons";
                 clicked => { root.ab-bubble-toggle(); }
@@ -446,7 +446,7 @@ export component MultiviewVideoBar inherits Rectangle {
                 pt: root.pt;
                 icon: IconId.video-filter;
                 icon-size: root.icon-size;
-                tint: root.bar.filter-count > 0 ? Theme.filter-active : Theme.text;
+                tint: root.bar.filter-count > 0 ? MediaTheme.filter-active : MediaTheme.text;
                 badge: root.bar.filter-count;
                 open: root.bar.menu-open == 2;
                 tip: root.bar.filter-count > 0 ? "Video filters (" + root.bar.filter-count + " on)" : "Video filters";
@@ -476,7 +476,7 @@ export component MultiviewVideoBar inherits Rectangle {
                 property <length> knob: Math.round(12 * root.pt / 1px) * 1px;
                 property <length> inner-width: self.width - self.knob;
                 property <bool> active: volume-touch.has-hover || volume-touch.pressed;
-                property <color> fill: root.bar.muted ? Theme.text-muted.with-alpha(0.5) : Theme.primary;
+                property <color> fill: root.bar.muted ? MediaTheme.text-muted.with-alpha(0.5) : MediaTheme.primary;
 
                 Rectangle {
                     x: slider.knob / 2;
@@ -501,7 +501,7 @@ export component MultiviewVideoBar inherits Rectangle {
                     width: slider.knob;
                     height: slider.knob;
                     border-radius: self.width / 2;
-                    background: root.bar.muted ? Theme.text-muted : #ffffff;
+                    background: root.bar.muted ? MediaTheme.text-muted : #ffffff;
                 }
 
                 volume-touch := TouchArea {

@@ -48,7 +48,7 @@ export component DeleteTagDialog inherits Window {
                     DialogHeading {
                         icon: IconId.status-warning;
                         text: "Delete Tag";
-                        color: #f38ba8;
+                        color: Theme.status-corrupt;
                     }
 
                     Text {
@@ -59,10 +59,10 @@ export component DeleteTagDialog inherits Window {
                     }
 
                     if root.has-children : Rectangle {
-                        background: #f38ba822;
+                        background: Theme.status-corrupt.with-alpha(0.133);
                         border-radius: 4px;
                         border-width: 1px;
-                        border-color: #f38ba866;
+                        border-color: Theme.status-corrupt.with-alpha(0.4);
 
                         VerticalLayout {
                             padding: 8px;
@@ -72,7 +72,7 @@ export component DeleteTagDialog inherits Window {
                                 text: "Warning: The following child tags will also be permanently deleted:";
                                 font-size: 11px;
                                 font-weight: 700;
-                                color: #f38ba8;
+                                color: Theme.status-corrupt;
                             }
 
                             Text {
@@ -93,7 +93,7 @@ export component DeleteTagDialog inherits Window {
                     if root.error-message != "" : Text {
                         text: root.error-message;
                         font-size: 11px;
-                        color: #ff5555;
+                        color: Theme.status-corrupt;
                         wrap: word-wrap;
                     }
                 }

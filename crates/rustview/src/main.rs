@@ -148,6 +148,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     window_system::select_backend(selector, window_system).select()?;
 
     startup_clock::mark("Backend");
+    // The look before the first window exists: Settings > Appearance > Theme, then the desktop's scheme once it answers.
+    rustview::ui::theme::set_mode(&settings.get().appearance.theme);
+    rustview::system::color_scheme::watch(rustview::ui::theme::set_system);
     let main_window = MainWindow::new()?;
     rustview::ui::tooltip::install(&main_window);
     startup_clock::mark("MainWindowCreated");

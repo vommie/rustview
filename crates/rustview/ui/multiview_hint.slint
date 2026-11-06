@@ -1,4 +1,4 @@
-import { Theme } from "styles.slint";
+import { Theme, MediaTheme } from "styles.slint";
 import { AppIcon, IconId } from "icons.slint";
 
 /// The short hint of the Multiview when a key has nothing to act on ("Select a medium first"), drawn by the canvas centered over
@@ -13,7 +13,7 @@ export component MultiviewHint inherits Rectangle {
     property <length> caption-top: root.disc-size + 6px;
     property <length> caption-height: 26px;
     property <length> caption-width: caption-text.preferred-width + 28px;
-    property <color> surface: Theme.surface.with-alpha(0.93);
+    property <color> surface: MediaTheme.surface.with-alpha(0.93);
 
     width: Math.max(root.disc-size, root.caption-width);
     height: root.caption-top + root.caption-height;
@@ -31,14 +31,14 @@ export component MultiviewHint inherits Rectangle {
             border-radius: self.width / 2;
             background: root.surface;
             border-width: 2px;
-            border-color: Theme.primary;
+            border-color: MediaTheme.primary;
 
             AppIcon {
                 x: (parent.width - self.width) / 2;
                 y: (parent.height - self.height) / 2;
                 icon: IconId.multiview-select-first;
                 size: 24px;
-                color: Theme.primary;
+                color: MediaTheme.primary;
             }
         }
 
@@ -53,7 +53,7 @@ export component MultiviewHint inherits Rectangle {
             caption-text := Text {
                 text: root.text;
                 font-size: 13px;
-                color: Theme.text;
+                color: MediaTheme.text;
                 horizontal-alignment: center;
                 vertical-alignment: center;
             }

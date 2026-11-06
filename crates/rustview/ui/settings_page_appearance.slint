@@ -1,4 +1,4 @@
-import { Slider, CheckBox, ComboBox } from "settings_controls.slint";
+import { Slider, CheckBox, ComboBox, SegmentedChoice } from "settings_controls.slint";
 import { Theme } from "styles.slint";
 import { SettingsCard } from "settings_card.slint";
 
@@ -16,6 +16,8 @@ export component SettingsPageAppearance inherits VerticalLayout {
     in-out property <int> thumbnail-badge-overflow-idx: 0; // 0=hide, 1=wrap
     in-out property <bool> enable-hover-previews: true;
     in-out property <bool> enable-tooltips: true;
+    // 0 = follow the system, 1 = dark, 2 = light (`appearance.theme`).
+    in-out property <int> theme-idx: 0;
     in-out property <int> tooltip-delay-ms: 750;
     in-out property <bool> type-ahead-enabled: true;
     in-out property <int> type-ahead-timeout-ms: 1000;
@@ -33,6 +35,29 @@ export component SettingsPageAppearance inherits VerticalLayout {
     in-out property <int> grid-padding: 12;
     in-out property <int> grid-item-border-width: 1;
     in-out property <int> grid-item-corner-radius: 4;
+
+    SettingsCard {
+        title: "Theme";
+        description: "Dark or light. System follows KDE's color scheme (System Settings > Colors), also when it changes while RustView runs.";
+
+        HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+            spacing: 8px;
+
+            Text {
+                text: "Colors";
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+
+            SegmentedChoice {
+                items: ["System", "Dark", "Light"];
+                current <=> root.theme-idx;
+            }
+        }
+    }
 
     SettingsCard {
         title: "Grid & Thumbnail Presentation";

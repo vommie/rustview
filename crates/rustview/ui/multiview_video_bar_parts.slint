@@ -2,7 +2,7 @@
 // opens (the vertical volume bar of the speaker, the bubble with the A-B group). Every size comes from `pt` (one point of
 // the default bar, 30 px high). The look of the volume popup follows RustCut's (percent on top, the bar, mute below it).
 
-import { Theme } from "styles.slint";
+import { Theme, MediaTheme } from "styles.slint";
 import { AppIcon, IconId } from "icons.slint";
 import { TooltipHost } from "tooltips.slint";
 
@@ -23,7 +23,7 @@ export component BarIconButton inherits Rectangle {
     in property <IconId> icon;
     in property <length> size;
     in property <length> icon-size;
-    in property <color> tint: Theme.text;
+    in property <color> tint: MediaTheme.text;
     in property <bool> open;
     in property <string> tip;
     in property <string> shortcut;
@@ -43,7 +43,7 @@ export component BarIconButton inherits Rectangle {
         y: (parent.height - self.height) / 2;
         icon: root.icon;
         size: root.icon-size;
-        color: touch.has-hover ? (root.tint == Theme.text ? #ffffff : root.tint.brighter(0.25)) : root.tint;
+        color: touch.has-hover ? (root.tint == MediaTheme.text ? #ffffff : root.tint.brighter(0.25)) : root.tint;
     }
 
     if root.badge > 0 : Rectangle {
@@ -52,7 +52,7 @@ export component BarIconButton inherits Rectangle {
         height: Math.round(11 * root.pt / 1px) * 1px;
         width: Math.max(self.height, badge-text.preferred-width + Math.round(5 * root.pt / 1px) * 1px);
         border-radius: self.height / 2;
-        background: root.tint == Theme.text ? Theme.primary : root.tint;
+        background: root.tint == MediaTheme.text ? MediaTheme.primary : root.tint;
 
         badge-text := Text {
             text: root.badge > 99 ? "99+" : "\{root.badge}";
@@ -147,7 +147,7 @@ component BubbleCaret inherits Rectangle {
         viewbox-width: 14;
         viewbox-height: 8;
         commands: "M 0 0.5 L 7 7.5 L 14 0.5";
-        stroke: Theme.border;
+        stroke: MediaTheme.border;
         stroke-width: 1px;
     }
 }
@@ -157,7 +157,7 @@ component BubbleCaret inherits Rectangle {
 export component BarBubble inherits Rectangle {
     in property <length> pt;
     in property <length> caret-center;
-    in property <color> fill: Theme.surface;
+    in property <color> fill: MediaTheme.surface;
     out property <length> caret: Math.round(7 * root.pt / 1px) * 1px;
     out property <length> body-height: root.height - root.caret;
 
@@ -167,7 +167,7 @@ export component BarBubble inherits Rectangle {
         border-radius: Math.round(6 * root.pt / 1px) * 1px;
         background: root.fill;
         border-width: 1px;
-        border-color: Theme.border;
+        border-color: MediaTheme.border;
 
         // Presses between the controls stay inside (they never reach the video or the backdrop).
         TouchArea { }
@@ -195,7 +195,7 @@ component VerticalVolume inherits Rectangle {
     property <length> knob: Math.round(10 * root.pt / 1px) * 1px;
     property <length> usable: root.height - root.knob;
     property <float> shown: Math.clamp(root.share, 0, 1);
-    property <color> fill: root.muted ? Theme.text-muted.with-alpha(0.5) : Theme.primary;
+    property <color> fill: root.muted ? MediaTheme.text-muted.with-alpha(0.5) : MediaTheme.primary;
 
     pure function at(y: length) -> float {
         return Math.clamp(1 - (y - root.knob / 2) / Math.max(1px, root.usable), 0, 1);
@@ -223,7 +223,7 @@ component VerticalVolume inherits Rectangle {
         width: root.knob;
         height: root.knob;
         border-radius: self.width / 2;
-        background: root.muted ? Theme.text-muted : (touch.has-hover || touch.pressed ? #ffffff : Theme.text);
+        background: root.muted ? MediaTheme.text-muted : (touch.has-hover || touch.pressed ? #ffffff : MediaTheme.text);
     }
 
     touch := TouchArea {
@@ -287,7 +287,7 @@ export component BarVolumePopup inherits Rectangle {
             width: root.w;
             height: Math.round(14 * root.pt / 1px) * 1px;
             text: root.level-text;
-            color: root.muted ? Theme.text-muted : Theme.text;
+            color: root.muted ? MediaTheme.text-muted : MediaTheme.text;
             font-size: Math.max(9px, Math.round(11 * root.pt / 1px) * 1px);
             horizontal-alignment: center;
             vertical-alignment: center;

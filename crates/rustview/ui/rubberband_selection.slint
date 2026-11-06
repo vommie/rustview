@@ -10,7 +10,7 @@ export component RubberbandOverlay inherits Rectangle {
     in property <length> rect-height: 0px;
 
     // Theming & Customization API
-    in property <color> fill-color: #89b4fa26; // 15% opacity Theme.primary
+    in property <color> fill-color: Theme.primary.with-alpha(0.149); // 15% opacity Theme.primary
     in property <color> border-line-color: Theme.primary;
     in property <length> border-line-width: 1px;
     in property <length> rect-corner-radius: 2px;

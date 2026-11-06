@@ -1,4 +1,4 @@
-import { Theme } from "styles.slint";
+import { Theme, MediaTheme } from "styles.slint";
 import { AppIcon, IconId, IconSize } from "icons.slint";
 
 /// Separator between two Multiview tiles. The whole gutter is a drag handle (double click resets all splits); the swap
@@ -53,7 +53,7 @@ export component MultiviewGutter inherits Rectangle {
         y: root.vertical ? 0px : (parent.height - self.height) / 2;
         width: root.vertical ? (root.hot ? 2px : 1px) : parent.width;
         height: root.vertical ? parent.height : (root.hot ? 2px : 1px);
-        background: drag.pressed ? Theme.accent : (root.hot ? Theme.primary : Theme.border);
+        background: drag.pressed ? MediaTheme.accent : (root.hot ? MediaTheme.primary : MediaTheme.border);
     }
 
     swap-touch := TouchArea {
@@ -70,7 +70,7 @@ export component MultiviewGutter inherits Rectangle {
         }
 
         Rectangle {
-            background: swap-touch.has-hover ? Theme.surface-hover : Theme.surface;
+            background: swap-touch.has-hover ? MediaTheme.surface-hover : MediaTheme.surface;
             border-radius: 3px;
 
             AppIcon {
@@ -78,7 +78,7 @@ export component MultiviewGutter inherits Rectangle {
                 y: (parent.height - self.height) / 2;
                 icon: root.vertical ? IconId.multiview-swap : IconId.multiview-swap-rows;
                 size: IconSize.sm;
-                color: swap-touch.has-hover ? Theme.primary : Theme.text-muted;
+                color: swap-touch.has-hover ? MediaTheme.primary : MediaTheme.text-muted;
             }
         }
     }

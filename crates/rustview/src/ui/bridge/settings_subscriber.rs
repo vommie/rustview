@@ -86,6 +86,10 @@ impl UiBridge {
                     FormatPolicyApplier::apply(&ctx, old_formats, new_formats);
                 }
 
+                if diff_clone.theme_changed {
+                    crate::ui::theme::set_mode(&new_clone.appearance.theme);
+                }
+
                 if diff_clone.tooltip_settings_changed {
                     window.set_enable_tooltips(new_clone.appearance.enable_tooltips);
                     window.set_tooltip_delay_ms(new_clone.appearance.tooltip_delay_ms.saturating_as::<i32>());
