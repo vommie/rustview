@@ -88,6 +88,7 @@ fn create(manager: &Arc<SettingsManager>) -> Option<Rc<LogWindowController>> {
             return None;
         }
     };
+    crate::ui::tooltip::install(&window);
     let settings = manager.get();
     let tooltips = window.global::<TooltipSettings>();
     tooltips.set_enabled(settings.appearance.enable_tooltips);

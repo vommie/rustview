@@ -200,6 +200,7 @@ pub(super) fn refresh_settings(settings: &SettingsManager) {
 
 fn create_window() -> Result<MultiviewFullscreenWindow, slint::PlatformError> {
     let win = MultiviewFullscreenWindow::new()?;
+    crate::ui::tooltip::install(&win);
     crate::ui::dialog_parent::register_parent(&win, crate::ui::dialog_parent::Role::Fullscreen);
     super::video_host::register(&win, FULLSCREEN_WINDOW, MultiviewFullscreenWindow::set_video_frames);
     super::video_host::install_notifier(&win, FULLSCREEN_WINDOW);

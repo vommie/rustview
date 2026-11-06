@@ -37,6 +37,7 @@ pub mod tabs;
 pub mod tags;
 pub mod thumbnail_badges;
 pub mod thumbnail_regeneration;
+pub mod tooltip;
 pub mod type_ahead;
 pub mod virtual_folder_wording;
 

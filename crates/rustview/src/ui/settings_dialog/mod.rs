@@ -109,6 +109,7 @@ impl SettingsDialogController {
     pub fn show(&mut self) {
         if self.settings_window.is_none() {
             let window = SettingsWindow::new().expect("Failed to create SettingsWindow");
+            crate::ui::tooltip::install(&window);
             crate::ui::dialog_parent::install_window(&window, crate::ui::dialog_parent::Role::Settings);
             color_picker::install(&window);
             self.formats_page.install(&window);

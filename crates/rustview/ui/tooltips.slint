@@ -1,24 +1,29 @@
-import { Theme } from "styles.slint";
-import { AppIcon, IconId, IconSize, IconSlot } from "icons.slint";
+// The tooltips, RustCut's bubbles (RustCut's `ui/tooltip.slint`, which grew out of this file; same author, kept alike):
+// one bubble per window, drawn by `GlobalTooltipLayer` (global_tooltip_layer.slint) on top of everything (no popup
+// window, so it never grabs the pointer). An element embeds a `TooltipHost` (or wraps its children in a `TooltipArea`):
+// it waits for the hover delay and hands its tip and its rectangle to `GlobalTooltip`. The layer places the bubble next
+// to the element with a tail pointing at it (`TooltipLogic.place`, Rust `src/ui/tooltip/placement.rs`), glides from
+// element to element and shows the next tip at once while one just closed. RustView keeps its extras: an icon before
+// the text, tips of context menu entries only while a menu is open, and tips that follow the pointer.
 
-/// Global configuration and state registry for the centralized Tooltip Subsystem.
+import { IconId } from "icons.slint";
+
 export global TooltipSettings {
-    // Master enable flag (synchronized from AppSettings.appearance.enable_tooltips)
+    // Settings > Appearance (`appearance.enable_tooltips`, `appearance.tooltip_delay_ms`).
     in-out property <bool> enabled: true;
-
-    // Master default delay before a tooltip opens (synchronized from AppSettings.appearance.tooltip_delay_ms)
-    in-out property <duration> default-delay: 750ms;
-
-    // Default Visual Styling (Theme adaptive)
-    in-out property <color> default-background: #181825f2;
-    in-out property <color> default-border: #45475acc;
-    in-out property <color> default-text: #cdd6f4;
-    in-out property <color> default-shortcut-color: #f9e2af;
-    in-out property <length> default-font-size: 12px;
-    in-out property <length> default-corner-radius: 4px;
-    in-out property <length> default-padding-h: 9px;
-    in-out property <length> default-padding-v: 5px;
-    in-out property <length> max-width: 340px;
+    in-out property <duration> default-delay: 600ms;
+    // After a tooltip closed, the next one within this time shows at once (moving along a row of buttons).
+    out property <duration> warm-up: 700ms;
+    out property <color> background: #181825f4;
+    out property <color> border: #45475acc;
+    out property <color> text: #cdd6f4;
+    out property <color> muted: #a6adc8;
+    out property <color> accent: #f9e2af;
+    out property <length> font-size: 12px;
+    out property <length> small-font-size: 11px;
+    out property <length> padding-h: 9px;
+    out property <length> padding-v: 6px;
+    out property <length> max-width: 320px;
 }
 
 /// Single source of truth for the reasons appended to tooltips of disabled elements.
@@ -29,233 +34,301 @@ export global TooltipReasons {
     out property <string> busy: "Disabled: Another scan, refresh or thumbnail operation is currently in progress";
 }
 
-/// Global non-blocking Tooltip Overlay state manager.
-/// Manages tooltip visibility and positioning without creating modal popup window grabs.
+/// One line of a rich tooltip: a label and its value, or (`heading`) the title of the rows below it.
+export struct TipRow {
+    label: string,
+    value: string,
+    heading: bool,
+}
+
+/// What a tooltip shows.
+export struct Tip {
+    title: string,
+    text: string,
+    // The keys as the keymap writes them ("Ctrl+S", several joined by " or "), or a short explanation.
+    shortcut: string,
+    rows: [TipRow],
+    note: string,
+    icon: IconId,
+    // The element acts only when held: the bubble shows the hold badge (hold.slint).
+    hold: bool,
+    // Shows even with tooltips switched off.
+    forced: bool,
+    // A row of a menu: the bubble goes beside it first, so it never covers the other rows.
+    beside: bool,
+}
+
+/// A rectangle in window coordinates.
+export struct TipRect {
+    x: length,
+    y: length,
+    width: length,
+    height: length,
+}
+
+/// One key cap: a key's short name or a symbol; `alternative` = another chord of the action starts here ("or").
+export struct TipKey {
+    text: string,
+    icon: IconId,
+    alternative: bool,
+}
+
+/// The caps of a shortcut text; `keys` is false for a text that is no key (a plain chip, or a line of its own when it is
+/// a `sentence`).
+export struct TipKeys {
+    caps: [TipKey],
+    keys: bool,
+    alternatives: bool,
+    sentence: bool,
+}
+
+/// The side of the element the bubble is on.
+export enum TipSide { below, above, right, left, over }
+
+/// Where the bubble goes (layer coordinates); `arrow` is the arrow's center along the edge that faces the element.
+export struct TipPlacement {
+    x: length,
+    y: length,
+    side: TipSide,
+    arrow: length,
+}
+
+/// Rust's side (src/ui/tooltip/): the key caps and the placement, pure functions with tests.
+export global TooltipLogic {
+    pure callback key-caps(/* shortcut */ string) -> TipKeys;
+    pure callback place(/* element */ TipRect, /* bubble width */ length, /* bubble height */ length,
+        /* area width */ length, /* area height */ length, /* beside first */ bool) -> TipPlacement;
+}
+
+/// What the bubble shows and for which element.
 export global GlobalTooltip {
     in-out property <bool> is-visible: false;
-    in-out property <string> text: "";
-    in-out property <string> shortcut: "";
-    // The element acts only when held (hold.slint): the bubble shows the hold badge.
-    in-out property <bool> hold: false;
-    in-out property <IconId> icon: IconId.none;
-    in-out property <length> pos-x: 0px;
-    in-out property <length> pos-y: 0px;
-    // The bottom edge of the bubble when it goes above its element, because below it there is no room (a bar at the bottom of
-    // the window): just over the element, never over it.
-    in-out property <length> top-y: 0px;
-    // A context menu of the window is open: only the tooltips of its entries show (`TooltipHost.in-menu`). An element behind the
-    // menu's backdrop never hears that the pointer left, so its tooltip would appear over the menu.
+    in-out property <Tip> tip;
+    in-out property <TipRect> anchor;
+    // Counts the shows: a host knows whether the bubble is still its own.
+    in-out property <int> serial;
+    // A tooltip closed a moment ago: the next one skips the delay (the layer cools it down).
+    in-out property <bool> warm;
+    // The previous bubble was still fading out: the new one glides from its place.
+    in-out property <bool> recent;
+    in-out property <bool> glide;
+    // A context menu of the window is open: only the tooltips of its entries show (`TooltipHost.in-menu`). An element
+    // behind the menu's backdrop never hears that the pointer left, so its tooltip would appear over the menu.
     in-out property <bool> menu-open: false;
 
-    public function show(
-        text: string,
-        shortcut: string,
-        icon: IconId,
-        x: length,
-        y: length,
-        top: length
-    ) {
-        root.text = text;
-        root.shortcut = shortcut;
-        root.icon = icon;
-        root.pos-x = x;
-        root.pos-y = y;
-        root.top-y = top;
+    public function show(tip: Tip, anchor: TipRect) -> int {
+        root.glide = root.is-visible || root.recent;
+        root.tip = tip;
+        root.anchor = anchor;
+        root.serial += 1;
         root.is-visible = true;
+        root.warm = true;
+        return root.serial;
     }
 
+    /// A shown tip changed (another text under the pointer, the element moved).
+    public function update(serial: int, tip: Tip, anchor: TipRect) {
+        if serial == root.serial && root.is-visible {
+            // Only a moved element glides (the host's first update carries the rectangle `show()` got).
+            if anchor != root.anchor {
+                root.glide = true;
+            }
+            root.tip = tip;
+            root.anchor = anchor;
+        }
+    }
+
+    /// The pointer left: the next tooltip close by shows at once.
     public function hide() {
         root.is-visible = false;
     }
-}
 
-/// Standalone visual tooltip bubble component with border, drop shadow, text, and optional shortcut badge.
-export component TooltipBubble inherits Rectangle {
-    in property <string> text: "";
-    in property <string> shortcut: "";
-    in property <IconId> icon: IconId.none;
-    property <bool> has-icon: root.icon != IconId.none;
-
-    // Custom Style Overrides (falls back to TooltipSettings defaults if transparent / 0)
-    in property <color> custom-bg: transparent;
-    in property <color> custom-border: transparent;
-    in property <color> custom-text: transparent;
-    in property <length> custom-font-size: 0px;
-
-    background: (root.custom-bg != transparent) ? root.custom-bg : TooltipSettings.default-background;
-    border-radius: TooltipSettings.default-corner-radius;
-    border-width: 1px;
-    border-color: (root.custom-border != transparent) ? root.custom-border : TooltipSettings.default-border;
-    drop-shadow-blur: 8px;
-    drop-shadow-color: #000000aa;
-    drop-shadow-offset-y: 2px;
-
-    HorizontalLayout {
-        padding-left: TooltipSettings.default-padding-h;
-        padding-right: TooltipSettings.default-padding-h;
-        padding-top: TooltipSettings.default-padding-v;
-        padding-bottom: TooltipSettings.default-padding-v;
-        spacing: 6px;
-        alignment: center;
-
-        if root.has-icon : IconSlot {
-            icon: root.icon;
-            size: IconSize.sm;
-            color: (root.custom-text != transparent) ? root.custom-text : TooltipSettings.default-text;
-        }
-
-        Text {
-            text: root.text;
-            font-size: (root.custom-font-size > 0px) ? root.custom-font-size : TooltipSettings.default-font-size;
-            color: (root.custom-text != transparent) ? root.custom-text : TooltipSettings.default-text;
-            vertical-alignment: center;
-            horizontal-alignment: left;
-        }
-
-        if root.shortcut != "" : Rectangle {
-            background: #ffffff14;
-            border-radius: 3px;
-            border-width: 1px;
-            border-color: #ffffff22;
-            height: 18px;
-            y: (parent.height - self.height) / 2;
-
-            HorizontalLayout {
-                padding-left: 5px;
-                padding-right: 5px;
-                alignment: center;
-
-                Text {
-                    text: root.shortcut;
-                    font-size: 10.5px;
-                    font-weight: 700;
-                    color: TooltipSettings.default-shortcut-color;
-                    vertical-alignment: center;
-                }
-            }
-        }
+    /// A press or a closed dialog: the next tooltip waits for the delay again.
+    public function hide-cold() {
+        root.is-visible = false;
+        root.warm = false;
     }
 }
 
-/// Generic, modular TooltipHost controller component.
-/// Embedded directly inside any button or UI element to manage hover timing, delay, cursor tracking,
-/// and instant click-through without modal input interception.
+/// Embedded in an element: shows its tip next to the element after the hover delay (at once while another tooltip
+/// just closed). The element's touch area calls `on-hover-enter()`/`on-hover-leave()` (or `enter()`/`leave()`) and
+/// `press()` on a press.
 export component TooltipHost inherits Rectangle {
-    in property <string> text: "";
-    in property <string> shortcut: "";
+    in property <string> text;
+    in property <string> shortcut;
+    in property <string> title;
+    in property <[TipRow]> rows;
+    in property <string> note;
     in property <IconId> icon: IconId.none;
     in property <bool> is-enabled: true;
     // The element acts only when held: the bubble shows the hold badge (also without a text).
-    in property <bool> hold: false;
+    in property <bool> hold;
+    in property <bool> forced;
+    in property <bool> beside;
     // The element is an entry of a context menu (see `GlobalTooltip.menu-open`).
-    in property <bool> in-menu: false;
-
-    // Behavioral Options
-    in property <duration> delay: 0ms; // 0ms = use TooltipSettings.default-delay
-    in property <bool> follow-cursor: false;
+    in property <bool> in-menu;
+    // 0 ms = `TooltipSettings.default-delay`.
+    in property <duration> delay: 0ms;
+    // The bubble points at the pointer instead of the element (large areas such as a picture).
+    in property <bool> follow-cursor;
     in property <length> offset-x: 0px;
     in property <length> offset-y: 0px;
 
-    // Internal State
-    property <bool> is-hovered: false;
-    property <duration> effective-delay: (root.delay > 0ms) ? root.delay : TooltipSettings.default-delay;
-    property <bool> allowed: TooltipSettings.enabled && root.is-enabled && (root.in-menu || !GlobalTooltip.menu-open);
+    property <bool> is-hovered;
+    property <length> mouse-x;
+    property <length> mouse-y;
+    property <int> shown-serial: -1;
+    property <bool> mine: GlobalTooltip.is-visible && GlobalTooltip.serial == root.shown-serial;
+    property <bool> wanted: (TooltipSettings.enabled || root.forced) && root.is-enabled
+        && (root.in-menu || !GlobalTooltip.menu-open)
+        && (root.text != "" || root.title != "" || root.rows.length > 0 || root.hold);
+    property <Tip> tip: {
+        title: root.title,
+        text: root.text,
+        shortcut: root.shortcut,
+        rows: root.rows,
+        note: root.note,
+        icon: root.icon,
+        hold: root.hold,
+        forced: root.forced,
+        beside: root.beside || root.in-menu,
+    };
+    // Followed only while the bubble is this host's, so the other hosts track nothing.
+    property <Tip> shown-tip: root.mine ? root.tip : { };
+    property <TipRect> shown-rect: root.mine ? root.rect() : { };
 
+    x: 0;
+    y: 0;
     width: 100%;
     height: 100%;
-    x: 0px;
-    y: 0px;
-    background: transparent;
 
-    hover-timer := Timer {
-        interval: root.effective-delay;
+    function rect() -> TipRect {
+        if root.follow-cursor {
+            return {
+                x: root.absolute-position.x + root.mouse-x,
+                y: root.absolute-position.y + root.mouse-y,
+                width: 1px,
+                height: 16px,
+            };
+        }
+        return {
+            x: root.absolute-position.x + root.offset-x,
+            y: root.absolute-position.y + root.offset-y,
+            width: root.width,
+            height: root.height,
+        };
+    }
+
+    timer := Timer {
+        interval: root.delay > 0ms ? root.delay : TooltipSettings.default-delay;
         running: false;
-        triggered() => {
-            if root.is-hovered && root.allowed && (root.text != "" || root.hold) {
-                let target-x = root.absolute-position.x + root.offset-x;
-                let target-y = root.absolute-position.y + root.height + 4px + root.offset-y;
-                GlobalTooltip.hold = root.hold;
-                GlobalTooltip.show(
-                    root.text,
-                    root.shortcut,
-                    root.icon,
-                    target-x,
-                    target-y,
-                    root.absolute-position.y - 6px
-                );
-            }
+        triggered => {
             self.running = false;
+            if root.is-hovered {
+                root.show-now();
+            }
         }
     }
 
-    /// Invoked when mouse enters the host component area
-    public function on-hover-enter(mx: length, my: length) {
-        root.is-hovered = true;
-        if root.allowed && (root.text != "" || root.hold) {
-            if root.effective-delay <= 0ms {
-                root.show-now(mx, my);
-            } else {
-                hover-timer.running = true;
-            }
+    function show-now() {
+        if root.wanted {
+            root.shown-serial = GlobalTooltip.show(root.tip, root.rect());
         }
+    }
+
+    public function enter() {
+        root.is-hovered = true;
+        if !root.wanted {
+            return;
+        }
+        if GlobalTooltip.warm {
+            timer.running = false;
+            root.show-now();
+        } else {
+            timer.start();
+        }
+    }
+
+    public function leave() {
+        root.is-hovered = false;
+        timer.running = false;
+        if root.mine {
+            GlobalTooltip.hide();
+        }
+    }
+
+    public function press() {
+        root.is-hovered = false;
+        timer.running = false;
+        if root.mine {
+            GlobalTooltip.hide-cold();
+        }
+    }
+
+    /// Invoked when the pointer enters the element (`mx`, `my` in the element's coordinates).
+    public function on-hover-enter(mx: length, my: length) {
+        root.mouse-x = mx;
+        root.mouse-y = my;
+        root.enter();
+    }
+
+    /// Invoked when the pointer leaves the element, or on a click.
+    public function on-hover-leave() {
+        root.leave();
     }
 
     /// Shows the tooltip at once, without the delay (a short click on a held element explains why nothing happened).
     public function reveal(mx: length, my: length) {
+        root.mouse-x = mx;
+        root.mouse-y = my;
         root.is-hovered = true;
-        hover-timer.running = false;
-        if root.allowed && (root.text != "" || root.hold) {
-            root.show-now(mx, my);
+        timer.running = false;
+        root.show-now();
+    }
+
+    /// The pointer moved over the element: a tip that follows the pointer moves along.
+    public function on-mouse-move(mx: length, my: length) {
+        if root.follow-cursor {
+            root.mouse-x = mx;
+            root.mouse-y = my;
         }
     }
 
-    function show-now(mx: length, my: length) {
-        let target-x = root.follow-cursor
-            ? (root.absolute-position.x + mx + 8px)
-            : (root.absolute-position.x + root.offset-x);
-        let target-y = root.follow-cursor
-            ? (root.absolute-position.y + my + 16px)
-            : (root.absolute-position.y + root.height + 4px + root.offset-y);
-        let top-y = root.follow-cursor ? (root.absolute-position.y + my - 8px) : (root.absolute-position.y - 6px);
-        GlobalTooltip.hold = root.hold;
-        GlobalTooltip.show(
-            root.text,
-            root.shortcut,
-            root.icon,
-            target-x,
-            target-y,
-            top-y
-        );
+    // The bubble follows a tip that changes under the pointer and an element that moves.
+    changed shown-tip => {
+        if root.mine {
+            GlobalTooltip.update(root.shown-serial, root.tip, root.rect());
+        }
     }
-
-    /// Invoked when mouse leaves the host component area or on click
-    public function on-hover-leave() {
-        root.is-hovered = false;
-        hover-timer.running = false;
-        GlobalTooltip.hide();
+    changed shown-rect => {
+        if root.mine {
+            GlobalTooltip.update(root.shown-serial, root.tip, root.rect());
+        }
     }
-
-    /// Invoked during mouse move when follow-cursor is active
-    public function on-mouse-move(mx: length, my: length) {
-        if root.follow-cursor && root.is-hovered && GlobalTooltip.is-visible {
-            GlobalTooltip.pos-x = root.absolute-position.x + mx + 8px;
-            GlobalTooltip.pos-y = root.absolute-position.y + my + 16px;
+    changed wanted => {
+        if !root.wanted && root.mine {
+            GlobalTooltip.hide();
         }
     }
 }
 
-/// Standalone wrapper area component that can wrap arbitrary children and provide tooltips.
+/// A transparent area with a tooltip over its children (labels, fields, pictures). Its touch area lies under the
+/// children, so they keep their clicks; `clicked` and `right-clicked` report clicks on the area itself.
 export component TooltipArea inherits Rectangle {
-    in property <string> text: "";
-    in property <string> shortcut: "";
+    in property <string> text;
+    in property <string> shortcut;
+    in property <string> title;
+    in property <[TipRow]> rows;
+    in property <string> note;
     in property <IconId> icon: IconId.none;
     in property <bool> tooltip-enabled: true;
+    in property <bool> forced;
     in property <duration> delay: 0ms;
-    in property <bool> follow-cursor: false;
+    in property <bool> follow-cursor;
     in property <length> offset-x: 0px;
     in property <length> offset-y: 0px;
     in property <MouseCursor> cursor: MouseCursor.default;
-    in property <bool> in-menu: false;
+    in property <bool> in-menu;
 
     callback clicked();
     // A press of the right mouse button (a control with a second meaning on the right click).
@@ -263,11 +336,15 @@ export component TooltipArea inherits Rectangle {
 
     out property <bool> has-hover: touch.has-hover;
 
-    tooltip-host := TooltipHost {
+    host := TooltipHost {
         text: root.text;
         shortcut: root.shortcut;
+        title: root.title;
+        rows: root.rows;
+        note: root.note;
         icon: root.icon;
         is-enabled: root.tooltip-enabled;
+        forced: root.forced;
         in-menu: root.in-menu;
         delay: root.delay;
         follow-cursor: root.follow-cursor;
@@ -275,33 +352,39 @@ export component TooltipArea inherits Rectangle {
         offset-y: root.offset-y;
     }
 
+    property <bool> timer-started;
+
     touch := TouchArea {
         width: 100%;
         height: 100%;
         mouse-cursor: root.cursor;
         pointer-event(event) => {
             if event.kind == PointerEventKind.down {
-                tooltip-host.on-hover-leave();
+                host.press();
                 if event.button == PointerEventButton.right {
                     root.right-clicked();
                 }
+            } else if event.kind == PointerEventKind.move && self.has-hover && !root.timer-started {
+                // The area appeared under a resting pointer (no hover change): the first move starts it.
+                root.timer-started = true;
+                host.on-hover-enter(self.mouse-x, self.mouse-y);
             }
         }
         clicked => {
-            tooltip-host.on-hover-leave();
+            host.press();
             root.clicked();
         }
         moved => {
-            tooltip-host.on-mouse-move(self.mouse-x, self.mouse-y);
+            host.on-mouse-move(self.mouse-x, self.mouse-y);
         }
-    }
-
-    property <bool> is-hovered: touch.has-hover && root.text != "" && root.tooltip-enabled;
-    changed is-hovered => {
-        if self.is-hovered {
-            tooltip-host.on-hover-enter(touch.mouse-x, touch.mouse-y);
-        } else {
-            tooltip-host.on-hover-leave();
+        changed has-hover => {
+            if self.has-hover {
+                root.timer-started = true;
+                host.on-hover-enter(self.mouse-x, self.mouse-y);
+            } else {
+                root.timer-started = false;
+                host.on-hover-leave();
+            }
         }
     }
 

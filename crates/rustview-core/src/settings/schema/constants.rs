@@ -73,7 +73,7 @@ pub const DEFAULT_DARK_THEME: bool = true;
 
 pub const DEFAULT_ENABLE_TOOLTIPS: bool = true;
 
-pub const DEFAULT_TOOLTIP_DELAY_MS: u32 = 750;
+pub const DEFAULT_TOOLTIP_DELAY_MS: u32 = 600;
 
 pub const MIN_TOOLTIP_DELAY_MS: u32 = 50;
 

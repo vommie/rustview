@@ -149,6 +149,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     startup_clock::mark("Backend");
     let main_window = MainWindow::new()?;
+    rustview::ui::tooltip::install(&main_window);
     startup_clock::mark("MainWindowCreated");
     rustview::ui::multiview::video_host::register(
         &main_window,

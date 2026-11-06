@@ -21,6 +21,9 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ### Changed
 
+- Tooltips are RustCut's bubbles: a small tail points at the element, the bubble moves to the other side or along the
+  window's edge when there is no room, glides from button to button and shows at once while one just closed; keys show
+  as key caps on a line of their own. The default delay is 600 ms like RustCut's (a delay set in the settings stays).
 - Sidebar tabs and group bars look like RustCut's: the active tab merges into its panel, the groups are rounded cards on the
   darker sidebar background, and "Info / Metadata" is called "Info".
 

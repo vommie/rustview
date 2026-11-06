@@ -198,3 +198,9 @@ group_restore = { tabler = "arrows-minimize", doc = "A maximized sidebar group g
 panel_info = { tabler = "info-circle", doc = "Sidebar panel Info (file, path, size, MD5)" }
 panel_tag_history = { tabler = "history", doc = "Sidebar panel Tag History" }
 rail_pinned = { tabler = "pin", style = "filled", doc = "A held sidebar group over the center (badge on the rail)" }
+
+# --- Tooltip key caps (RustCut's tooltips, 0.6.14) -----------------------------------------------------------------
+key_left = { tabler = "arrow-left", doc = "The Left arrow key on a key cap" }
+key_right = { tabler = "arrow-right", doc = "The Right arrow key on a key cap" }
+key_up = { tabler = "arrow-up", doc = "The Up arrow key on a key cap" }
+key_down = { tabler = "arrow-down", doc = "The Down arrow key on a key cap" }
