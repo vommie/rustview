@@ -1,10 +1,30 @@
 # RustView
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/vommie/rustview)](https://github.com/vommie/rustview/releases)
+![Platform: Arch Linux / Manjaro, KDE Plasma](https://img.shields.io/badge/platform-Arch%20%7C%20Manjaro%20%7C%20KDE%20Plasma-1793d1)
+
 A fast media browser for images and videos on Linux. RustView keeps its own library of your folders, tags and ratings, scrolls
 through very large collections without stutter and never touches the drive unless you ask for a refresh. It is written in Rust with a
 Slint user interface; videos play through the embedded mpv player and most formats are decoded by FFmpeg.
 
-![The Browse view: folder tree, thumbnail grid with badges, tags and ratings](docs/screenshots/browse-grid.png)
+![A short tour: a video and a picture opened side by side in the Multiview, the picture cropped and saved, back in the Browse view](docs/screenshots/demo.webp)
+
+![The Browse view: folder tree, thumbnail grid with rating and tag badges, the Tag & Rate panel with the selected picture's tags](docs/screenshots/browse.png)
+
+## Quick start
+
+1. Install the package (see [Install](#install)) and start RustView from the application menu.
+2. Choose your media folder as the root folder in Settings > General.
+3. Click **Refresh > Refresh Entire Tree (Full)** in the Folders toolbar once; RustView reads the drive only when you ask it to.
+4. Pick a folder, select media and tag and rate them in the **Tag & Rate** panel (switch it to **ASSIGN**), or open them with a
+   double click, `Enter` (tabs) or `F11` (Multiview).
+
+## RustView and RustCut
+
+[RustCut](https://github.com/vommie/rustcut) is the video cutter that belongs to RustView. It cuts, filters and renders clips and tags
+and rates them in the same RustView library through RustView's command line API (`rustview api`), so a rendered clip shows up in
+RustView with its tags and rating; the clips RustView already knows are recognized by their hash.
 
 ## Features
 
@@ -37,9 +57,9 @@ Slint user interface; videos play through the embedded mpv player and most forma
 
 | | |
 | --- | --- |
-| ![Table view with ratings and tag counts](docs/screenshots/browse-table.png) | ![Context menu of a selection](docs/screenshots/context-menu.png) |
+| ![Multiview: a video and three pictures side by side, the video with its control bar](docs/screenshots/multiview.png) | ![A video tab with the control bar and the filter menu (rotate, mirror, deinterlace, picture adjustments, volume normalization)](docs/screenshots/video.png) |
 
-![Multiview: four media in a 2x2 arrangement with the media action bar](docs/screenshots/multiview.png)
+![The tab grid: every open tab at a glance, videos keep their position](docs/screenshots/tab-grid.png)
 
 ## Platform
 
@@ -50,8 +70,8 @@ missing for now (dragging files to other programs, dialogs tied to their window,
 
 ## Install
 
-**Download the newest release** (Arch Linux, Manjaro) with the [GitHub CLI](https://cli.github.com/) (`sudo pacman -S github-cli`, then
-`gh auth login` once; this also works while the repository is private). The [Releases page](https://github.com/vommie/rustview/releases)
+**Download the newest release** (Arch Linux, Manjaro) with the [GitHub CLI](https://cli.github.com/) (`sudo pacman -S github-cli`) or from the
+Releases page. The [Releases page](https://github.com/vommie/rustview/releases)
 lists every version with its changelog:
 
 ```bash
@@ -86,11 +106,22 @@ rustview --migrate-xnview ~/.config/xnviewmp/XnView.db --yes      # import an Xn
 rustview api --help
 ```
 
-## Development
+## Limitations
 
-[AGENTS.md](AGENTS.md) holds the rules for contributors and coding agents (stack, licenses, icons, code style,
-checks). Cargo aliases: `cargo ck` (check), `cargo cl` (clippy), `cargo t` (tests), `cargo br` (release build). The changes of every
-version are in [CHANGELOG.md](CHANGELOG.md).
+- Arch Linux and Manjaro with KDE Plasma only; other distributions and desktops are not tested.
+- Wayland lacks a few X11 features (see [Platform](#platform)).
+- No light theme yet; the app uses one dark palette.
+
+## Contributing
+
+Bug reports and ideas are welcome as [issues](https://github.com/vommie/rustview/issues) and in the
+[discussions](https://github.com/vommie/rustview/discussions). The repository does not take pull requests. [AGENTS.md](AGENTS.md)
+holds the rules for contributors and coding agents (stack, licenses, icons, code style, checks). Cargo aliases: `cargo ck` (check),
+`cargo cl` (clippy), `cargo t` (tests), `cargo br` (release build). The changes of every version are in [CHANGELOG.md](CHANGELOG.md).
+
+## Security
+
+Please report security problems privately, as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
@@ -107,3 +138,5 @@ the licenses require; the package installs them to `/usr/share/licenses/rustview
 - [Tabler Icons](https://tabler.io/icons) (MIT) for the interface icons; the app icon is built from two of them (the grid and the eye).
 - [LMDB](https://www.symas.com/lmdb) through [heed](https://github.com/meilisearch/heed), [image](https://github.com/image-rs/image),
   [resvg](https://github.com/linebender/resvg) and many more crates (see `Cargo.lock`).
+- The pictures and videos in the screenshots are public domain or CC BY works from Wikimedia Commons and NASA; authors and
+  licenses are listed in [docs/screenshots/CREDITS.md](docs/screenshots/CREDITS.md).
