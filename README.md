@@ -88,8 +88,8 @@ rustview api --help
 
 ## Development
 
-[CLAUDE.md](CLAUDE.md) holds the rules and the architecture notes of the project (performance principles, Multiview, shutdown, startup,
-icons, dialogs). Cargo aliases: `cargo ck` (check), `cargo cl` (clippy), `cargo t` (tests), `cargo br` (release build). The changes of every
+[AGENTS.md](AGENTS.md) holds the rules for contributors and coding agents (stack, licenses, icons, code style,
+checks). Cargo aliases: `cargo ck` (check), `cargo cl` (clippy), `cargo t` (tests), `cargo br` (release build). The changes of every
 version are in [CHANGELOG.md](CHANGELOG.md).
 
 ## License

@@ -2,7 +2,7 @@
 """Command line client for the MCP server that is built into the RustView debug build (cargo feature `slint/mcp`).
 
 RustView only: this script lives in the repository and is not installed anywhere else. The app must run as an MCP build
-(`rv-testenv mcp-build`, then `rv-testenv mcp-start`, which sets SLINT_MCP_PORT; default port 8765 or $SLINT_MCP_PORT, always on
+(a build with the Slint MCP backend, started with SLINT_MCP_PORT set; default port 8765 or $SLINT_MCP_PORT, always on
 127.0.0.1), otherwise there is nothing to talk to. The build has element ids because it is made with SLINT_EMIT_DEBUG_INFO=1.
 
   scripts/slint-mcp windows                         window handles
@@ -60,7 +60,7 @@ class Client:
             with urllib.request.urlopen(request, timeout=60) as response:
                 reply = json.loads(response.read())
         except urllib.error.URLError as error:
-            die(f"cannot reach {self.url} ({error.reason}); start the MCP build of RustView with: rv-testenv mcp-start")
+            die(f"cannot reach {self.url} ({error.reason}); start an MCP build of RustView with SLINT_MCP_PORT set")
         if "error" in reply:
             die(f"{method}: {reply['error']}")
         return reply["result"]

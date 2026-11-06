@@ -5,7 +5,7 @@ Since `video-in-slint` (0.5.7-0.5.13, `docs/rendering.md`) a video is a texture 
 over a video is simply the window's: mpv's on-screen controller (OSC) is off, mpv takes neither keys nor the mouse, and the bar is
 an element of the canvas.
 
-## Decisions (questionnaire round 4, 2026-10-24, `~/claude/feedback/2026-10-24-rustview-video-bar`)
+## Decisions (maintainer decision round 4, 2026-10-24)
 
 - Content, left to right: play/pause, the current time, the progress bar, the remaining time, the volume (a speaker button and a
   volume slider instead of a plain mute button).
@@ -162,7 +162,7 @@ cover, and nothing has to tell Rust that Slint closed one.
 A key that moves a video (the jump and frame keys, the A-B repeat keys) shows the bar for 1.5 s (`BarReveal::pulse`), like the
 volume bar after a wheel step; the script's own jumps of a loop do not.
 
-## Tab-Grid items (questionnaire 2026-10-24, `~/claude/feedback/2026-10-24-rustview-tab-grid`; built in 0.4.8)
+## Tab-Grid items (maintainer decision 2026-10-24; built in 0.4.8)
 
 - The mouse over a video item is RustView's too, like over a picture item: click opens the tab, Ctrl+click and Shift+click select,
   middle click opens the fullscreen, right click opens the tab's context menu, the wheel scrolls the grid smoothly, and the

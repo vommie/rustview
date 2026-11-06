@@ -32,3 +32,11 @@ packaging/*.pkg.tar.zst
 # Tracked despite the patterns above: the license notices and their generator.
 !/LICENSES/*.txt
 !/scripts/attribution.py
+
+# Local agent and development files: they stay on the maintainer's machine, never in the public repository
+/CLAUDE.md
+/CLAUDE.local.md
+HANDOFF*.md
+HANDON*.md
+/.claude/
+/.mcp.json

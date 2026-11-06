@@ -1,6 +1,6 @@
 //! Which Slint renderer draws the windows: femtovg (GLX on X11) or skia (EGL everywhere). Videos are drawn with mpv's OpenGL render
 //! API into textures shared with the renderer's GL context (`viewer::video_surface`), so both are OpenGL renderers; skia's EGL
-//! context lets mpv decode with VAAPI without copying the frames back (decision 1 of `docs/video_in_slint/HANDOFF.md`).
+//! context lets mpv decode with VAAPI without copying the frames back.
 //! `RUSTVIEW_RENDERER=femtovg|skia` overrides the default for one start (a check or a workaround for a driver).
 
 use std::sync::OnceLock;
@@ -15,7 +15,7 @@ pub enum Renderer {
 }
 
 impl Renderer {
-    /// The renderer when nothing else is asked for (user decision 2026-10-26: skia; in the VM both drew the UI alike and both
+    /// The renderer when nothing else is asked for (maintainer decision 2026-10-26: skia; on the virtualized test machine both drew the UI alike and both
     /// carried the videos, and skia's EGL context is the one mpv's hardware decoders need without copies).
     pub const DEFAULT: Self = Self::Skia;
 

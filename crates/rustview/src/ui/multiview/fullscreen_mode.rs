@@ -14,7 +14,7 @@ use std::time::Duration;
 
 /// When the fullscreen state is checked after the request, and how often it is asked for again. The window is reused for every
 /// fullscreen; when it is shown again the request can be lost: on X11 it can reach the window manager before it manages the window
-/// again, which then maximizes the screen-sized window instead (2 of 9 opens in the VM), and on native Wayland the compositor ignored every
+/// again, which then maximizes the screen-sized window instead (2 of 9 opens on the virtualized test machine), and on native Wayland the compositor ignored every
 /// second request after the window was hidden and shown again (the panel stayed above it).
 const CONFIRM_DELAY: Duration = Duration::from_millis(200);
 const CONFIRM_TRIES: u32 = 3;

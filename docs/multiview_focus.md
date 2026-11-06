@@ -3,7 +3,7 @@
 Status: **implemented** (0.4.1: focus model, clicks, marks, hint, rating keys; 0.4.2: every key through `MultiviewCommand`, Esc chain, DEL and zoom keys
 in the tab view, refusals with reasons, marks hidden with the cursor and shown by a key; 0.4.3: panels follow the selection, "The selected video" sound
 choice, the settings). The follow-up milestones below are open. Concept agreed on 2026-10-24, after RustView 0.4.0. Decisions were made with the user in four rounds; this file is the
-reference for the implementation on branch `claude`. Paths are relative to `crates/rustview/` as in CLAUDE.md.
+reference for the implementation on branch `claude`. Paths are relative to `crates/rustview/`.
 
 ## Goal
 A Multiview with two or more tiles gets ONE selected medium (the focus). Every key that acts on a medium acts on the selected one and on nothing else.
@@ -136,11 +136,11 @@ the sound and mutes the other videos the policy controls; focusing an image chan
 2. All keys through `MultiviewCommand` to the focus (fullscreen, tab view, mpv messages), the Esc chain incl. the mpv Esc binding, DEL and zoom keys in
    the tab view, refusals with reasons, marks revealed by a key. **Done in 0.4.2**; hiding the marks with the cursor already works (default on), its
    switch and tooltips follow in stage 3. F5 acts on the selected medium; the refresh button of the tab toolbar still refreshes the whole tab.
-3. Tab view panels, "The selected video" sound choice, the settings section and the cursor-hiding switch with its tooltips, CLAUDE.md (Multiview chapter)
+3. Tab view panels, "The selected video" sound choice, the settings section and the cursor-hiding switch with its tooltips, the architecture notes
    and CHANGELOG. **Done in 0.4.3.** The Tag & Rate panel greys out and shows "Select a medium in the view" while nothing is selected; the refresh button
    of the tab toolbar keeps refreshing every medium of the tab (only F5 follows the selection).
 
-Tests: unit tests for `focus`, `targets`, `hint`, the settings sanitizing and the sound rule; GUI checks with `rv-testenv session` (2, 3 and 4 tiles,
+Tests: unit tests for `focus`, `targets`, `hint`, the settings sanitizing and the sound rule; GUI checks in the maintainer's local test environment (2, 3 and 4 tiles,
 images and one video, fullscreen and tab view, keys with and without focus, cursor hiding).
 
 ## Follow-up milestones (each in a new, clean chat)

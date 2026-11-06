@@ -23,10 +23,10 @@ and the new unit tests were scaffolding. They were removed from the tree after t
 | RAM options per cache (`l1_cache_slots`) | one RAM budget setting (default half of the RAM, startup check, warnings) |
 
 ## Measurement environment
-Ubuntu 24.04 VM, 4 cores, Xvfb + openbox + xcompmgr, **llvmpipe software GL** (render times are not representative; the jank metric is the
+Ubuntu 24.04 virtual machine, 4 cores, Xvfb + openbox + xcompmgr, **llvmpipe software GL** (render times are not representative; the jank metric is the
 *non-render tick time* = UI-thread work between frames, floor ~9-16 ms from swap/llvmpipe), 1600x900, 200 px / 1:1 thumbnails, WebP q80.
-The host of the VM changed between sessions (host B: `base_b`, `new1`, `new2`, `huge1`; host C: `main3`, `main4`, `huge2-4`, baseline binary
-`rustview_base2`). Only numbers measured on the same host in the same session are compared directly.
+The machine hosting the virtual machine changed between sessions (`base_b`, `new1`, `new2`, `huge1` on one; `main3`, `main4`, `huge2-4` and baseline binary
+`rustview_base2` on another). Only numbers measured on the same host in the same session are compared directly.
 
 ## 1. Scroll jank, same host (host B), 1000-item folder
 `nr` = non-render tick time (ms), `slices` = tile-pool/slice updates, `slice avg` = UI-thread cost per update.

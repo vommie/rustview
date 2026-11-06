@@ -2,7 +2,7 @@
 
 The user's checklist for the acceptance ("Abnahme") of the branch `video-in-slint`: every behavior of videos in the
 Multiview that was decided before this branch (`docs/video_controls.md`, `docs/mpv_ab_repeat.md`, `docs/multiview_focus.md`,
-`docs/hotkeys.md`, the Multiview chapter of CLAUDE.md) and has to work the same afterwards, plus what the branch promises on
+`docs/hotkeys.md`, the Multiview architecture notes) and has to work the same afterwards, plus what the branch promises on
 top (section R). Each item says what should happen and how to try it. Milestones tick off the items they touched in their
 self-check ("checked in Mx"); the user's acceptance at the end goes through all of them. Before the acceptance the list is
 also offered as a German questionnaire with a tick and a note field per item.
@@ -10,8 +10,8 @@ also offered as a German questionnaire with a tick and a note field per item.
 ## Self-check of M7 (2026-10-26, before the acceptance)
 
 The boxes stay unticked: ticking is the user's acceptance. What the milestones checked is noted at each item ("Checked in Mx").
-M7 went through what M6 left (O1 volume/zoom/A-B across a move, O2, O3, N4, N5) and P1-P3, A6, I5, K2, Q2 in the VM (X11 session,
-skia on VirGL, compositor on; real screen captures, the Slint MCP build and the real mouse for hovering), and R2 as far as the VM
+M7 went through what M6 left (O1 volume/zoom/A-B across a move, O2, O3, N4, N5) and P1-P3, A6, I5, K2, Q2 on the virtualized test machine (X11 session,
+skia on VirGL, compositor on; real screen captures, the Slint MCP build and the real mouse for hovering), and R2 as far as the test machine
 allows (a nested KWin Wayland session). Found and fixed on the way: the fullscreen did not open on native Wayland; on X11 the reused
 fullscreen window was sometimes only maximized (now confirmed and asked for again). Found and logged (not regressions of this branch):
 no error tile for a video mpv cannot open (P3, CLEANUP #16); 5 % of a core while a tab with a paused video is shown (Q2, CLEANUP #2).
@@ -33,7 +33,7 @@ L1-L3, M1, M4 drag/middle/right click, P4, Q1, R3) and the joint Wayland test (R
 ## A. The picture
 
 - [ ] **A1** A video plays in the tab view, in the fullscreen and (paused) in the tab grid, sharp and in the right
-  shape. — *Test:* open `full_hd_h264.mp4`, `portrait_1080x1920.mp4` and `anamorphic_720x480.mp4` in each of the three. *Checked in M1: tab view and fullscreen with `vid_landscape.mp4` (VirGL VM, femtovg/GLX); the grid and the other clips in M6.* *M1: the tab grid shows the paused video too (its black placeholder lay over the canvas; fixed). Also under skia/EGL.*
+  shape. — *Test:* open `full_hd_h264.mp4`, `portrait_1080x1920.mp4` and `anamorphic_720x480.mp4` in each of the three. *Checked in M1: tab view and fullscreen with `vid_landscape.mp4` (VirGL test machine, femtovg/GLX); the grid and the other clips in M6.* *M1: the tab grid shows the paused video too (its black placeholder lay over the canvas; fixed). Also under skia/EGL.*
 - [ ] **A2** A lone video in a tab fills the whole tab area; mpv adds the black bars itself where the shape differs. —
   *Test:* open `cinemascope_2560x1072.mp4` in a tab, make the window narrower and wider.
 - [ ] **A3** 2, 3 and 4 media are arranged as before (a row, or a 2x2 grid for four wide media); the gutters can be dragged,
@@ -217,7 +217,7 @@ L1-L3, M1, M4 drag/middle/right click, P4, Q1, R3) and the joint Wayland test (R
   picture can be dragged; never an empty margin when it is larger than the room. — *Test:* `portrait_1080x1920.mp4` alone
   in the fullscreen, zoom in, drag. *Checked in M5: `portrait_1080x1920.mp4` alone in the fullscreen, Ctrl+Plus three times: the picture grows over the whole screen width, a drag moves it at once (Slint moves the texture; mpv is not asked), the top edge stops at the screen edge; in a Multiview of two videos the selected one grows into its column at the full height.*
 - [ ] **M3** Going from 100 % to zoomed and back shows no stale or stretched frame. — *Test:* Ctrl+wheel one notch in and
-  out several times. *M5: by construction (the texture is drawn where the zoom puts the picture; a texture of the old size is only drawn softer for a moment, never in the wrong place); zoom in and Ctrl+Backspace looked right in the VM.*
+  out several times. *M5: by construction (the texture is drawn where the zoom puts the picture; a texture of the old size is only drawn softer for a moment, never in the wrong place); zoom in and Ctrl+Backspace looked right on the test machine.*
 - [ ] **M4** The minimap (bottom corner) shows the whole video with the visible part marked, its picture follows the video
   (refreshed while it plays); drag in it moves the view finely (the pointer is held and hidden), middle click resets, right
   click opens a slider bubble above it. — *Test:* each. *Checked in M5: the minimap of a zoomed video (fullscreen, one and two videos, tab view) shows the video's own texture and plays along (same time code as the big picture), the visible part is framed; drag, middle and right click not run through.*
@@ -270,6 +270,6 @@ L1-L3, M1, M4 drag/middle/right click, P4, Q1, R3) and the joint Wayland test (R
 - [ ] **R2** Native Wayland is the default (decision 2026-10-26, tested together): in a Plasma Wayland session RustView runs
   without XWayland and everything above works; what native Wayland still lacks (dragging files to other programs, dialogs that
   belong to their window, pointer lock of the minimap) is solved or accepted by you. — *Test:* log into Plasma (Wayland),
-  repeat A, C, D, G, then switch to X11/XWayland (`RUSTVIEW_WINDOW_SYSTEM`) and repeat a few. *M7: prepared, not switched (needs the joint test). In a nested KWin Wayland session in the VM (`RUSTVIEW_WINDOW_SYSTEM=wayland`, EGL on virgl): a video tab, the tab bar's context menu over the playing video, the fullscreen (opened only after a fix: it waited for an X11 window id), the mute icon, back to the tab, the tab grid with its time badge, the rename dialog. The list of what native Wayland lacks: `WAYLAND.md`.*
+  repeat A, C, D, G, then switch to X11/XWayland (`RUSTVIEW_WINDOW_SYSTEM`) and repeat a few. *M7: prepared, not switched (needs the joint test). In a nested KWin Wayland session on the test machine (`RUSTVIEW_WINDOW_SYSTEM=wayland`, EGL on virgl): a video tab, the tab bar's context menu over the playing video, the fullscreen (opened only after a fix: it waited for an X11 window id), the mute icon, back to the tab, the tab grid with its time badge, the rename dialog. The list of what native Wayland lacks: `WAYLAND.md`.*
 - [ ] **R3** The UI looks right under the renderer chosen after the AMD measurement (skia unless something spoke against it):
   text, rounded corners, icons, thumbnails. — *Test:* look through Browse, Settings, a dialog and the Multiview.

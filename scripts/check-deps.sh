@@ -80,7 +80,7 @@ check optional cmd:cargo-deny    cargo-deny   "checks licenses, bans and advisor
 check optional cmd:cargo-about   cargo-about  "writes and checks ATTRIBUTION.md (scripts/attribution.py)"
 check optional cmd:cargo-machete cargo-machete "finds unused dependencies (cargo machete)"
 
-section "Visual tests (only needed to take screenshots of the running app: rv-testenv session)"
+section "Visual tests (only needed to take screenshots of the running app)"
 check optional cmd:xdotool       xdotool      "clicks, typing and window lookup"
 check optional cmd:import        imagemagick  "window screenshots"
 

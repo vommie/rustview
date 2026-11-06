@@ -1,7 +1,7 @@
 # Video in Slint – inventory of the native-window workarounds (M0)
 
 Every place in `crates/rustview` (`src/`, `ui/`) that exists only because a video is a native mpv window (`wid` + `vo=gpu`
-in an `X11VideoSubwindow`), with the milestone of `HANDOFF.md` that replaces or deletes it, or **stays** with the reason.
+in an `X11VideoSubwindow`), with the milestone of the design notes that replaces or deletes it, or **stays** with the reason.
 Paths are relative to `crates/rustview/`. Made on 2026-10-26 from `video-in-slint` at 321be78 (= `claude` b23564b + the plan).
 
 ## How to check that the list is complete
@@ -19,7 +19,7 @@ pure bar model, which stays). At the end of M7 the same search must list only th
 
 ## Legend and rules
 
-- **M1 … M7**: the milestone of `HANDOFF.md` that deletes or rewrites the entry. "M1 → M5" = first touched in M1 (made to work
+- **M1 … M7**: the milestone of the design notes that deletes or rewrites the entry. "M1 → M5" = first touched in M1 (made to work
   with the texture), finished in M5.
 - **stays**: kept on purpose, with the reason. "stays, text M7": the code stays, only comments/docs that name native windows are
   rewritten in M7.
@@ -38,7 +38,7 @@ pure bar model, which stays). At the end of M7 the same search must list only th
 | `src/viewer/mpv_engine.rs` `attach_to_window(wid)` | sets `wid`, limits `gpu-context`, switches `vo=gpu`; `attached_wid` field | **M1** replace by `attach_surface(...)` (`vo=libmpv` + render context on the video's render thread) |
 | `src/viewer/mpv_engine.rs` `use_x11_gpu_contexts` + `mod gpu_context` | only mpv's X11 GPU contexts may draw into RustView's X11 window (else mpv opens Wayland windows) | **M1** delete (the render API has no GPU context of its own) |
 | `src/viewer/mpv_engine/gpu_context.rs` (`is_x11_context`, `x11_gpu_contexts`, its tests) | pure filter of the `gpu-context` list | **M1** delete (with its tests) |
-| `src/viewer/mpv_engine.rs` `new`: `gpu-sw=yes` | mpv's `vo=gpu` refuses llvmpipe without it | **M1** delete for the render path (the context is Slint's; with VirGL there is no llvmpipe); re-check the software-GL fallback note in CLAUDE.md |
+| `src/viewer/mpv_engine.rs` `new`: `gpu-sw=yes` | mpv's `vo=gpu` refuses llvmpipe without it | **M1** delete for the render path (the context is Slint's; with VirGL there is no llvmpipe); re-check the software-GL fallback note |
 | `src/viewer/mpv_engine.rs` `new`: `force-window=no`, `window-maximized`, `ontop`, `border` | keep mpv's own window state neutral | **M1** delete (no mpv window) |
 | `src/viewer/mpv_engine.rs` `CLICK_MESSAGE` / `bind_click` (`MBTN_LEFT` → `script-message rustview-click`), `keybind MBTN_LEFT_DBL`/`MBTN_MID` → `cycle fullscreen`, the ten `Ctrl+MBTN_LEFT*` → `cycle window-maximized` | mouse on mpv's window reported as fake property toggles / script messages | **M1** delete (the video is a Slint `Image`; the canvas's own `tile-clicked`, double/middle/Ctrl clicks handle it like an image) |
 | `src/viewer/mpv_engine/events.rs` `spawn_event_observer_thread`: `ClientMessage(CLICK_MESSAGE)`, the `fullscreen` and `window-maximized` interception, `current-gpu-context` record | turns those fakes into callbacks; reads mpv's GPU context for Settings > Debug | **M1** delete the click/fullscreen/maximize part; the GPU-context record becomes "render API on Slint's GL context" (see `graphics.rs`) |
@@ -210,17 +210,17 @@ tab grid still builds every item's model on a sync (CLEANUP #8, the double place
 |---|---|---|
 | `src/system/window_system.rs` (`decide`, `select_backend`, doc), `src/system/window_system/choice.rs` | forces XWayland in a Wayland session "because native mpv windows exist only on X11" | **M7** native Wayland becomes the default (decision 3), switched together with the user in a Plasma Wayland session; XWayland stays selectable |
 | core `diagnostics/dependencies.rs`, `health.rs` (`XWayland` rows) | Settings > Debug explains the choice | **M7** text for native Wayland as the default |
-| `docs/rendering.md`, `docs/video_controls.md`, `docs/mpv_ab_repeat.md` (OSD/`osd-border-style` remark), `docs/multiview_focus.md` (mpv marks), CLAUDE.md (Multiview chapter, VM graphics note on `gpu-sw`, the black-video quirk) | describe the native-window design | **M7** rewrite |
+| `docs/rendering.md`, `docs/video_controls.md`, `docs/mpv_ab_repeat.md` (OSD/`osd-border-style` remark), `docs/multiview_focus.md` (mpv marks), the architecture notes (Multiview, the virtualized-machine graphics note on `gpu-sw`, the black-video quirk) | describe the native-window design | **M7** rewrite |
 | `src/viewer/x11/error_handler.rs` | see §1 | **M7** decide |
 
 **Done in M7 (0.5.13):** the docs (`docs/rendering.md` rewritten, `docs/video_controls.md`, `docs/multiview_focus.md`,
-`docs/mpv_ab_repeat.md`, `docs/hotkeys.md`, `docs/debug_page.md`, README "Platform", CLAUDE.md: the VM graphics note, the testing
+`docs/mpv_ab_repeat.md`, `docs/hotkeys.md`, `docs/debug_page.md`, README "Platform", the architecture notes: the virtualized-machine graphics note, the testing
 quirk, "Platform", the Multiview, shutdown, feedback and dialog chapters) describe videos as textures of the canvas. The window-system
 texts (`window_system.rs` doc and log line, Settings > Debug's "Native Wayland" row) no longer say that videos are missing on native
 Wayland. The switch of the default itself waits for the joint test with the user (decision 3, `WAYLAND.md`); on the way the Multiview
 fullscreen was made to open on native Wayland at all (`ui/multiview/fullscreen_mode.rs`; it waited for an X11 window id). `error_handler.rs`
 **stays**: libmpv may still install its process-killing Xlib handler when a hardware decoder's interop used Xlib (VAAPI over GLX/X11
-EGL), and the VM has no VAAPI to prove that it never does; the call after a teardown costs nothing.
+EGL), and the test machine has no VAAPI to prove that it never does; the call after a teardown costs nothing.
 
 ## 9. X11 code that stays (not a video workaround)
 

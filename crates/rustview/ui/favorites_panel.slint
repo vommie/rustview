@@ -19,7 +19,7 @@ export component FavoriteItemRow inherits Rectangle {
     border-width: root.item.is-selected ? 1px : 0px;
     border-color: root.item.is-selected ? Theme.accent : transparent;
 
-    // Card-weiter Tooltip mit dem ungekürzten Pfad
+    // Card-wide tooltip with the untruncated path
     tooltip-host := TooltipHost {
         text: root.item.path;
         is-enabled: true;
@@ -84,7 +84,7 @@ export component FavoriteItemRow inherits Rectangle {
             }
         }
 
-        // Line 2: Dezenter Pfad mit führender Ellipsis (.../ordner/unterordner)
+        // Line 2: Subtle path with a leading ellipsis (.../folder/subfolder)
         path-box := Rectangle {
             clip: true;
             height: 14px;

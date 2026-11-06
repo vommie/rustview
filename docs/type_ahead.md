@@ -21,7 +21,7 @@ Typing in the grid or the table jumps to the first item whose name starts with t
 ## Options (Settings > Appearance & Grid > Type-Ahead Find, `appearance.type_ahead_*`)
 Enable, search timeout, new search after a pause (0 = off), also find folders, repeating a letter cycles, center the found item (else scroll only as far as needed), "No match" message in the status bar (shown for `TYPE_AHEAD_NO_MATCH_MESSAGE_MS`, then the previous message returns), delay of an open Multiview (0 = at once).
 
-## Measured (debug profile = opt-level 3, VM, synthetic records with 24-character names, no match = scans the whole list)
+## Measured (debug profile = opt-level 3, virtual machine, synthetic records with 24-character names, no match = scans the whole list)
 | records | no match, full scan |
 |---|---|
 | 20 000 | 0.4 ms |

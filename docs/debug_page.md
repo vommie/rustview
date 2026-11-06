@@ -3,7 +3,7 @@
 The Debug page answers "is everything RustView needs in place, and is RustView itself healthy?", keeps the log so that a
 problem can be looked at afterwards, and has the tools for hunting a bug. Modeled on RustStart's "System check" and "Debug"
 pages (`ruststart/crates/ruststart/src/diagnostics.rs`, `src/app/debug.rs`), tailored to what RustView really uses.
-User decisions: questionnaire `~/claude/feedback/questionnaires/rustview/2026-10-25-rustview-debug-seite` (2026-10-25).
+Maintainer decisions: 2026-10-25.
 
 ## Decisions (questionnaire 2026-10-25)
 | Question | Decision |

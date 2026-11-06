@@ -3,13 +3,12 @@
 The user's mpv script `~/.config/mpv/scripts/ab_repeat.lua` sets A-B repeats and saves, loads and deletes them in
 `~/.config/mpv/ab_repeat.json`. RustView's players load the user's mpv config and scripts (`MpvPlayer::new`: `config=yes`,
 `load-scripts=yes`, `config-dir` = `$XDG_CONFIG_HOME/mpv`), so the script already runs in every RustView player, but
-`input-vo-keyboard=no` means its keys never reach it. The design was decided in the questionnaire `2026-10-25-rustview-ab-repeat`
-(`~/claude/feedback/questionnaires/rustview/`, saved 2026-10-25); the decisions, how it is built and what was tested before
+`input-vo-keyboard=no` means its keys never reach it. The design was decided by the maintainer on 2026-10-25; the decisions, how it is built and what was tested before
 follow.
 
-Tested with mpv 0.41.0 (libmpv of the VM), the VM's real `~/.config/mpv` (test-only, so as close to production as possible),
-native mpv (CLI, `--input-ipc-server`, real X11 keys through `xdotool`) and RustView 0.5.3 in the test environment
-(`rv-testenv mpv-user on --ipc SOCKET` links the real scripts into the test profile).
+Tested with mpv 0.41.0 (libmpv of the test machine), the test machine's real `~/.config/mpv` (test-only, so as close to production as possible),
+native mpv (CLI, `--input-ipc-server`, real X11 keys through `xdotool`) and RustView 0.5.3 in a local test environment
+(the real scripts are linked into the isolated test profile).
 
 ## Decisions (questionnaire 2026-10-25)
 
@@ -105,7 +104,7 @@ through symbolic links (the script keys them as given).
 
 ## Checked with a compositing manager (0.5.6, 2026-10-26)
 
-KWin compositing is on in the VM since 2026-10-26, so the translucent bar was checked as on the user's PCs (MCP build, two tiles of
+KWin compositing is on on the test machine since 2026-10-26, so the translucent bar was checked as on the user's PCs (MCP build, two tiles of
 `Videos/Clips/hd_720_mkv.mkv` in one tab through Duplicate, the real `~/.config/mpv`):
 
 | Check | Result |
@@ -160,7 +159,7 @@ other player of the file, their scripts publish again (`reload_others` in `viewe
 
 ## Ctrl+S in native mpv
 
-Not reproducible in the VM with the copied config: Ctrl+S opens the name prompt, Enter saves (real X11 keys and mpv's
+Not reproducible on the test machine with the copied config: Ctrl+S opens the name prompt, Enter saves (real X11 keys and mpv's
 `keydown`/`keyup` alike). `input-bindings` shows the script's Ctrl+s with priority 13 over the built-in `screenshot window`
 (0); the user's `input.conf` does not bind Ctrl+s. Causes that were reproduced:
 
@@ -228,7 +227,7 @@ JSON reading of its own.
 
 ## Test tools (outside the repository)
 
-- `rv-testenv mpv-user on [--ipc SOCKET] | off | status` (test environment): the real mpv config in the test profile.
-- `~/claude/rustview-testenv/bin/gen_ab_repeats.py`: 52 sample repeats in 10 test videos, created through the script itself
+- The maintainer's local test environment can link the real mpv config into the isolated test profile.
+- A local generator script (not in the repository): 52 sample repeats in 10 test videos, created through the script itself
   (start, end, middle, overlapping, nested, identical, touching, 0.2 s, whole video, 26 for paging, an accented path, the four
   Multiview videos); reruns replace them.

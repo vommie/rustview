@@ -1,10 +1,9 @@
 # Native Wayland as the default (decision 3)
 
-Decision 3 of `HANDOFF.md` (2026-10-26): native Wayland becomes RustView's default in a Wayland session, **after a joint test
+Decision 3 of the design notes of this work (2026-10-26): native Wayland becomes RustView's default in a Wayland session, **after a joint test
 with the user** in a Plasma Wayland session; XWayland stays selectable. Until then a Wayland session starts through XWayland
 (`system/window_system/choice.rs`). This file lists what native Wayland lacks compared with X11/XWayland, what M7 checked
-already, and the plan of the joint test. The German checklist for the user is the questionnaire
-`2026-10-26-rustview-wayland-test` (`~/claude/feedback/questionnaires/rustview/`).
+already, and the plan of the joint test. The checklist for the maintainer was prepared on 2026-10-26.
 
 ## What works the same on native Wayland
 
@@ -26,28 +25,28 @@ maximizes natively at startup. Native Wayland also brings sharp fractional scali
 | W6 | **Image to the clipboard** (copy a picture) | `xclip` (under XWayland `wl-copy` as the fallback) | `wl-copy` only | install `wl-clipboard` (`sudo pacman -S wl-clipboard`); Settings > Debug says when it is missing |
 | W7 | **Settings > Debug** facts of the X server (compositor, X extensions) | shown | not shown (no X server) | accept |
 
-## What M7 checked in the VM (an X11 session)
+## What M7 checked on the virtualized test machine (an X11 session)
 
 In a headless nested KWin Wayland session (`dbus-run-session -- kwin_wayland --virtual`, scratch XDG dirs, the Slint MCP build
 to drive the app, since no X11 input reaches native Wayland windows): see the log below. A real Plasma Wayland session on the
-VM's display (VirGL), mpv's hardware decoding on Wayland and two monitors are left for the joint test.
+test machine's display (VirGL), mpv's hardware decoding on Wayland and two monitors are left for the joint test.
 
 ## The joint test (with the user, in a Plasma Wayland session)
 
-1. The user logs out of the X11 session and into "Plasma (Wayland)" on the VM's login screen (or on the AMD PC).
+1. The user logs out of the X11 session and into "Plasma (Wayland)" on the test machine's login screen (or on the AMD PC).
 2. Native Wayland: start RustView with `RUSTVIEW_WINDOW_SYSTEM=wayland`; Settings > Debug shows "Native Wayland". Go through
    the checklist (videos in tab, fullscreen and grid; bars and menus over videos; dialogs; the minimap drag; copying a
    picture; dragging a file to Dolphin; startup maximized; fractional scaling if the display uses it).
 3. XWayland for comparison: start RustView without the variable (today's default) and repeat a few items.
 4. The user decides per item of W1-W7 whether it must be solved before the switch or is accepted.
 5. Then the default changes: in `choice.rs` a Wayland session takes native Wayland, `RUSTVIEW_WINDOW_SYSTEM=x11` (new) asks for
-   XWayland, the tests, `docs/rendering.md`, CLAUDE.md "Platform", README and Settings > Debug follow.
+   XWayland, the tests, `docs/rendering.md`, the platform notes, README and Settings > Debug follow.
 
 ## Log
 
 - 2026-10-26 (M7): list made. Found and fixed on the way: the Multiview fullscreen never opened on native Wayland (it waited
   for an X11 window id and closed itself after 40 tries); it now enters winit's borderless fullscreen (`ui/multiview/fullscreen_mode.rs`).
-- 2026-10-26 (M7, in the user's Plasma Wayland session in the VM; Claude drove the MCP build, spectacle took the shots; no pointer injection
+- 2026-10-26 (M7, in a Plasma Wayland session on the test machine; Claude drove the MCP build, spectacle took the shots; no pointer injection
   tool exists there, so nothing that needs a hovering mouse or a drag was run). Native Wayland (`RUSTVIEW_WINDOW_SYSTEM=wayland`, EGL on
   virgl): starts maximized; a video tab; the control bar (shown by the jump key); the tab's context menu over the playing video; the
   fullscreen and back; four videos in the fullscreen; zoom with the live minimap; the tab grid with the time badge; the rename dialog (an
@@ -59,5 +58,5 @@ VM's display (VirGL), mpv's hardware decoding on Wayland and two monitors are le
   the minimap's pointer lock, fractional scaling.
 - 2026-10-26 (0.5.15): questionnaire saved: switch after the test (done), W1 dragging out, W2 dialog parents and W3 the pointer lock
   "later" (cleanup branch, CLEANUP #19-#21); W4-W7 accepted as listed. The user ran no tests of their own ("passt", Claude's checks in the
-  VM's Wayland session count). Default switched: a Wayland session runs on native Wayland, `RUSTVIEW_WINDOW_SYSTEM=x11` (or `xwayland`)
+  the test machine's Wayland session count). Default switched: a Wayland session runs on native Wayland, `RUSTVIEW_WINDOW_SYSTEM=x11` (or `xwayland`)
   asks for XWayland, an X11 session stays on X11 whatever the variable says. Settings > Debug: "Native Wayland" is Info (was Warning).

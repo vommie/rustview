@@ -23,10 +23,10 @@ user asks what else could be optimized or improved, start here.
 
 ### B2 (CLEANUP #5 and #18): two files over the ~600-line limit
 
-- **What:** `crates/rustview/src/ui/multiview/session.rs` (about 700 lines) is over the limit of CLAUDE.md;
+- **What:** `crates/rustview/src/ui/multiview/session.rs` (about 700 lines) is over the file size limit of AGENTS.md;
   `ui/multiview/video_bar/window.rs` (694 lines in M0) went away with M2.
 - **Where:** `session.rs` holds the fullscreen session: opening, populating, refreshing, bars, closing.
-- **Why:** the file size rule of CLAUDE.md.
+- **Why:** the file size rule of AGENTS.md.
 - **User:** later. Split by topic like the other Multiview presenters (for example the open/populate part and the bars) when the file
   is touched next.
 

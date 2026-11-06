@@ -3,7 +3,7 @@
 Every key of RustView that triggers an action comes from ONE keymap that the user edits in Settings > Hotkeys, modeled on
 RustCut's keymap (`rustcut/crates/rustcut/src/ui/keymap/`, page `ui/settings/hotkeys.rs`). The Multiview keys still run as
 `MultiviewCommand`s on the selected medium (`docs/multiview_focus.md`); the keymap only replaced the key -> command tables.
-User decisions: questionnaires `~/claude/feedback/2026-10-24-rustview-hotkeys` and `...-hotkeys-2` (2026-10-24).
+Maintainer decisions: 2026-10-24.
 
 ## Areas
 An action belongs to one area; the same key may mean different things in areas that are never active together.
@@ -101,6 +101,6 @@ unzoomed. No slider or minimap for videos, and a video stays inside its tile.
 - The bar (user spec): play/pause, the current time (live; a click toggles milliseconds), a flat progress bar without chapter
   marks (a click seeks exactly there), the remaining time like mpv (a click toggles milliseconds), a mute button on the right.
   Nothing else. It appears only while the pointer is over it, across the whole width (like mpv's OSC), flat and compact;
-  the look is chosen in round 4 (`~/claude/feedback/2026-10-24-rustview-video-bar`, built: `docs/video_controls.md`).
+  the look is chosen in round 4 (built: `docs/video_controls.md`).
 - Mouse wheel over a video: volume. Right click: play/pause. Videos get the minimap and the zoom slider like pictures, and a
   zoomed video may grow beyond its tile into the free room (the canvas draws its texture there, since 0.5.11).
