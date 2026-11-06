@@ -1,4 +1,4 @@
-import { Slider, CheckBox, ComboBox } from "std-widgets.slint";
+import { Slider, CheckBox, ComboBox } from "settings_controls.slint";
 import { Theme } from "styles.slint";
 import { SettingsCard } from "settings_card.slint";
 
@@ -38,8 +38,10 @@ export component SettingsPageAppearance inherits VerticalLayout {
         title: "Grid & Thumbnail Presentation";
 
         HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             Text {
-                text: "Default Thumbnail Width:";
+                text: "Default Thumbnail Width";
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
@@ -61,16 +63,17 @@ export component SettingsPageAppearance inherits VerticalLayout {
         }
 
         HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             spacing: 8px;
             Text {
-                text: "Thumbnail Aspect Ratio:";
+                text: "Thumbnail Aspect Ratio";
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
             }
 
             ComboBox {
-                width: 180px;
                 model: ["1:1 (Square)", "4:3 (Standard)", "5:4 (Landscape)", "16:9 (Widescreen)", "3:4 (Portrait)", "4:5 (Portrait)", "9:16 (Tall Portrait)"];
                 current-index <=> root.thumb-aspect-idx;
             }
@@ -117,16 +120,17 @@ export component SettingsPageAppearance inherits VerticalLayout {
         }
 
         HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             spacing: 8px;
             Text {
-                text: "When thumbnail space is insufficient:";
+                text: "When thumbnail space is insufficient";
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
             }
 
             ComboBox {
-                width: 180px;
                 model: ["Hide badges", "Wrap badges"];
                 current-index <=> root.thumbnail-badge-overflow-idx;
             }
@@ -138,8 +142,10 @@ export component SettingsPageAppearance inherits VerticalLayout {
         description: "Customize spacing, padding, borders, and corner rounding for media items in the Grid View.";
 
         HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             Text {
-                text: "Horizontal Item Padding (Left / Right):";
+                text: "Horizontal Item Padding (Left / Right)";
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
@@ -161,8 +167,10 @@ export component SettingsPageAppearance inherits VerticalLayout {
         }
 
         HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             Text {
-                text: "Vertical Item Padding (Top / Bottom):";
+                text: "Vertical Item Padding (Top / Bottom)";
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
@@ -184,8 +192,10 @@ export component SettingsPageAppearance inherits VerticalLayout {
         }
 
         HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             Text {
-                text: "Spacing Between Items:";
+                text: "Spacing Between Items";
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
@@ -207,8 +217,10 @@ export component SettingsPageAppearance inherits VerticalLayout {
         }
 
         HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             Text {
-                text: "Outer Grid Padding:";
+                text: "Outer Grid Padding";
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
@@ -230,8 +242,10 @@ export component SettingsPageAppearance inherits VerticalLayout {
         }
 
         HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             Text {
-                text: "Tile Border Width:";
+                text: "Tile Border Width";
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
@@ -253,8 +267,10 @@ export component SettingsPageAppearance inherits VerticalLayout {
         }
 
         HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             Text {
-                text: "Tile Corner Radius:";
+                text: "Tile Corner Radius";
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
@@ -286,8 +302,10 @@ export component SettingsPageAppearance inherits VerticalLayout {
         }
 
         if root.enable-tooltips : HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             Text {
-                text: "Tooltip Display Delay:";
+                text: "Tooltip Display Delay";
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
@@ -319,8 +337,10 @@ export component SettingsPageAppearance inherits VerticalLayout {
         }
 
         if root.type-ahead-enabled : HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             Text {
-                text: "Keep typing within (search timeout):";
+                text: "Keep typing within (search timeout)";
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
@@ -342,8 +362,10 @@ export component SettingsPageAppearance inherits VerticalLayout {
         }
 
         if root.type-ahead-enabled : HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             Text {
-                text: "Start a new search after a pause of:";
+                text: "Start a new search after a pause of";
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
@@ -364,10 +386,15 @@ export component SettingsPageAppearance inherits VerticalLayout {
             }
         }
 
-        if root.type-ahead-enabled : Text {
-            text: "A typed letter that continues no name starts a new search after that pause, and is ignored as a typo when typed faster. Off = always a typo.";
-            color: Theme.text-muted;
-            wrap: word-wrap;
+        if root.type-ahead-enabled : HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+
+            Text {
+                text: "A typed letter that continues no name starts a new search after that pause, and is ignored as a typo when typed faster. Off = always a typo.";
+                color: Theme.text-muted;
+                wrap: word-wrap;
+            }
         }
 
         if root.type-ahead-enabled : CheckBox {
@@ -391,8 +418,10 @@ export component SettingsPageAppearance inherits VerticalLayout {
         }
 
         if root.type-ahead-enabled : HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             Text {
-                text: "Open Multiview follows the selection after:";
+                text: "Open Multiview follows the selection after";
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
@@ -413,10 +442,15 @@ export component SettingsPageAppearance inherits VerticalLayout {
             }
         }
 
-        if root.type-ahead-enabled : Text {
-            text: "Only for items selected by typing: the item is selected at once, a Multiview that follows the selection waits, so no video is opened for every letter.";
-            color: Theme.text-muted;
-            wrap: word-wrap;
+        if root.type-ahead-enabled : HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+
+            Text {
+                text: "Only for items selected by typing: the item is selected at once, a Multiview that follows the selection waits, so no video is opened for every letter.";
+                color: Theme.text-muted;
+                wrap: word-wrap;
+            }
         }
     }
 }

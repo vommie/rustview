@@ -1,4 +1,4 @@
-import { CheckBox } from "std-widgets.slint";
+import { CheckBox } from "settings_controls.slint";
 import { Theme } from "styles.slint";
 import { BulletItem } from "bullet_item.slint";
 import { SettingsCard } from "settings_card.slint";
@@ -17,11 +17,16 @@ export component SettingsPageApi inherits VerticalLayout {
             checked <=> root.auto-complete-external-stubs;
         }
 
-        Text {
-            text: "When enabled, entering a directory containing media records created by external tools that are still missing metadata or thumbnails will automatically probe the disk, extract full video/image container metrics, and generate thumbnails as soon as the render file becomes available.";
-            font-size: 11px;
-            color: Theme.text-muted;
-            wrap: word-wrap;
+        HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+
+            Text {
+                text: "When enabled, entering a directory containing media records created by external tools that are still missing metadata or thumbnails will automatically probe the disk, extract full video/image container metrics, and generate thumbnails as soon as the render file becomes available.";
+                font-size: 11px;
+                color: Theme.text-muted;
+                wrap: word-wrap;
+            }
         }
     }
 

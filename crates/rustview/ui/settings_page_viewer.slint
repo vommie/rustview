@@ -1,4 +1,4 @@
-import { CheckBox, ComboBox } from "std-widgets.slint";
+import { CheckBox, ComboBox } from "settings_controls.slint";
 import { Theme } from "styles.slint";
 import { SettingsCard } from "settings_card.slint";
 
@@ -10,6 +10,8 @@ export component SettingsPageViewer inherits VerticalLayout {
     in-out property <bool> open-videos-in-tab: true;
     in-out property <bool> allow-multiple-video-tabs: true;
     in-out property <bool> show-tab-rating-badge: false;
+    // 0 = on every tab, 1 = on the shown tab and under the pointer, 2 = none (`viewer.tabs.close_buttons`).
+    in-out property <int> tab-close-buttons-idx: 0;
     in-out property <int> background-mode-idx: 0; // 0 = Dark, 1 = Deep Black, 2 = Checkerboard
 
     SettingsCard {
@@ -26,15 +28,20 @@ export component SettingsPageViewer inherits VerticalLayout {
             checked <=> root.allow-multiple-image-tabs;
         }
 
-        Text {
-            text: root.open-images-in-tab
-                ? (root.allow-multiple-image-tabs
-                    ? "Double-clicking an image opens a new tab every time with an iteration suffix like (1), (2)."
-                    : "Double-clicking an image tile focuses the existing tab if already open.")
-                : "Double-clicking an image tile delegates opening to the operating system default application.";
-            font-size: 11px;
-            color: Theme.text-muted;
-            wrap: word-wrap;
+        HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+
+            Text {
+                text: root.open-images-in-tab
+                    ? (root.allow-multiple-image-tabs
+                        ? "Double-clicking an image opens a new tab every time with an iteration suffix like (1), (2)."
+                        : "Double-clicking an image tile focuses the existing tab if already open.")
+                    : "Double-clicking an image tile delegates opening to the operating system default application.";
+                font-size: 11px;
+                color: Theme.text-muted;
+                wrap: word-wrap;
+            }
         }
     }
 
@@ -52,15 +59,20 @@ export component SettingsPageViewer inherits VerticalLayout {
             checked <=> root.allow-multiple-video-tabs;
         }
 
-        Text {
-            text: root.open-videos-in-tab
-                ? (root.allow-multiple-video-tabs
-                    ? "Double-clicking a video opens a new tab with an independent MPV player instance and iteration suffix like (1), (2)."
-                    : "Double-clicking a video tile focuses the existing tab if already open.")
-                : "Double-clicking a video tile delegates opening to the operating system default application.";
-            font-size: 11px;
-            color: Theme.text-muted;
-            wrap: word-wrap;
+        HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+
+            Text {
+                text: root.open-videos-in-tab
+                    ? (root.allow-multiple-video-tabs
+                        ? "Double-clicking a video opens a new tab with an independent MPV player instance and iteration suffix like (1), (2)."
+                        : "Double-clicking a video tile focuses the existing tab if already open.")
+                    : "Double-clicking a video tile delegates opening to the operating system default application.";
+                font-size: 11px;
+                color: Theme.text-muted;
+                wrap: word-wrap;
+            }
         }
     }
 
@@ -72,6 +84,36 @@ export component SettingsPageViewer inherits VerticalLayout {
             text: "Show rating badge in tabs";
             checked <=> root.show-tab-rating-badge;
         }
+
+        HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+            spacing: 8px;
+
+            Text {
+                text: "Close buttons";
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+
+            ComboBox {
+                model: ["On every tab", "On the shown tab and under the pointer", "None"];
+                current-index <=> root.tab-close-buttons-idx;
+            }
+        }
+
+        HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+
+            Text {
+                text: "Without a button a tab still closes with a middle click, from its menu or with its key.";
+                font-size: 11px;
+                color: Theme.text-muted;
+                wrap: word-wrap;
+            }
+        }
     }
 
     SettingsCard {
@@ -79,16 +121,17 @@ export component SettingsPageViewer inherits VerticalLayout {
         description: "Background canvas and appearance for internal media tabs.";
 
         HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             spacing: 8px;
             Text {
-                text: "Viewer Canvas Background:";
+                text: "Viewer Canvas Background";
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
             }
 
             ComboBox {
-                width: 190px;
                 model: ["Dark Theme (#11111b)", "Deep Black (#000000)", "Transparent Checkerboard"];
                 current-index <=> root.background-mode-idx;
             }

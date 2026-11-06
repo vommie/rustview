@@ -1,4 +1,4 @@
-import { ComboBox, Slider } from "std-widgets.slint";
+import { ComboBox, Slider } from "settings_controls.slint";
 import { Theme } from "styles.slint";
 import { SettingsCard } from "settings_card.slint";
 import { SettingsOptionRow, SettingsSwitchRow } from "settings_option_row.slint";
@@ -58,7 +58,6 @@ export component SettingsCardPlayer inherits VerticalLayout {
             tooltip: "Translucent bar: over the whole width of the video, the picture stays visible behind it. Floating pill: rounded, with a small margin to the edges of the video.";
 
             ComboBox {
-                width: 220px;
                 model: ["Translucent bar", "Floating pill"];
                 current-index <=> root.style-idx;
             }
@@ -93,7 +92,6 @@ export component SettingsCardPlayer inherits VerticalLayout {
             tooltip: "Near the bottom: the bar appears while the pointer is in the lower part of the video and goes when it leaves. Any movement: every movement of the pointer over the video shows it, and it goes after a moment without movement.";
 
             ComboBox {
-                width: 220px;
                 model: ["Pointer near the bottom", "Any movement over the video"];
                 current-index <=> root.reveal-idx;
             }
@@ -104,7 +102,6 @@ export component SettingsCardPlayer inherits VerticalLayout {
             tooltip: "How a click or a drag on the progress bar seeks. Exact: to the exact frame, also while dragging (slower on long or heavy videos). Like mpv's controller: a click exactly, a drag by keyframes. Keyframes: to the nearest keyframe, the fastest but up to a few seconds off. As mpv is configured: mpv's own setting (hr-seek in your mpv.conf).";
 
             ComboBox {
-                width: 220px;
                 model: ["Exact", "Like mpv's controller", "Keyframes (fastest)", "As mpv is configured"];
                 current-index <=> root.seek-idx;
             }
@@ -115,7 +112,6 @@ export component SettingsCardPlayer inherits VerticalLayout {
             tooltip: "The volume normalization every video starts with (as in RustCut). Loudness: every video equally loud. Dynamic: quiet parts louder. Speech: voices clear and even. Compressor: loud peaks quieter. The filter menu of a video can choose another one for that video in its view.";
 
             ComboBox {
-                width: 220px;
                 model: ["Off", "Loudness", "Dynamic", "Speech", "Compressor"];
                 current-index <=> root.normalize-idx;
             }

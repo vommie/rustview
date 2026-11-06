@@ -1,4 +1,4 @@
-import { Button, CheckBox } from "std-widgets.slint";
+import { Button, CheckBox } from "settings_controls.slint";
 import { Theme } from "styles.slint";
 import { SettingsCard } from "settings_card.slint";
 import { SearchField } from "search_field.slint";
@@ -77,11 +77,16 @@ export component SettingsPageFormats inherits VerticalLayout {
             text: root.hidden-notice;
         }
 
-        Text {
-            text: root.intro;
-            font-size: 11px;
-            color: Theme.text-muted;
-            wrap: word-wrap;
+        HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+
+            Text {
+                text: root.intro;
+                font-size: 11px;
+                color: Theme.text-muted;
+                wrap: word-wrap;
+            }
         }
 
         SearchField {
@@ -118,10 +123,15 @@ export component SettingsPageFormats inherits VerticalLayout {
             }
         }
 
-        if root.image-formats.length == 0 : Text {
-            text: "No image format matches the search.";
-            font-size: 11px;
-            color: Theme.text-muted;
+        if root.image-formats.length == 0 : HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+
+            Text {
+                text: "No image format matches the search.";
+                font-size: 11px;
+                color: Theme.text-muted;
+            }
         }
     }
 
@@ -147,10 +157,15 @@ export component SettingsPageFormats inherits VerticalLayout {
             }
         }
 
-        if root.video-formats.length == 0 : Text {
-            text: "No video format matches the search.";
-            font-size: 11px;
-            color: Theme.text-muted;
+        if root.video-formats.length == 0 : HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+
+            Text {
+                text: "No video format matches the search.";
+                font-size: 11px;
+                color: Theme.text-muted;
+            }
         }
     }
 
@@ -163,11 +178,16 @@ export component SettingsPageFormats inherits VerticalLayout {
             checked <=> root.auto-detect-extensionless;
         }
 
-        Text {
-            text: "Only files whose content is a switched-on format are renamed.";
-            font-size: 11px;
-            color: Theme.text-muted;
-            wrap: word-wrap;
+        HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+
+            Text {
+                text: "Only files whose content is a switched-on format are renamed.";
+                font-size: 11px;
+                color: Theme.text-muted;
+                wrap: word-wrap;
+            }
         }
     }
 

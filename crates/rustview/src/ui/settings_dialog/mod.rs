@@ -1,4 +1,5 @@
 mod ab_repeat_card;
+mod apply;
 mod confirmations;
 mod debug_page;
 mod formats_page;
@@ -30,7 +31,7 @@ use rustview_core::settings::schema::{
     MAX_VIEWER_VIDEO_JUMP_SECS, MIN_CONFIRM_OPEN_FILE_COUNT, MIN_FULLSCREEN_IDLE_CURSOR_MS,
     MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX, MIN_FULLSCREEN_ZOOM_MAX_PERCENT, MIN_FULLSCREEN_ZOOM_MINIMAP_SECS,
     MIN_FULLSCREEN_ZOOM_OUT_PERCENT, MIN_FULLSCREEN_ZOOM_STEP_PERCENT, MIN_MAX_HISTORY_TAGS, MIN_MEMORY_BUDGET_MB,
-    MIN_TYPE_AHEAD_TIMEOUT_MS, MIN_VIEWER_VIDEO_JUMP_SECS, ThumbnailBadgeOverflow,
+    MIN_TYPE_AHEAD_TIMEOUT_MS, MIN_VIEWER_VIDEO_JUMP_SECS, ThumbnailBadgeOverflow, VIEWER_TAB_CLOSE_BUTTON_MODES,
 };
 use rustview_core::util::cast::{Az, FloatToInt, SaturatingAs};
 
@@ -122,7 +123,7 @@ impl SettingsDialogController {
         }
 
         if let Some(ref window) = self.settings_window {
-            self.populate_ui(window, &self.manager.get());
+            Self::fill(&self.apply_context(), window, &self.manager.get());
 
             if let Some(ref w_weak) = self.main_window_weak
                 && let Some(main) = w_weak.upgrade()
@@ -138,7 +139,30 @@ impl SettingsDialogController {
         }
     }
 
-    fn populate_ui(&self, window: &SettingsWindow, settings: &AppSettings) {
+    /// What applying and filling need besides the window.
+    fn apply_context(&self) -> apply::ApplyContext {
+        apply::ApplyContext {
+            mgr: Arc::clone(&self.manager),
+            formats: Arc::clone(&self.formats_page),
+            hotkeys: Rc::clone(&self.hotkeys_page),
+            monitors: Rc::clone(&self.detected_monitors),
+            debug: Rc::clone(&self.debug_page),
+        }
+    }
+
+    /// Fills the window from `settings` without applying anything: edits apply again once it is filled.
+    fn fill(ctx: &apply::ApplyContext, window: &SettingsWindow, settings: &AppSettings) {
+        window.set_armed(false);
+        Self::populate_ui(ctx, window, settings);
+        let weak = window.as_weak();
+        slint::Timer::single_shot(std::time::Duration::from_millis(400), move || {
+            if let Some(w) = weak.upgrade() {
+                w.set_armed(true);
+            }
+        });
+    }
+
+    fn populate_ui(ctx: &apply::ApplyContext, window: &SettingsWindow, settings: &AppSettings) {
         window.set_app_version(env!("CARGO_PKG_VERSION").into());
         window.set_root_folder_path(
             settings
@@ -244,8 +268,8 @@ impl SettingsDialogController {
         window.set_preview_quality(i32::from(settings.performance.preview_quality));
 
         // Formats properties
-        self.formats_page.populate(window, settings.formats.format_mask());
-        self.hotkeys_page.populate(settings);
+        ctx.formats.populate(window, settings.formats.format_mask());
+        ctx.hotkeys.populate(settings);
         window.set_auto_detect_extensionless(settings.formats.auto_detect_extensionless_media);
 
         // Viewer properties
@@ -257,6 +281,11 @@ impl SettingsDialogController {
         window.set_video_jump_long_secs(settings.viewer.videos.jump_long_secs.saturating_as::<i32>());
         ab_repeat_card::populate(window, &settings.viewer.videos.ab_repeat);
         window.set_viewer_show_tab_rating_badge(settings.viewer.tabs.show_rating_badge);
+        let close_mode = VIEWER_TAB_CLOSE_BUTTON_MODES
+            .iter()
+            .position(|m| *m == settings.viewer.tabs.close_buttons)
+            .unwrap_or(0);
+        window.set_viewer_tab_close_buttons_idx(close_mode.saturating_as::<i32>());
         window.set_viewer_background_mode_idx(match settings.viewer.background_mode.to_lowercase().as_str() {
             "deep black" | "black" => 1,
             "transparent checkerboard" | "checkerboard" => 2,
@@ -285,7 +314,7 @@ impl SettingsDialogController {
             }
         }
 
-        *self.detected_monitors.borrow_mut() = monitors;
+        *ctx.monitors.borrow_mut() = monitors;
         window.set_display_options(ModelRc::new(VecModel::from(options)));
         window.set_selected_display_idx(selected_idx.saturating_as::<i32>());
 
@@ -305,7 +334,7 @@ impl SettingsDialogController {
 
         // Debug properties
         window.set_obfuscate_logs(settings.debug.obfuscate_logs);
-        self.debug_page.populate(window, settings);
+        ctx.debug.populate(window, settings);
     }
 
     /// Action bar, sound and background of the fullscreen.
@@ -551,194 +580,46 @@ impl SettingsDialogController {
         let main_weak_save = main_weak.clone();
         let detected_monitors_save = self.detected_monitors.clone();
 
+        // Every change applies a moment after the edit (the window debounces it), and once more when it closes.
+        let apply_ctx = apply::ApplyContext {
+            mgr: Arc::clone(&mgr_save),
+            formats: Arc::clone(&formats_page_save),
+            hotkeys: Rc::clone(&hotkeys_page_save),
+            monitors: Rc::clone(&detected_monitors_save),
+            debug: Rc::clone(&self.debug_page),
+        };
+        let close_ctx = apply_ctx.clone();
+        let reset_ctx = apply_ctx.clone();
+        let w_weak_reset = w_weak.clone();
+        window.on_reset_page(move |page| {
+            let Some(w) = w_weak_reset.upgrade() else {
+                return;
+            };
+            let Ok(page) = usize::try_from(page) else {
+                return;
+            };
+            // What the window shows is saved first, so only this page changes.
+            Self::apply_from_window(&w, &reset_ctx);
+            let mut settings = reset_ctx.mgr.get();
+            if rustview_core::settings::page_reset::reset_page(&mut settings, page) {
+                tracing::info!(page, "[SettingsDialog: Reset] Page reset to its defaults");
+                reset_ctx.mgr.update(&settings);
+                Self::fill(&reset_ctx, &w, &reset_ctx.mgr.get());
+            }
+        });
+        let w_weak_apply = w_weak.clone();
+        window.on_apply_now(move || {
+            if let Some(w) = w_weak_apply.upgrade() {
+                tracing::debug!("[SettingsDialog: Apply] Changes applied at once");
+                Self::apply_from_window(&w, &apply_ctx);
+            }
+        });
+        let w_weak_close_apply = w_weak.clone();
+        let save_ctx = close_ctx.clone();
+
         window.on_save_and_apply(move || {
             if let Some(w) = w_weak_save.upgrade() {
-                let mut current = mgr_save.get();
-
-                let root_str = w.get_root_folder_path();
-                current.general.root_folder = if root_str.is_empty() {
-                    None
-                } else {
-                    Some(PathBuf::from(root_str.as_str()))
-                };
-
-                current.general.remember_last_folder = w.get_remember_last_folder();
-                current.general.confirm_on_file_delete = w.get_confirm_delete();
-                current.general.confirm_open_file_count = w
-                    .get_confirm_open_file_count()
-                    .clamp(
-                        MIN_CONFIRM_OPEN_FILE_COUNT.saturating_as::<i32>(),
-                        MAX_CONFIRM_OPEN_FILE_COUNT.saturating_as::<i32>(),
-                    )
-                    .saturating_as::<u32>();
-                current.general.ignore_nested_mounts = w.get_ignore_nested_mounts();
-                confirmations::save(&w, &mut current.general);
-
-                current.folders.auto_reveal_remembered_folder = w.get_auto_reveal_remembered_folder();
-                current.folders.persist_folder_tree_state = w.get_persist_folder_tree_state();
-                current.folders.show_deleted_folders = w.get_show_deleted_folders();
-                current.folders.show_folder_metrics = w.get_show_folder_metrics();
-                current.folders.show_hidden_folders = w.get_show_hidden_folders();
-                current.folders.support_dot_hidden_files = w.get_support_dot_hidden_files();
-
-                current.appearance.default_thumbnail_size = w.get_default_thumb_size().saturating_as::<u32>();
-                let ratio = GridAspectRatio::from_index(w.get_thumb_aspect_idx());
-                current.appearance.thumbnail_aspect_ratio = ratio.as_str().to_string();
-                current.appearance.show_filenames = w.get_show_filenames();
-                current.appearance.show_ratings_overlay = w.get_show_rating_badge();
-                current.appearance.show_tags_overlay = w.get_show_tag_badge();
-                current.appearance.show_media_type_badges = w.get_show_media_type_badges();
-                current.appearance.show_duration_badge = w.get_show_duration_badge();
-                current.appearance.show_animated_badge = w.get_show_animated_badge();
-                current.appearance.thumbnail_badge_overflow =
-                    ThumbnailBadgeOverflow::from_index(w.get_thumbnail_badge_overflow_idx())
-                        .as_str()
-                        .to_string();
-                current.appearance.enable_hover_previews = w.get_enable_hover_previews();
-                current.appearance.enable_tooltips = w.get_enable_tooltips();
-                current.appearance.tooltip_delay_ms = w.get_tooltip_delay_ms().clamp(50, 2000).saturating_as::<u32>();
-                current.appearance.type_ahead_enabled = w.get_type_ahead_enabled();
-                current.appearance.type_ahead_timeout_ms = w
-                    .get_type_ahead_timeout_ms()
-                    .clamp(
-                        MIN_TYPE_AHEAD_TIMEOUT_MS.saturating_as::<i32>(),
-                        MAX_TYPE_AHEAD_TIMEOUT_MS.saturating_as::<i32>(),
-                    )
-                    .saturating_as::<u32>();
-                current.appearance.type_ahead_new_search_gap_ms = (w
-                    .get_type_ahead_new_search_gap_ms()
-                    .clamp(0, MAX_TYPE_AHEAD_NEW_SEARCH_GAP_MS.saturating_as::<i32>()))
-                .saturating_as::<u32>();
-                current.appearance.type_ahead_include_folders = w.get_type_ahead_include_folders();
-                current.appearance.type_ahead_cycle_repeated_keys = w.get_type_ahead_cycle_repeated_keys();
-                current.appearance.type_ahead_center_target = w.get_type_ahead_center_target();
-                current.appearance.type_ahead_show_no_match = w.get_type_ahead_show_no_match();
-                current.appearance.type_ahead_multiview_delay_ms = (w
-                    .get_type_ahead_multiview_delay_ms()
-                    .clamp(0, MAX_TYPE_AHEAD_MULTIVIEW_DELAY_MS.saturating_as::<i32>()))
-                .saturating_as::<u32>();
-
-                // Save Grid Items Layout Properties
-                current.appearance.grid_item_padding_horizontal =
-                    w.get_grid_item_padding_h().clamp(0, 32).saturating_as::<u32>();
-                current.appearance.grid_item_padding_vertical =
-                    w.get_grid_item_padding_v().clamp(0, 32).saturating_as::<u32>();
-                current.appearance.grid_spacing = w.get_grid_spacing().clamp(0, 48).saturating_as::<u32>();
-                current.appearance.grid_padding = w.get_grid_padding().clamp(0, 48).saturating_as::<u32>();
-                current.appearance.grid_item_border_width =
-                    w.get_grid_item_border_width().clamp(0, 6).saturating_as::<u32>();
-                current.appearance.grid_item_corner_radius =
-                    w.get_grid_item_corner_radius().clamp(0, 24).saturating_as::<u32>();
-
-                // Save Performance Parameters
-                current.performance.worker_threads = w.get_worker_threads().clamp(1, 32).saturating_as::<usize>();
-                current.performance.batch_commit_size =
-                    w.get_batch_commit_size().clamp(4, 256).saturating_as::<usize>();
-                current.performance.memory_budget_mb = if w.get_memory_budget_auto() {
-                    0
-                } else {
-                    w.get_memory_budget_mb()
-                        .clamp(
-                            MIN_MEMORY_BUDGET_MB.saturating_as::<i32>(),
-                            MAX_MEMORY_BUDGET_MB.saturating_as::<i32>(),
-                        )
-                        .saturating_as::<u32>()
-                };
-                current.performance.thumbnail_db_size = w.get_thumb_db_size().clamp(64, 1024).saturating_as::<u32>();
-                current.performance.thumbnail_format = if w.get_thumb_format_idx() == 1 {
-                    "JPEG".to_string()
-                } else {
-                    "WebP".to_string()
-                };
-                current.performance.thumbnail_quality = w.get_thumb_quality().clamp(10, 100).saturating_as::<u8>();
-                current.performance.scaling_algorithm = match w.get_scaling_algo_idx() {
-                    1 => "Bilinear".to_string(),
-                    2 => "Lanczos3".to_string(),
-                    3 => "Nearest".to_string(),
-                    _ => "CatmullRom".to_string(),
-                };
-                current.performance.video_engine = if w.get_video_engine_idx() == 1 {
-                    "MPV".to_string()
-                } else {
-                    "FFmpeg".to_string()
-                };
-                current.performance.video_offset_percent =
-                    w.get_video_offset_percent().clamp(1, 90).saturating_as::<u8>();
-                current.performance.short_video_threshold_secs =
-                    w.get_short_video_threshold_secs().clamp(1, 60).saturating_as::<u32>();
-                current.performance.generate_video_previews = w.get_generate_video_previews();
-                current.performance.preview_frame_count =
-                    w.get_preview_frame_count().clamp(2, 100).saturating_as::<u32>();
-                current.performance.custom_preview_settings = w.get_custom_preview_settings();
-                current.performance.preview_format = if w.get_preview_format_idx() == 1 {
-                    "JPEG".to_string()
-                } else {
-                    "WebP".to_string()
-                };
-                current.performance.preview_quality = w.get_preview_quality().clamp(10, 100).saturating_as::<u8>();
-
-                // Save Formats Parameters
-                current.formats.auto_detect_extensionless_media = w.get_auto_detect_extensionless();
-                current.formats.disabled_formats = formats_page_save.disabled_ids();
-                hotkeys_page_save.save(&mut current);
-
-                // Save Viewer Parameters
-                current.viewer.images.open_in_tab = w.get_open_images_in_tab();
-                current.viewer.images.allow_multiple_tabs = w.get_allow_multiple_image_tabs();
-                current.viewer.videos.open_in_tab = w.get_open_videos_in_tab();
-                current.viewer.videos.allow_multiple_tabs = w.get_allow_multiple_video_tabs();
-                let jump = |secs: i32| {
-                    secs.clamp(
-                        MIN_VIEWER_VIDEO_JUMP_SECS.saturating_as::<i32>(),
-                        MAX_VIEWER_VIDEO_JUMP_SECS.saturating_as::<i32>(),
-                    )
-                    .saturating_as::<u32>()
-                };
-                current.viewer.videos.jump_secs = jump(w.get_video_jump_secs());
-                current.viewer.videos.jump_long_secs = jump(w.get_video_jump_long_secs());
-                ab_repeat_card::save(&w, &mut current.viewer.videos.ab_repeat);
-                current.viewer.tabs.show_rating_badge = w.get_viewer_show_tab_rating_badge();
-                current.viewer.background_mode = match w.get_viewer_background_mode_idx() {
-                    1 => "Deep Black".to_string(),
-                    2 => "Transparent Checkerboard".to_string(),
-                    _ => "Dark".to_string(),
-                };
-
-                // Save Fullscreen & Target Display Parameters
-                current.fullscreen.enable_specific_monitor = w.get_fullscreen_enable_specific();
-                let sel_disp_idx = w.get_selected_display_idx().saturating_as::<usize>();
-                let monitors_guard = detected_monitors_save.borrow();
-                if let Some(m) = monitors_guard.get(sel_disp_idx) {
-                    current.fullscreen.specific_monitor.clone_from(&m.connector);
-                }
-                drop(monitors_guard);
-
-                current.fullscreen.enable_fallback_rule = w.get_fullscreen_enable_fallback();
-                current.fullscreen.fallback_target = if w.get_fullscreen_fallback_target_idx() == 1 {
-                    "different".to_string()
-                } else {
-                    "same".to_string()
-                };
-                Self::save_fullscreen_extras(&w, &mut current.fullscreen);
-                image_edit_page::save(&w, &mut current.image_edit);
-
-                // Save Tag History Configuration
-                let new_max_history = w
-                    .get_max_history_tags()
-                    .saturating_as::<usize>()
-                    .clamp(MIN_MAX_HISTORY_TAGS, MAX_MAX_HISTORY_TAGS);
-                current.tags.max_history_tags = new_max_history;
-                current.tags.history_tag_ids.truncate(new_max_history);
-                current.tags.compact_tree = w.get_tag_tree_compact();
-
-                // Save API Parameters
-                current.api.auto_complete_external_stubs = w.get_auto_complete_external_stubs();
-
-                // Save Debug Parameters
-                current.debug.obfuscate_logs = w.get_obfuscate_logs();
-                DebugPageController::save(&w, &mut current);
-
-                mgr_save.update(&current);
+                Self::apply_from_window(&w, &save_ctx);
 
                 if let Some(ref mw) = main_weak_save
                     && let Some(main) = mw.upgrade()
@@ -794,6 +675,9 @@ impl SettingsDialogController {
         let main_weak_close = self.main_window_weak.clone();
         window.window().on_close_requested(move || {
             tracing::info!("[SettingsDialog: CloseRequest] Settings window closed via titlebar close button");
+            if let Some(w) = w_weak_close_apply.upgrade() {
+                Self::apply_from_window(&w, &close_ctx);
+            }
             if let Some(ref mw) = main_weak_close
                 && let Some(main) = mw.upgrade()
             {

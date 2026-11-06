@@ -1,4 +1,4 @@
-import { Slider, Button, ComboBox, CheckBox } from "std-widgets.slint";
+import { Slider, Button, ComboBox, CheckBox } from "settings_controls.slint";
 import { Theme } from "styles.slint";
 import { SettingsCard } from "settings_card.slint";
 
@@ -32,8 +32,10 @@ export component SettingsPagePerformance inherits VerticalLayout {
         description: "Configure background thread pools and batched transactional commits to maximize CPU throughput across multiple cores.";
 
         HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             Text {
-                text: "Rayon Worker Threads:";
+                text: "Rayon Worker Threads";
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
@@ -55,8 +57,10 @@ export component SettingsPagePerformance inherits VerticalLayout {
         }
 
         HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             Text {
-                text: "LMDB Batch Commit Size:";
+                text: "LMDB Batch Commit Size";
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
@@ -90,8 +94,10 @@ export component SettingsPagePerformance inherits VerticalLayout {
         }
 
         if !root.memory-budget-auto : HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             Text {
-                text: "RAM Budget:";
+                text: "RAM Budget";
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
@@ -115,16 +121,26 @@ export component SettingsPagePerformance inherits VerticalLayout {
             }
         }
 
-        Text {
-            text: root.memory-summary;
-            color: Theme.text-muted;
-            wrap: word-wrap;
+        HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+
+            Text {
+                text: root.memory-summary;
+                color: Theme.text-muted;
+                wrap: word-wrap;
+            }
         }
 
-        if root.memory-warning != "" : Text {
-            text: root.memory-warning;
-            color: #f9e2af;
-            wrap: word-wrap;
+        if root.memory-warning != "" : HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+
+            Text {
+                text: root.memory-warning;
+                color: #f9e2af;
+                wrap: word-wrap;
+            }
         }
     }
 
@@ -134,8 +150,10 @@ export component SettingsPagePerformance inherits VerticalLayout {
         description: "Configure how thumbnails are resized, encoded, and persisted in binary L2 PackStore containers. Exact aspect ratios are preserved without letterbox borders.";
 
         HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             Text {
-                text: "Target DB Bounding Size:";
+                text: "Target DB Bounding Size";
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
@@ -157,9 +175,11 @@ export component SettingsPagePerformance inherits VerticalLayout {
         }
 
         HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             spacing: 8px;
             Text {
-                text: "Storage Format:";
+                text: "Storage Format";
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
@@ -179,8 +199,10 @@ export component SettingsPagePerformance inherits VerticalLayout {
         }
 
         HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             Text {
-                text: "Compression Quality:";
+                text: "Compression Quality";
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
@@ -202,16 +224,17 @@ export component SettingsPagePerformance inherits VerticalLayout {
         }
 
         HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             spacing: 8px;
             Text {
-                text: "Scaling Algorithm:";
+                text: "Scaling Algorithm";
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
             }
 
             ComboBox {
-                width: 200px;
                 model: ["Bicubic (CatmullRom)", "Bilinear (Triangle)", "Lanczos3", "Nearest"];
                 current-index <=> root.scaling-algo-idx;
             }
@@ -224,24 +247,27 @@ export component SettingsPagePerformance inherits VerticalLayout {
         description: "Specify the backend video decoding library, extraction timestamp offset, short video handling threshold, and multi-frame preview animation generation.";
 
         HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             spacing: 8px;
             Text {
-                text: "Video Extraction Engine:";
+                text: "Video Extraction Engine";
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
             }
 
             ComboBox {
-                width: 200px;
                 model: ["FFmpeg (High Performance)", "MPV (libmpv Engine)"];
                 current-index <=> root.video-engine-idx;
             }
         }
 
         HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             Text {
-                text: "Primary Thumbnail Position Offset:";
+                text: "Primary Thumbnail Position Offset";
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
@@ -263,8 +289,10 @@ export component SettingsPagePerformance inherits VerticalLayout {
         }
 
         HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             Text {
-                text: "Short Video Threshold (Linear Scan):";
+                text: "Short Video Threshold (Linear Scan)";
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
@@ -291,8 +319,10 @@ export component SettingsPagePerformance inherits VerticalLayout {
         }
 
         if root.generate-video-previews : HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             Text {
-                text: "Preview Frame Count (10%-90% split):";
+                text: "Preview Frame Count (10%-90% split)";
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
@@ -319,9 +349,11 @@ export component SettingsPagePerformance inherits VerticalLayout {
         }
 
         if root.generate-video-previews && root.custom-preview-settings : HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             spacing: 8px;
             Text {
-                text: "Preview Storage Format:";
+                text: "Preview Storage Format";
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
@@ -341,8 +373,10 @@ export component SettingsPagePerformance inherits VerticalLayout {
         }
 
         if root.generate-video-previews && root.custom-preview-settings : HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             Text {
-                text: "Preview Compression Quality:";
+                text: "Preview Compression Quality";
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;

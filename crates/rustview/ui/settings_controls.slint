@@ -1,0 +1,470 @@
+// The controls of the Settings window in RustCut's look (RustCut's `controls_*.slint` and `toggle_switch.slint`, same
+// author): framed 24 px controls in the theme's colors, every choice, number and slider as wide as one column
+// (`SettingsMetrics.control-width`), a switch at the right end of its row instead of a check box. They keep the API of
+// Slint's std-widgets that the settings pages use (`CheckBox`, `ComboBox`, `SpinBox`, `Slider`, `Button`, `LineEdit`),
+// so a page only imports them from here.
+
+import { Theme } from "styles.slint";
+import { AppIcon, IconId, IconSize, IconSlot } from "icons.slint";
+import { ToggleSwitch } from "toggle_switch.slint";
+
+export global SettingsMetrics {
+    // The one width of every choice, number field and slider (RustCut's `ControlMetrics.field-max-width`).
+    out property <length> control-width: 200px;
+    out property <length> control-height: 24px;
+}
+
+/// An on/off option: the text on the left, a switch at the right end; the whole row is the click target (RustCut's
+/// switch row). Keeps std-widgets' `CheckBox` API.
+export component CheckBox {
+    in property <string> text;
+    in-out property <bool> checked;
+    in property <bool> enabled: true;
+    in property <color> color: Theme.text;
+    in property <length> font-size: 12px;
+    callback toggled();
+
+    min-height: 30px;
+    preferred-height: Math.max(30px, label.preferred-height + 10px);
+
+    Rectangle {
+        border-radius: 4px;
+        background: touch.has-hover && root.enabled ? Theme.surface-hover : transparent;
+    }
+
+    touch := TouchArea {
+        mouse-cursor: root.enabled ? MouseCursor.pointer : MouseCursor.default;
+        clicked => {
+            if root.enabled {
+                keys.focus();
+                root.checked = !root.checked;
+                root.toggled();
+            }
+        }
+    }
+
+    keys := FocusScope {
+        width: 0px;
+        height: 0px;
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if event.text == " " {
+                root.checked = !root.checked;
+                root.toggled();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 12px;
+
+        label := Text {
+            horizontal-stretch: 1;
+            text: root.text;
+            color: root.enabled ? root.color : Theme.text-muted;
+            font-size: root.font-size;
+            wrap: word-wrap;
+            vertical-alignment: center;
+        }
+
+        VerticalLayout {
+            alignment: center;
+
+            ToggleSwitch {
+                checked: root.checked;
+                enabled: root.enabled;
+                has-focus: keys.has-focus;
+            }
+        }
+    }
+}
+
+/// A push button (RustCut's `IconButton` with a text; `primary` = the blue tint of a button that is on).
+export component Button inherits Rectangle {
+    in property <string> text;
+    in property <IconId> icon: IconId.none;
+    in property <bool> enabled: true;
+    in property <bool> primary;
+    callback clicked();
+
+    height: SettingsMetrics.control-height;
+    min-width: Math.max(26px, row.preferred-width);
+    horizontal-stretch: 0;
+    border-radius: 4px;
+    background: !root.enabled ? transparent
+        : root.primary ? Theme.primary.with-alpha(touch.has-hover ? 0.32 : 0.22)
+        : touch.pressed ? Theme.surface-selected : touch.has-hover ? Theme.surface-hover : Theme.surface;
+    border-width: 1px;
+    border-color: root.primary && root.enabled ? Theme.primary : Theme.border;
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+
+    row := HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 6px;
+        alignment: center;
+
+        if root.icon != IconId.none: IconSlot {
+            icon: root.icon;
+            size: IconSize.md;
+            color: root.enabled ? Theme.text : Theme.text-muted;
+        }
+
+        if root.text != "": Text {
+            text: root.text;
+            font-size: 12px;
+            color: root.enabled ? (root.primary ? Theme.primary : Theme.text) : Theme.text-muted;
+            vertical-alignment: center;
+        }
+    }
+}
+
+/// A text field (RustCut's field look). Keeps std-widgets' `LineEdit` API that the pages use.
+export component LineEdit {
+    in-out property <string> text <=> input.text;
+    in property <string> placeholder-text;
+    in property <bool> read-only;
+    in property <bool> enabled: true;
+    out property <bool> has-focus: input.has-focus;
+    callback accepted(string);
+    callback edited(string);
+
+    height: SettingsMetrics.control-height;
+    min-width: 60px;
+
+    Rectangle {
+        border-radius: 4px;
+        background: Theme.background;
+        border-width: 1px;
+        border-color: input.has-focus ? Theme.primary : Theme.border;
+    }
+
+    public function focus-input() {
+        input.focus();
+    }
+
+    public function select-all() {
+        input.select-all();
+    }
+
+    if input.text == "" && !input.has-focus: Text {
+        x: 8px;
+        width: parent.width - 16px;
+        height: parent.height;
+        text: root.placeholder-text;
+        font-size: 12px;
+        color: Theme.text-muted;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+
+    input := TextInput {
+        x: 8px;
+        width: parent.width - 16px;
+        height: parent.height;
+        font-size: 12px;
+        color: root.enabled ? Theme.text : Theme.text-muted;
+        selection-background-color: Theme.primary.with-alpha(0.4);
+        vertical-alignment: center;
+        single-line: true;
+        read-only: root.read-only || !root.enabled;
+        accepted => { root.accepted(self.text); }
+        edited => { root.edited(self.text); }
+    }
+}
+
+/// A choice of a list (RustCut's `ChoiceButton`): the current entry and a chevron; a click opens the list under it.
+/// Keeps std-widgets' `ComboBox` API.
+export component ComboBox inherits Rectangle {
+    in property <[string]> model;
+    in-out property <int> current-index: 0;
+    out property <string> current-value: root.model[root.current-index];
+    in property <bool> enabled: true;
+    callback selected(string);
+
+    width: SettingsMetrics.control-width;
+    height: SettingsMetrics.control-height;
+    horizontal-stretch: 0;
+    border-radius: 4px;
+    background: !root.enabled ? transparent : touch.has-hover || popup-open ? Theme.surface-hover : Theme.surface;
+    border-width: 1px;
+    border-color: Theme.border;
+
+    property <bool> popup-open;
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => {
+            root.popup-open = true;
+            list.show();
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 6px;
+        spacing: 6px;
+
+        Text {
+            horizontal-stretch: 1;
+            text: root.current-value;
+            font-size: 12px;
+            color: root.enabled ? Theme.text : Theme.text-muted;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        IconSlot {
+            icon: IconId.chevron-down;
+            size: IconSize.sm;
+            color: Theme.text-muted;
+        }
+    }
+
+    list := PopupWindow {
+        x: 0;
+        y: root.height + 2px;
+        width: root.width;
+        close-policy: close-on-click-outside;
+
+        Rectangle {
+            background: Theme.surface;
+            border-radius: 6px;
+            border-width: 1px;
+            border-color: Theme.surface-selected;
+
+            VerticalLayout {
+                padding: 4px;
+                spacing: 1px;
+
+                for item[i] in root.model: Rectangle {
+                    height: 24px;
+                    border-radius: 4px;
+                    background: row-touch.has-hover ? Theme.surface-hover : (i == root.current-index ? Theme.surface-selected : transparent);
+
+                    row-touch := TouchArea {
+                        clicked => {
+                            root.current-index = i;
+                            root.popup-open = false;
+                            list.close();
+                            root.selected(item);
+                        }
+                    }
+
+                    Text {
+                        x: 8px;
+                        width: parent.width - 16px;
+                        text: item;
+                        font-size: 12px;
+                        color: i == root.current-index ? Theme.primary : Theme.text;
+                        font-weight: i == root.current-index ? 700 : 400;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                }
+            }
+        }
+    }
+
+    // The list closed without a pick (a click outside).
+    Timer {
+        interval: 200ms;
+        running: root.popup-open;
+        triggered => {
+            if !list.is-open {
+                root.popup-open = false;
+            }
+        }
+    }
+}
+
+/// A whole number (RustCut's `NumberField`): typed in, changed with the small arrows or the wheel. Keeps std-widgets'
+/// `SpinBox` API.
+export component SpinBox inherits Rectangle {
+    in property <int> minimum: 0;
+    in property <int> maximum: 100;
+    in-out property <int> value;
+    in property <int> step-size: 1;
+    in property <bool> enabled: true;
+    callback edited(int);
+
+    width: SettingsMetrics.control-width;
+    height: SettingsMetrics.control-height;
+    horizontal-stretch: 0;
+    border-radius: 4px;
+    background: Theme.background;
+    border-width: 1px;
+    border-color: input.has-focus ? Theme.primary : Theme.border;
+    clip: true;
+
+    function set(v: int) {
+        let clamped = Math.max(root.minimum, Math.min(root.maximum, v));
+        if clamped != root.value {
+            root.value = clamped;
+            root.edited(clamped);
+        }
+        input.text = root.value;
+    }
+
+    changed value => {
+        if !input.has-focus {
+            input.text = root.value;
+        }
+    }
+
+    TouchArea {
+        scroll-event(event) => {
+            if !root.enabled {
+                return reject;
+            }
+            if event.delta-y > 0 {
+                root.set(root.value + root.step-size);
+            } else if event.delta-y < 0 {
+                root.set(root.value - root.step-size);
+            }
+            return accept;
+        }
+    }
+
+    input := TextInput {
+        x: 8px;
+        width: parent.width - 30px;
+        height: parent.height;
+        text: root.value;
+        font-size: 12px;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+        single-line: true;
+        input-type: number;
+        color: root.enabled ? Theme.text : Theme.text-muted;
+        read-only: !root.enabled;
+        selection-background-color: Theme.primary.with-alpha(0.4);
+        accepted => { root.set(self.text.to-float()); }
+        changed has-focus => {
+            if !self.has-focus {
+                root.set(self.text.to-float());
+            }
+        }
+    }
+
+    // The spin arrows at the right end.
+    VerticalLayout {
+        x: parent.width - 16px;
+        width: 14px;
+        padding-top: 1px;
+        padding-bottom: 1px;
+
+        for dir in [1, -1]: Rectangle {
+            vertical-stretch: 1;
+            border-radius: 2px;
+            background: arrow.has-hover && root.enabled ? Theme.surface-hover : transparent;
+
+            arrow := TouchArea {
+                enabled: root.enabled;
+                clicked => { root.set(root.value + dir * root.step-size); }
+            }
+
+            AppIcon {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                icon: dir > 0 ? IconId.chevron-up : IconId.chevron-down;
+                size: 10px;
+                color: Theme.text-muted;
+            }
+        }
+    }
+}
+
+/// A slider in the theme's colors (RustCut's look), as wide as a control column. Keeps std-widgets' `Slider` API.
+export component Slider inherits Rectangle {
+    in property <float> minimum: 0;
+    in property <float> maximum: 100;
+    in-out property <float> value;
+    in property <float> step: 1;
+    in property <bool> enabled: true;
+    callback changed(float);
+    callback released(float);
+
+    property <float> fraction: root.maximum > root.minimum ? (root.value - root.minimum) / (root.maximum - root.minimum) : 0;
+    property <length> knob: 14px;
+
+    width: SettingsMetrics.control-width;
+    height: SettingsMetrics.control-height;
+    horizontal-stretch: 0;
+
+    function set-from(x: length) {
+        let f = Math.max(0, Math.min(1, (x - root.knob / 2) / (root.width - root.knob)));
+        let raw = root.minimum + f * (root.maximum - root.minimum);
+        let stepped = root.step > 0 ? Math.round(raw / root.step) * root.step : raw;
+        let v = Math.max(root.minimum, Math.min(root.maximum, stepped));
+        if v != root.value {
+            root.value = v;
+            root.changed(v);
+        }
+    }
+
+    track := Rectangle {
+        x: root.knob / 2;
+        y: (parent.height - self.height) / 2;
+        width: parent.width - root.knob;
+        height: 4px;
+        border-radius: 2px;
+        background: Theme.surface-selected;
+
+        Rectangle {
+            x: 0;
+            width: parent.width * root.fraction;
+            border-radius: 2px;
+            background: root.enabled ? Theme.primary : Theme.text-muted;
+        }
+    }
+
+    Rectangle {
+        x: root.fraction * (parent.width - root.knob);
+        y: (parent.height - self.height) / 2;
+        width: root.knob;
+        height: root.knob;
+        border-radius: root.knob / 2;
+        background: !root.enabled ? Theme.text-muted : touch.pressed || touch.has-hover ? Theme.primary : Theme.text;
+        border-width: 1px;
+        border-color: Theme.border;
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                root.set-from(self.mouse-x);
+            }
+            if event.kind == PointerEventKind.up && event.button == PointerEventButton.left {
+                root.released(root.value);
+            }
+        }
+        moved => {
+            if self.pressed {
+                root.set-from(self.mouse-x);
+            }
+        }
+        scroll-event(event) => {
+            if !root.enabled {
+                return reject;
+            }
+            let delta = root.step > 0 ? root.step : (root.maximum - root.minimum) / 100;
+            let v = Math.max(root.minimum, Math.min(root.maximum, root.value + (event.delta-y > 0 ? delta : -delta)));
+            if v != root.value {
+                root.value = v;
+                root.changed(v);
+                root.released(v);
+            }
+            return accept;
+        }
+    }
+}

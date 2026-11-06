@@ -35,6 +35,7 @@ refresh = { tabler = "refresh", doc = "Refresh / rescan / reload", aliases = ["r
 loader = { tabler = "loader-2", doc = "Busy indicator (rotated by the throbber)", aliases = ["spinner", "throbber"] }
 regex = { tabler = "regex", doc = "Regular expression search mode" }
 chevron_down = { tabler = "chevron-down", doc = "Chevron pointing down (expanded)" }
+chevron_up = { tabler = "chevron-up", doc = "Chevron pointing up (the up arrow of a number field)" }
 chevron_left = { tabler = "chevron-left", doc = "Chevron pointing left (previous)" }
 chevron_right = { tabler = "chevron-right", doc = "Chevron pointing right (collapsed, submenu, next)" }
 arrow_left = { tabler = "arrow-left", doc = "Arrow pointing left" }

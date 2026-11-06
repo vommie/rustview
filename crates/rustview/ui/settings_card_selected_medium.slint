@@ -1,4 +1,4 @@
-import { ComboBox } from "std-widgets.slint";
+import { ComboBox } from "settings_controls.slint";
 import { SettingsCard } from "settings_card.slint";
 import { SettingsOptionRow } from "settings_option_row.slint";
 
@@ -16,7 +16,6 @@ export component SettingsCardSelectedMedium inherits VerticalLayout {
             tooltip: "The empty area around the selected medium (above, below or beside it in its column) is lightened. Off: only the corner marks show the selection.";
 
             ComboBox {
-                width: 220px;
                 model: ["Off", "Weak", "Medium", "Strong"];
                 current-index <=> root.brighten-idx;
             }
@@ -27,7 +26,6 @@ export component SettingsCardSelectedMedium inherits VerticalLayout {
             tooltip: "The length of the blue marks inside the corners of the selected medium (on a video too). They are always shown, so the selection never goes unnoticed.";
 
             ComboBox {
-                width: 220px;
                 model: ["Short", "Medium", "Long"];
                 current-index <=> root.corner-idx;
             }

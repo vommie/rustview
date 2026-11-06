@@ -1,6 +1,6 @@
 // Settings > Debug: the cards Log, Diagnostic Report, Tools, Startup and Runtime (`docs/debug_page.md`).
 
-import { ComboBox } from "std-widgets.slint";
+import { ComboBox } from "settings_controls.slint";
 import { Theme } from "styles.slint";
 import { AppIcon, IconId, IconSize } from "icons.slint";
 import { ToolbarButton } from "toolbar_button.slint";
@@ -33,7 +33,6 @@ export component DebugLogCard inherits DebugCard {
             enabled: DebugUi.env-override == "";
 
             ComboBox {
-                width: 140px;
                 enabled: DebugUi.env-override == "";
                 model: ["Errors", "Warnings", "Info", "Debug", "Trace"];
                 current-index <=> root.log-level-idx;

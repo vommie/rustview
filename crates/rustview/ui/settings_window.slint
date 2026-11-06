@@ -16,6 +16,9 @@ import { SettingsPageHotkeys } from "settings_page_hotkeys.slint";
 import { SettingsPageApi } from "settings_page_api.slint";
 import { SettingsPageDebug } from "settings_page_debug.slint";
 import { ButtonBar } from "button_bar.slint";
+import { Button } from "settings_controls.slint";
+import { ToolbarButton } from "toolbar_button.slint";
+import { IconId } from "icons.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
 import { GlobalTooltipLayer } from "global_tooltip_layer.slint";
 import { TooltipSettings } from "tooltips.slint";
@@ -41,7 +44,9 @@ export { SmoothScrollArea } from "smooth_scroll_view.slint";
 export component SettingsWindow inherits Window {
     title: "RustView - Settings";
     icon: AppIdentity.window-icon;
-    preferred-width: 860px;
+    preferred-width: 900px;
+    // Labels of the rows are 12 px like RustCut's (`SettingsRow`), card titles 13 px.
+    default-font-size: 12px;
     preferred-height: 640px;
     min-width: 740px;
     min-height: 540px;
@@ -143,6 +148,7 @@ export component SettingsWindow inherits Window {
     in-out property <bool> open-videos-in-tab: true;
     in-out property <bool> allow-multiple-video-tabs: true;
     in-out property <bool> viewer-show-tab-rating-badge: false;
+    in-out property <int> viewer-tab-close-buttons-idx: 0;
     in-out property <int> viewer-background-mode-idx: 0;
 
     // Multiview options: the video player keys and the ab_repeat.lua support (stored under `viewer.videos`)
@@ -258,6 +264,169 @@ export component SettingsWindow inherits Window {
     callback browse-root-folder();
     callback save-and-apply();
     callback cancel-clicked();
+    // Every change applies at once (RustCut's "Changes are saved at once."): a moment after an edit the window asks Rust
+    // to apply what it shows. `armed` is set by Rust once the window is filled, so filling it applies nothing.
+    callback apply-now();
+    in-out property <bool> armed;
+    property <bool> pending;
+    // "Reset this page" (held): Rust puts the page's options back to their defaults and fills the window again.
+    callback reset-page(int /* page */);
+
+    function mark-edited() {
+        if root.armed {
+            root.pending = true;
+        }
+    }
+
+    apply-timer := Timer {
+        interval: 300ms;
+        running: root.pending;
+        triggered => {
+            root.pending = false;
+            root.apply-now();
+        }
+    }
+
+    changed root-folder-path => { root.mark-edited(); }
+    changed ignore-nested-mounts => { root.mark-edited(); }
+    changed remember-last-folder => { root.mark-edited(); }
+    changed confirm-delete => { root.mark-edited(); }
+    changed confirm-open-file-count => { root.mark-edited(); }
+    changed deletion-mode-idx => { root.mark-edited(); }
+    changed auto-reveal-remembered-folder => { root.mark-edited(); }
+    changed persist-folder-tree-state => { root.mark-edited(); }
+    changed show-deleted-folders => { root.mark-edited(); }
+    changed show-folder-metrics => { root.mark-edited(); }
+    changed show-hidden-folders => { root.mark-edited(); }
+    changed support-dot-hidden-files => { root.mark-edited(); }
+    changed default-thumb-size => { root.mark-edited(); }
+    changed thumb-aspect-idx => { root.mark-edited(); }
+    changed show-filenames => { root.mark-edited(); }
+    changed show-rating-badge => { root.mark-edited(); }
+    changed show-tag-badge => { root.mark-edited(); }
+    changed show-media-type-badges => { root.mark-edited(); }
+    changed show-animated-badge => { root.mark-edited(); }
+    changed show-duration-badge => { root.mark-edited(); }
+    changed thumbnail-badge-overflow-idx => { root.mark-edited(); }
+    changed enable-hover-previews => { root.mark-edited(); }
+    changed type-ahead-enabled => { root.mark-edited(); }
+    changed type-ahead-timeout-ms => { root.mark-edited(); }
+    changed type-ahead-new-search-gap-ms => { root.mark-edited(); }
+    changed type-ahead-include-folders => { root.mark-edited(); }
+    changed type-ahead-cycle-repeated-keys => { root.mark-edited(); }
+    changed type-ahead-center-target => { root.mark-edited(); }
+    changed type-ahead-show-no-match => { root.mark-edited(); }
+    changed type-ahead-multiview-delay-ms => { root.mark-edited(); }
+    changed grid-item-padding-h => { root.mark-edited(); }
+    changed grid-item-padding-v => { root.mark-edited(); }
+    changed grid-spacing => { root.mark-edited(); }
+    changed grid-padding => { root.mark-edited(); }
+    changed grid-item-border-width => { root.mark-edited(); }
+    changed grid-item-corner-radius => { root.mark-edited(); }
+    changed worker-threads => { root.mark-edited(); }
+    changed batch-commit-size => { root.mark-edited(); }
+    changed memory-budget-auto => { root.mark-edited(); }
+    changed memory-budget-mb => { root.mark-edited(); }
+    changed thumb-db-size => { root.mark-edited(); }
+    changed thumb-format-idx => { root.mark-edited(); }
+    changed thumb-quality => { root.mark-edited(); }
+    changed scaling-algo-idx => { root.mark-edited(); }
+    changed video-engine-idx => { root.mark-edited(); }
+    changed video-offset-percent => { root.mark-edited(); }
+    changed short-video-threshold-secs => { root.mark-edited(); }
+    changed generate-video-previews => { root.mark-edited(); }
+    changed preview-frame-count => { root.mark-edited(); }
+    changed custom-preview-settings => { root.mark-edited(); }
+    changed preview-format-idx => { root.mark-edited(); }
+    changed preview-quality => { root.mark-edited(); }
+    changed auto-detect-extensionless => { root.mark-edited(); }
+    changed open-images-in-tab => { root.mark-edited(); }
+    changed allow-multiple-image-tabs => { root.mark-edited(); }
+    changed open-videos-in-tab => { root.mark-edited(); }
+    changed allow-multiple-video-tabs => { root.mark-edited(); }
+    changed viewer-show-tab-rating-badge => { root.mark-edited(); }
+    changed viewer-tab-close-buttons-idx => { root.mark-edited(); }
+    changed viewer-background-mode-idx => { root.mark-edited(); }
+    changed video-jump-secs => { root.mark-edited(); }
+    changed video-jump-long-secs => { root.mark-edited(); }
+    changed ab-enabled => { root.mark-edited(); }
+    changed ab-colors-idx => { root.mark-edited(); }
+    changed ab-click-loads => { root.mark-edited(); }
+    changed ab-hover-name => { root.mark-edited(); }
+    changed ab-hover-times => { root.mark-edited(); }
+    changed ab-drag-flags => { root.mark-edited(); }
+    changed ab-menu-idx => { root.mark-edited(); }
+    changed ab-page-size => { root.mark-edited(); }
+    changed fullscreen-enable-specific => { root.mark-edited(); }
+    changed fullscreen-enable-fallback => { root.mark-edited(); }
+    changed fullscreen-fallback-target-idx => { root.mark-edited(); }
+    changed fullscreen-media-bar-enabled => { root.mark-edited(); }
+    changed fullscreen-media-bar-show-mute => { root.mark-edited(); }
+    changed fullscreen-media-bar-show-sticky => { root.mark-edited(); }
+    changed fullscreen-media-bar-show-duplicate => { root.mark-edited(); }
+    changed fullscreen-media-bar-show-open-as-tab => { root.mark-edited(); }
+    changed fullscreen-media-bar-show-open-with => { root.mark-edited(); }
+    changed fullscreen-media-bar-show-zoom => { root.mark-edited(); }
+    changed fullscreen-media-bar-show-crop => { root.mark-edited(); }
+    changed image-edit-crop-grid-idx => { root.mark-edited(); }
+    changed image-edit-align-jpeg => { root.mark-edited(); }
+    changed image-edit-overwrite-mode-idx => { root.mark-edited(); }
+    changed image-edit-jpeg-quality => { root.mark-edited(); }
+    changed image-edit-jpeg-subsampling-idx => { root.mark-edited(); }
+    changed image-edit-jpeg-progressive => { root.mark-edited(); }
+    changed image-edit-png-compression-idx => { root.mark-edited(); }
+    changed image-edit-webp-lossless => { root.mark-edited(); }
+    changed image-edit-webp-quality => { root.mark-edited(); }
+    changed image-edit-avif-quality => { root.mark-edited(); }
+    changed image-edit-avif-speed => { root.mark-edited(); }
+    changed image-edit-tiff-compression-idx => { root.mark-edited(); }
+    changed fullscreen-media-bar-show-delete => { root.mark-edited(); }
+    changed fullscreen-media-bar-show-remove => { root.mark-edited(); }
+    changed fullscreen-media-bar-reveal-distance-px => { root.mark-edited(); }
+    changed fullscreen-primary-bar-enabled => { root.mark-edited(); }
+    changed fullscreen-primary-bar-show-send-to-tab => { root.mark-edited(); }
+    changed fullscreen-primary-bar-show-close => { root.mark-edited(); }
+    changed fullscreen-primary-bar-show-mute-all => { root.mark-edited(); }
+    changed fullscreen-primary-bar-show-play-pause-all => { root.mark-edited(); }
+    changed fullscreen-primary-bar-show-reset-layout => { root.mark-edited(); }
+    changed fullscreen-primary-bar-show-hide-cursor => { root.mark-edited(); }
+    changed fullscreen-primary-bar-show-pin => { root.mark-edited(); }
+    changed fullscreen-primary-bar-reveal-distance-px => { root.mark-edited(); }
+    changed fullscreen-hide-idle-cursor => { root.mark-edited(); }
+    changed fullscreen-idle-cursor-secs => { root.mark-edited(); }
+    changed fullscreen-hide-selection-with-cursor => { root.mark-edited(); }
+    changed fullscreen-selection-brighten-idx => { root.mark-edited(); }
+    changed fullscreen-selection-corner-idx => { root.mark-edited(); }
+    changed fullscreen-zoom-step-percent => { root.mark-edited(); }
+    changed fullscreen-zoom-max-percent => { root.mark-edited(); }
+    changed fullscreen-zoom-out-percent => { root.mark-edited(); }
+    changed fullscreen-zoom-minimap-secs => { root.mark-edited(); }
+    changed fullscreen-zoom-smooth => { root.mark-edited(); }
+    changed fullscreen-zoom-minimap-idx => { root.mark-edited(); }
+    changed fullscreen-zoom-minimap-always => { root.mark-edited(); }
+    changed fullscreen-zoom-resample-idx => { root.mark-edited(); }
+    changed fullscreen-sound-auto-control => { root.mark-edited(); }
+    changed fullscreen-sound-follows-idx => { root.mark-edited(); }
+    changed fullscreen-sound-hand-over => { root.mark-edited(); }
+    changed fullscreen-player-style-idx => { root.mark-edited(); }
+    changed fullscreen-player-opacity-percent => { root.mark-edited(); }
+    changed fullscreen-player-height-px => { root.mark-edited(); }
+    changed fullscreen-player-reveal-idx => { root.mark-edited(); }
+    changed fullscreen-player-fade => { root.mark-edited(); }
+    changed fullscreen-player-show-ms => { root.mark-edited(); }
+    changed fullscreen-player-seek-idx => { root.mark-edited(); }
+    changed fullscreen-player-normalize-idx => { root.mark-edited(); }
+    changed fullscreen-rating-show-feedback => { root.mark-edited(); }
+    changed fullscreen-background-source-idx => { root.mark-edited(); }
+    changed fullscreen-background-color => { root.mark-edited(); }
+    changed max-history-tags => { root.mark-edited(); }
+    changed tag-tree-compact => { root.mark-edited(); }
+    changed auto-complete-external-stubs => { root.mark-edited(); }
+    changed obfuscate-logs => { root.mark-edited(); }
+    changed log-level-idx => { root.mark-edited(); }
+    changed log-files => { root.mark-edited(); }
+    changed mpv-log => { root.mark-edited(); }
+
 
     // The counts on the File Formats page are read from the library when the page is opened.
     changed active-category => {
@@ -270,13 +439,16 @@ export component SettingsWindow inherits Window {
     // The tooltips of this window follow the options being edited (the dialog is a window of its own with its own
     // tooltip settings).
     changed enable-tooltips => {
+        root.mark-edited();
         TooltipSettings.enabled = root.enable-tooltips;
     }
     changed tooltip-delay-ms => {
+        root.mark-edited();
         TooltipSettings.default-delay = root.tooltip-delay-ms * 1ms;
     }
     // The held elements of this window follow the duration being edited.
     changed hold-to-confirm-ms => {
+        root.mark-edited();
         HoldConfirm.duration = root.hold-to-confirm-ms * 1ms;
     }
 
@@ -285,7 +457,7 @@ export component SettingsWindow inherits Window {
     dialog-focus := FocusScope {
         key-pressed(event) => {
             if event.text == Key.Escape {
-                root.cancel-clicked();
+                root.save-and-apply();
                 return accept;
             }
             return reject;
@@ -301,8 +473,48 @@ export component SettingsWindow inherits Window {
                 padding: 0px;
                 spacing: 0px;
 
-                SettingsSidebar {
+                sidebar := SettingsSidebar {
                     active-category <=> root.active-category;
+                }
+
+                VerticalLayout {
+                    horizontal-stretch: 1;
+
+                // The page's title and its held reset button (RustCut's page header).
+                Rectangle {
+                    height: 48px;
+
+                    HorizontalLayout {
+                        padding-left: 16px;
+                        padding-right: 12px;
+                        spacing: 8px;
+
+                        Text {
+                            horizontal-stretch: 1;
+                            text: sidebar.categories[root.active-category];
+                            font-size: 16px;
+                            font-weight: 700;
+                            color: Theme.text;
+                            vertical-alignment: center;
+                        }
+
+                        if root.active-category != 9: VerticalLayout {
+                            alignment: center;
+
+                            ToolbarButton {
+                                icon: IconId.hotkey-reset-all;
+                                tooltip: "Reset this page: its options go back to their defaults";
+                                hold: true;
+                                clicked => { root.reset-page(root.active-category); }
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        y: parent.height - 1px;
+                        height: 1px;
+                        background: Theme.border;
+                    }
                 }
 
                 SmoothScrollArea {
@@ -401,8 +613,8 @@ export component SettingsWindow inherits Window {
                             unsupported: root.format-unsupported;
                             filter-text <=> root.formats-filter-text;
                             auto-detect-extensionless <=> root.auto-detect-extensionless;
-                            format-toggled(id, enabled) => { root.format-toggled(id, enabled); }
-                            set-all(kind, enabled) => { root.formats-set-all(kind, enabled); }
+                            format-toggled(id, enabled) => { root.mark-edited(); root.format-toggled(id, enabled); }
+                            set-all(kind, enabled) => { root.mark-edited(); root.formats-set-all(kind, enabled); }
                             filter-edited(text) => { root.formats-filter-edited(text); }
                         }
 
@@ -412,6 +624,7 @@ export component SettingsWindow inherits Window {
                             open-videos-in-tab <=> root.open-videos-in-tab;
                             allow-multiple-video-tabs <=> root.allow-multiple-video-tabs;
                             show-tab-rating-badge <=> root.viewer-show-tab-rating-badge;
+                            tab-close-buttons-idx <=> root.viewer-tab-close-buttons-idx;
                             background-mode-idx <=> root.viewer-background-mode-idx;
                         }
 
@@ -505,9 +718,9 @@ export component SettingsWindow inherits Window {
                             avif-quality <=> root.image-edit-avif-quality;
                             avif-speed <=> root.image-edit-avif-speed;
                             tiff-compression-idx <=> root.image-edit-tiff-compression-idx;
-                            add-ratio(text) => { root.image-edit-add-ratio(text); }
-                            remove-ratio(index) => { root.image-edit-remove-ratio(index); }
-                            reset-ratios => { root.image-edit-reset-ratios(); }
+                            add-ratio(text) => { root.mark-edited(); root.image-edit-add-ratio(text); }
+                            remove-ratio(index) => { root.mark-edited(); root.image-edit-remove-ratio(index); }
+                            reset-ratios => { root.mark-edited(); root.image-edit-reset-ratios(); }
                         }
 
                         if root.active-category == 8 : SettingsPageTagsRatings {
@@ -529,14 +742,43 @@ export component SettingsWindow inherits Window {
                         }
                     }
                 }
+                }
             }
 
-            ButtonBar {
+            // RustCut's bottom bar: every change is already saved, so the window only closes.
+            Rectangle {
+                height: 40px;
                 vertical-stretch: 0;
-                show-cancel: true;
-                show-save: true;
-                cancel-clicked => { root.cancel-clicked(); }
-                save-clicked => { root.save-and-apply(); }
+
+                Rectangle {
+                    y: 0;
+                    height: 1px;
+                    background: Theme.border;
+                }
+
+                HorizontalLayout {
+                    padding-left: 16px;
+                    padding-right: 12px;
+                    spacing: 8px;
+
+                    Text {
+                        horizontal-stretch: 1;
+                        text: "Changes are saved at once.";
+                        font-size: 11px;
+                        color: Theme.text-muted;
+                        vertical-alignment: center;
+                    }
+
+                    VerticalLayout {
+                        alignment: center;
+
+                        Button {
+                            text: "Close";
+                            min-width: 84px;
+                            clicked => { root.save-and-apply(); }
+                        }
+                    }
+                }
             }
         }
     }

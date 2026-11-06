@@ -1,4 +1,4 @@
-import { Button, ComboBox, LineEdit, Slider } from "std-widgets.slint";
+import { Button, ComboBox, LineEdit, Slider } from "settings_controls.slint";
 import { Theme } from "styles.slint";
 import { AppIcon, IconId, IconSize } from "icons.slint";
 import { SettingsCard } from "settings_card.slint";
@@ -254,7 +254,6 @@ export component SettingsPageImageEdit inherits VerticalLayout {
             tooltip: "When the lines of the rule of thirds show inside the crop rectangle.";
 
             ComboBox {
-                width: 170px;
                 model: ["While dragging", "Always", "Never"];
                 current-index <=> root.crop-grid-idx;
             }
@@ -280,7 +279,6 @@ export component SettingsPageImageEdit inherits VerticalLayout {
             tooltip: "What happens to the original file when an edited picture is saved over it.";
 
             ComboBox {
-                width: 230px;
                 model: ["Safe (temporary backup)", "Original to the trash", "Replace directly"];
                 current-index <=> root.overwrite-mode-idx;
             }
@@ -292,6 +290,8 @@ export component SettingsPageImageEdit inherits VerticalLayout {
         description: "The starting values of Save As, and what a saved file of these formats gets when its own quality is not known (WebP, AVIF). JPEG files keep their own quality when they are saved over.";
 
         HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             spacing: 10px;
 
             VerticalLayout {
@@ -309,7 +309,6 @@ export component SettingsPageImageEdit inherits VerticalLayout {
                     PresetRow {
                         label: "Chroma subsampling";
                         ComboBox {
-                            width: 140px;
                             model: ["4:2:0", "4:2:2", "4:4:4"];
                             current-index <=> root.jpeg-subsampling-idx;
                         }
@@ -330,7 +329,6 @@ export component SettingsPageImageEdit inherits VerticalLayout {
                     PresetRow {
                         label: "Compression";
                         ComboBox {
-                            width: 140px;
                             model: ["Fast", "Balanced", "Smallest file"];
                             current-index <=> root.png-compression-idx;
                         }
@@ -344,7 +342,6 @@ export component SettingsPageImageEdit inherits VerticalLayout {
                     PresetRow {
                         label: "Compression";
                         ComboBox {
-                            width: 140px;
                             model: ["None", "LZW", "Deflate"];
                             current-index <=> root.tiff-compression-idx;
                         }

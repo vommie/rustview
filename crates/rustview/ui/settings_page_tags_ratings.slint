@@ -1,4 +1,4 @@
-import { Slider } from "std-widgets.slint";
+import { Slider } from "settings_controls.slint";
 import { Theme } from "styles.slint";
 import { SettingsCard } from "settings_card.slint";
 import { ToggleSwitch } from "toggle_switch.slint";
@@ -36,8 +36,10 @@ export component SettingsPageTagsRatings inherits VerticalLayout {
         description: "Configure the recently assigned tags history cache.";
 
         HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             Text {
-                text: "Maximum History Tags to Display:";
+                text: "Maximum History Tags to Display";
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
@@ -60,11 +62,16 @@ export component SettingsPageTagsRatings inherits VerticalLayout {
             }
         }
 
-        Text {
-            text: "Tags are automatically added to the history whenever they are assigned. If the limit is decreased, the oldest entries are trimmed upon saving.";
-            font-size: 11px;
-            color: Theme.text-muted;
-            wrap: word-wrap;
+        HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+
+            Text {
+                text: "Tags are automatically added to the history whenever they are assigned. If the limit is decreased, the oldest entries are trimmed upon saving.";
+                font-size: 11px;
+                color: Theme.text-muted;
+                wrap: word-wrap;
+            }
         }
     }
 
@@ -73,6 +80,8 @@ export component SettingsPageTagsRatings inherits VerticalLayout {
         description: "How dense the tag tree in the sidebar is.";
 
         HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             spacing: 12px;
 
             Text {
@@ -90,11 +99,16 @@ export component SettingsPageTagsRatings inherits VerticalLayout {
             }
         }
 
-        Text {
-            text: "Dense rows that share one line, in a smaller font (Compact Mode). The tree's context menu (a right click on its free space) switches it too.";
-            font-size: 11px;
-            color: Theme.text-muted;
-            wrap: word-wrap;
+        HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+
+            Text {
+                text: "Dense rows that share one line, in a smaller font (Compact Mode). The tree's context menu (a right click on its free space) switches it too.";
+                font-size: 11px;
+                color: Theme.text-muted;
+                wrap: word-wrap;
+            }
         }
     }
 }

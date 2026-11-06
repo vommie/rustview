@@ -1,4 +1,4 @@
-import { ComboBox, Slider } from "std-widgets.slint";
+import { ComboBox, Slider } from "settings_controls.slint";
 import { Theme } from "styles.slint";
 import { SettingsCard } from "settings_card.slint";
 import { SettingsOptionRow, SettingsSwitchRow } from "settings_option_row.slint";
@@ -111,17 +111,21 @@ export component SettingsCardImageZoom inherits VerticalLayout {
             tooltip: "Lanczos (default) is the sharpest and the best for zooming in and out. Catmull-Rom is slightly softer, Bilinear is fast and soft, Nearest neighbor shows the pixels as blocks.";
 
             ComboBox {
-                width: 220px;
                 model: ["Lanczos (best quality)", "Catmull-Rom (cubic)", "Bilinear (fast)", "Nearest neighbor (pixels)"];
                 current-index <=> root.resample-idx;
             }
         }
 
-        Text {
-            text: "Minimap";
-            color: Theme.text-muted;
-            font-size: 11px;
-            font-weight: 700;
+        HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+
+            Text {
+                text: "Minimap";
+                color: Theme.text-muted;
+                font-size: 11px;
+                font-weight: 700;
+            }
         }
 
         SettingsOptionRow {
@@ -130,7 +134,6 @@ export component SettingsCardImageZoom inherits VerticalLayout {
             tooltip: "The corner of the image where the minimap sits. It appears when the pointer comes near it and for a moment after every zoom change.";
 
             ComboBox {
-                width: 220px;
                 model: ["Bottom left", "Bottom right"];
                 current-index <=> root.minimap-idx;
             }

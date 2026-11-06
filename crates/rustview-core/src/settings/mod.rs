@@ -1,6 +1,7 @@
 pub mod diff;
 pub mod memory_budget;
 pub mod obscurer;
+pub mod page_reset;
 pub mod registry;
 pub mod schema;
 pub mod store;

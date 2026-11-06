@@ -1,4 +1,4 @@
-import { Button, ComboBox, SpinBox } from "std-widgets.slint";
+import { Button, ComboBox, SpinBox } from "settings_controls.slint";
 import { Theme } from "styles.slint";
 import { SettingsCard } from "settings_card.slint";
 import { SettingsOptionRow, SettingsSwitchRow } from "settings_option_row.slint";
@@ -85,7 +85,6 @@ export component SettingsCardAbRepeat inherits VerticalLayout {
             enabled: root.on;
 
             ComboBox {
-                width: 220px;
                 enabled: root.on;
                 model: ["Each its own color", "All grey"];
                 current-index <=> root.colors-idx;
@@ -126,14 +125,12 @@ export component SettingsCardAbRepeat inherits VerticalLayout {
                 spacing: 8px;
 
                 ComboBox {
-                    width: 140px;
                     enabled: root.on;
                     model: ["Pages", "Scroll list"];
                     current-index <=> root.menu-idx;
                 }
 
                 SpinBox {
-                    width: 90px;
                     enabled: root.on;
                     minimum: 5;
                     maximum: 50;

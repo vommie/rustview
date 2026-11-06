@@ -28,6 +28,12 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   tabs, and the active tab merges into the window. Media tabs share the bar's width; when even narrow tabs do not fit, a
   "+n" button lists the others (a scrolling list under the button; the wheel still goes through all tabs). Settings is
   the gear at the right end. The toolbar buttons of the panels are framed buttons like RustCut's.
+- The Settings window works and looks like RustCut's: every change is saved at once (the bottom bar says so and has only
+  Close; Esc closes too), each page has its title on top and a held "reset this page" button (the root folder, the tag
+  history and other remembered data stay), on/off options are switches at the right end of their row, choices and
+  numbers share one column width, the controls are drawn in the theme's colors instead of the toolkit's teal, and all
+  texts of a card start at one edge. Settings > Viewer > Tabs has "Close buttons" (on every tab, on the shown tab and
+  under the pointer, none).
 - Tooltips are RustCut's bubbles: a small tail points at the element, the bubble moves to the other side or along the
   window's edge when there is no room, glides from button to button and shows at once while one just closed; keys show
   as key caps on a line of their own. The default delay is 600 ms like RustCut's (a delay set in the settings stays).

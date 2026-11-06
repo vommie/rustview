@@ -1,4 +1,4 @@
-import { ComboBox, Slider } from "std-widgets.slint";
+import { ComboBox, Slider } from "settings_controls.slint";
 import { Theme } from "styles.slint";
 import { BulletItem } from "bullet_item.slint";
 import { SettingsCard } from "settings_card.slint";
@@ -162,11 +162,16 @@ export component SettingsPageMultiview inherits VerticalLayout {
             }
         }
 
-        Text {
-            text: "Buttons";
-            color: Theme.text-muted;
-            font-size: 11px;
-            font-weight: 700;
+        HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+
+            Text {
+                text: "Buttons";
+                color: Theme.text-muted;
+                font-size: 11px;
+                font-weight: 700;
+            }
         }
 
         SettingsSwitchRow {
@@ -281,11 +286,16 @@ export component SettingsPageMultiview inherits VerticalLayout {
             }
         }
 
-        Text {
-            text: "Buttons";
-            color: Theme.text-muted;
-            font-size: 11px;
-            font-weight: 700;
+        HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+
+            Text {
+                text: "Buttons";
+                color: Theme.text-muted;
+                font-size: 11px;
+                font-weight: 700;
+            }
         }
 
         SettingsSwitchRow {
@@ -345,11 +355,16 @@ export component SettingsPageMultiview inherits VerticalLayout {
             checked <=> root.primary-bar-show-pin;
         }
 
-        Text {
-            text: "Mouse cursor";
-            color: Theme.text-muted;
-            font-size: 11px;
-            font-weight: 700;
+        HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+
+            Text {
+                text: "Mouse cursor";
+                color: Theme.text-muted;
+                font-size: 11px;
+                font-weight: 700;
+            }
         }
 
         SettingsSwitchRow {
@@ -461,7 +476,6 @@ export component SettingsPageMultiview inherits VerticalLayout {
             enabled: root.sound-auto-control;
 
             ComboBox {
-                width: 220px;
                 enabled: root.sound-auto-control;
                 model: ["The first video (leftmost)", "The newest video", "The selected video", "Nobody (all muted)"];
                 current-index <=> root.sound-follows-idx;
@@ -487,7 +501,7 @@ export component SettingsPageMultiview inherits VerticalLayout {
                 spacing: 3px;
 
                 Text {
-                    text: "Active Behavior:";
+                    text: "Active Behavior";
                     font-size: 11px;
                     font-weight: 700;
                     color: Theme.primary;
@@ -529,7 +543,6 @@ export component SettingsPageMultiview inherits VerticalLayout {
             tooltip: "Theme: the background color of the app theme. Same as viewer: the background chosen under Viewer. Custom color: pick any color.";
 
             ComboBox {
-                width: 220px;
                 model: ["Theme (automatic)", "Same as viewer background", "Custom color"];
                 current-index <=> root.background-source-idx;
             }

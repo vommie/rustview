@@ -297,6 +297,8 @@ export component SettingsPageHotkeys inherits VerticalLayout {
         }
 
         HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
             spacing: 12px;
 
             SearchField {
@@ -350,10 +352,15 @@ export component SettingsPageHotkeys inherits VerticalLayout {
             }
         }
 
-        if HotkeysUi.sections.length == 0 : Text {
-            text: HotkeysUi.only-changed ? "No key differs from its default." : "No action matches the filter.";
-            color: Theme.text-muted;
-            font-size: 12px;
+        if HotkeysUi.sections.length == 0 : HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+
+            Text {
+                text: HotkeysUi.only-changed ? "No key differs from its default." : "No action matches the filter.";
+                color: Theme.text-muted;
+                font-size: 12px;
+            }
         }
 
         for section in HotkeysUi.sections : VerticalLayout {

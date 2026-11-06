@@ -1,4 +1,4 @@
-import { ComboBox, CheckBox } from "std-widgets.slint";
+import { ComboBox, CheckBox } from "settings_controls.slint";
 import { Theme } from "styles.slint";
 import { BulletItem } from "bullet_item.slint";
 import { AppIcon, IconId, IconSize } from "icons.slint";
@@ -24,36 +24,35 @@ export component SettingsCardDisplays inherits VerticalLayout {
             spacing: 8px;
 
             CheckBox {
-                text: "Always display fullscreen on specific monitor:";
+                text: "Always display fullscreen on specific monitor";
                 checked <=> root.enable-specific-monitor;
             }
 
             HorizontalLayout {
-                padding-left: 20px;
+                padding-left: 30px;
+                padding-right: 8px;
                 spacing: 8px;
                 alignment: start;
 
                 Text {
-                    text: "Target Display:";
+                    text: "Target Display";
                     color: Theme.text;
-                    font-size: 11px;
                     vertical-alignment: center;
                     horizontal-stretch: 1;
                 }
 
                 ComboBox {
-                    width: 320px;
                     model: root.display-options;
                     current-index <=> root.selected-display-idx;
                 }
 
                 refresh-btn := Rectangle {
-                    width: 28px;
-                    height: 28px;
+                    width: 26px;
+                    height: 24px;
                     border-radius: 4px;
-                    background: refresh-touch.has-hover ? Theme.surface-hover : Theme.surface-variant;
+                    background: refresh-touch.pressed ? Theme.surface-selected : refresh-touch.has-hover ? Theme.surface-hover : Theme.surface;
                     border-width: 1px;
-                    border-color: refresh-touch.has-hover ? Theme.primary : Theme.border;
+                    border-color: Theme.border;
 
                     tooltip-host := TooltipHost {
                         text: "Re-scan connected displays";
@@ -88,7 +87,7 @@ export component SettingsCardDisplays inherits VerticalLayout {
                     AppIcon {
                         icon: IconId.refresh;
                         size: IconSize.md;
-                        color: refresh-touch.has-hover ? Theme.primary : Theme.text;
+                        color: Theme.text;
                         x: (parent.width - self.width) / 2;
                         y: (parent.height - self.height) / 2;
                     }
@@ -101,25 +100,24 @@ export component SettingsCardDisplays inherits VerticalLayout {
             spacing: 8px;
 
             CheckBox {
-                text: "When no specific monitor is chosen or available:";
+                text: "When no specific monitor is chosen or available";
                 checked <=> root.enable-fallback-rule;
             }
 
             HorizontalLayout {
-                padding-left: 20px;
+                padding-left: 30px;
+                padding-right: 8px;
                 spacing: 8px;
                 alignment: start;
 
                 Text {
-                    text: "Fallback Display:";
+                    text: "Fallback Display";
                     color: root.enable-fallback-rule ? Theme.text : Theme.text-muted;
-                    font-size: 11px;
                     vertical-alignment: center;
                     horizontal-stretch: 1;
                 }
 
                 ComboBox {
-                    width: 320px;
                     enabled: root.enable-fallback-rule;
                     model: ["Same display as Main UI", "Different display from Main UI"];
                     current-index <=> root.fallback-target-idx;
@@ -139,7 +137,7 @@ export component SettingsCardDisplays inherits VerticalLayout {
                 spacing: 3px;
 
                 Text {
-                    text: "Active Behavior:";
+                    text: "Active Behavior";
                     font-size: 11px;
                     font-weight: 700;
                     color: Theme.primary;
