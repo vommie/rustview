@@ -9,6 +9,8 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ## [Unreleased]
 
+## [0.6.13] - 2026-11-06
+
 ### Added
 
 - Settings > Multiview > Player: Normalize volume, the normalization every video starts with. The filter menu of a video starts
@@ -1072,7 +1074,8 @@ First usable version: the application skeleton grew into a working media browser
 ### Added
 - Initial commit of the project.
 
-[Unreleased]: https://github.com/vommie/rustview/compare/v0.6.11...HEAD
+[Unreleased]: https://github.com/vommie/rustview/compare/v0.6.13...HEAD
+[0.6.13]: https://github.com/vommie/rustview/compare/v0.6.11...v0.6.13
 [0.6.11]: https://github.com/vommie/rustview/compare/v0.6.9...v0.6.11
 [0.6.9]: https://github.com/vommie/rustview/compare/v0.6.7...v0.6.9
 [0.6.7]: https://github.com/vommie/rustview/compare/v0.6.6...v0.6.7
