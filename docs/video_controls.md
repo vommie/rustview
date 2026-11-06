@@ -105,7 +105,7 @@ menu open for the next one. While a filter is on the button is orange (`Theme.fi
 
 **Filter rows (user requests 2026-11-06).** Every filter is a row of kind 7 (`ui/multiview_bar_menu_rows.slint`): its icon,
 label, key, a value column ("On", "1 on", the normalization, a slider's value) and a reset button, then the slot of the submenu
-chevron. A filter that is on shows icon and value in the filter color; its reset button is enabled (text color, hover) only
+chevron (only in a menu that has a row with a submenu, `MultiviewBarMenu.has-submenus`). A filter that is on shows icon and value in the filter color; its reset button is enabled (text color, hover) only
 then, else it is faint and takes no click. The value column is as wide as the widest value any row of the menu can show
 (`value_template`, measured by `MultiviewBarMenu`), so the reset buttons of a menu stand in one column at its right edge and
 nothing moves when a value changes. The rotations are three rows (one of them can be on; a click on it turns back). A slider is

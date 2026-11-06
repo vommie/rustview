@@ -1,7 +1,8 @@
 // The filter rows of a bar menu (`MultiviewBarMenu`): the slider (row kind 6) and the filter (row kind 7) of the video
 // filters. Both have the columns of a context menu row (padding, icon slot, label) plus a value column of the menu's width
-// (`value-width`, the widest value any row of the menu can show), a reset button and the slot of the submenu chevron, so the
-// columns line up across the menu and nothing moves when a value changes. A filter that is on shows its icon and value in
+// (`value-width`, the widest value any row of the menu can show), a reset button and, only in a menu that has a submenu
+// (`chevron-slot`), the slot of the submenu chevron, so the columns line up across the menu and nothing moves when a value
+// changes. A filter that is on shows its icon and value in
 // `Theme.filter-active`; its reset button is enabled only then.
 
 import { Theme } from "styles.slint";
@@ -78,6 +79,8 @@ component BarMenuValue inherits Text {
 export component BarMenuFilterRow inherits Rectangle {
     in property <ContextMenuItemModel> item;
     in property <length> value-width;
+    // The menu has a row with a submenu: every filter row keeps the chevron's slot (empty where it opens none).
+    in property <bool> chevron-slot;
     // The submenu of this row is open (it stays highlighted).
     in property <bool> is-parent-active;
     callback clicked();
@@ -154,7 +157,7 @@ export component BarMenuFilterRow inherits Rectangle {
         }
 
         // The chevron of a row that opens a submenu; the slot stays empty in the others, so the reset buttons line up.
-        VerticalLayout {
+        if root.chevron-slot : VerticalLayout {
             alignment: center;
             width: BarMenuMetrics.chevron;
             AppIcon {
@@ -171,6 +174,7 @@ export component BarMenuFilterRow inherits Rectangle {
 export component BarMenuSliderRow inherits Rectangle {
     in property <ContextMenuItemModel> item;
     in property <length> value-width;
+    in property <bool> chevron-slot;
     // The share of the track (0..1) and the phase: 0 = press, 1 = drag, 2 = let go (a right click and the wheel: 2).
     callback changed(float, int);
     callback reset();
@@ -294,7 +298,7 @@ export component BarMenuSliderRow inherits Rectangle {
             }
         }
 
-        Rectangle { width: BarMenuMetrics.chevron; }
+        if root.chevron-slot : Rectangle { width: BarMenuMetrics.chevron; }
     }
 
     tip := TooltipHost {
@@ -309,6 +313,7 @@ export component BarMenuSliderRow inherits Rectangle {
 export component BarMenuRowMeasure inherits HorizontalLayout {
     in property <ContextMenuItemModel> item;
     in property <length> value-width;
+    in property <bool> chevron-slot;
     property <bool> filter-like: root.item.kind == 6 || root.item.kind == 7;
 
     padding-left: BarMenuMetrics.padding;
@@ -328,5 +333,5 @@ export component BarMenuRowMeasure inherits HorizontalLayout {
     }
     if root.filter-like : Rectangle { width: root.value-width; }
     if root.filter-like : Rectangle { width: BarMenuMetrics.reset; }
-    if root.filter-like || root.item.has-submenu : Rectangle { width: BarMenuMetrics.chevron; }
+    if (root.filter-like && root.chevron-slot) || root.item.has-submenu : Rectangle { width: BarMenuMetrics.chevron; }
 }

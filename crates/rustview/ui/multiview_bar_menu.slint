@@ -33,6 +33,8 @@ export component MultiviewBarMenu inherits Rectangle {
     out property <length> natural-width: Math.clamp(row-measure.preferred-width + 8px + 2px + 7px, root.min-natural-width, root.max-natural-width);
     // The value column of the filter rows: as wide as the widest value any row can show (so it never changes width).
     out property <length> value-width: value-measure.preferred-width;
+    // A row opens a submenu: only then do the filter and slider rows keep a column for the chevron.
+    out property <bool> has-submenus: submenu-measure.preferred-width > 0px;
 
     property <length> body-height: root.custom-height > 0px ? root.custom-height : Math.min(menu-layout.preferred-height + 8px, Math.max(root.max-content-height - root.caret-height, 0px));
     property <length> caret-x: Math.max(14px, Math.min(root.width - 14px, root.anchor-x));
@@ -54,11 +56,19 @@ export component MultiviewBarMenu inherits Rectangle {
         }
     }
 
+    submenu-measure := VerticalLayout {
+        visible: false;
+        for item in root.items : Rectangle {
+            width: item.has-submenu ? 1px : 0px;
+        }
+    }
+
     row-measure := VerticalLayout {
         visible: false;
         for item in root.items : BarMenuRowMeasure {
             item: item;
             value-width: root.value-width;
+            chevron-slot: root.has-submenus;
         }
     }
 
@@ -95,6 +105,7 @@ export component MultiviewBarMenu inherits Rectangle {
                     if item.kind == 6 : BarMenuSliderRow {
                         item: item;
                         value-width: root.value-width;
+                        chevron-slot: root.has-submenus;
                         changed(share, phase) => { root.item-slider(item.id, share, phase); }
                         reset => { root.item-reset(item.id); }
                     }
@@ -102,6 +113,7 @@ export component MultiviewBarMenu inherits Rectangle {
                     if item.kind == 7 : BarMenuFilterRow {
                         item: item;
                         value-width: root.value-width;
+                        chevron-slot: root.has-submenus;
                         is-parent-active: item.id >= 0 && item.id == root.active-id;
                         clicked => { root.item-clicked(item.id); }
                         reset => { root.item-reset(item.id); }

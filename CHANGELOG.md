@@ -22,7 +22,7 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   are three entries (90 degrees right, 180 degrees, 90 degrees left); a click on the one that is on turns the picture back.
   Mirror and Deinterlace have icons. Nothing in the menu moves when a filter changes.
 - The filter menu and the "..." menu are as wide as their entries need (up to a generous limit), each submenu with its own
-  width.
+  width; the column of the submenu arrow only takes room in a menu that has a submenu.
 
 ### Fixed
 
