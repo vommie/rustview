@@ -16,3 +16,11 @@ fits, its code (same author; the ported files say so in their header).
 Deviations with a reason: media tabs have equal widths (exact drag places, many tabs) where RustCut's dock tabs size to their
 title; the rail has a separator line (RustView's view next to it has the rail's color, RustCut's video is darker); the bar
 above the window is darker (`Theme.chrome`) so the active tab merges into the window.
+
+## Light theme (0.6.15, RustCut 0.0.109)
+
+Questionnaire `2026-11-06-rustview-light-theme`: all as proposed. Catppuccin Latte as the light palette with the same token
+names and values in both apps (`ui/styles.slint`, `Theme.dark`); Settings > Appearance > Theme: System (default, KDE's
+color scheme through the desktop portal, followed live; dark without an answer), Dark, Light; the bars, menus and sliders
+over pictures and videos stay dark (`MediaTheme`); the Browse grid follows the theme; the accent is the theme's blue.
+Code: `rustview_core::settings::theme`, `src/ui/theme.rs` (every window through `dialog_parent`), `src/system/color_scheme.rs`.
