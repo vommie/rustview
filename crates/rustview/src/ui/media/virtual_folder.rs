@@ -33,10 +33,19 @@ impl BridgeMedia {
                     Some("Recursive folder view is disabled while query filter is active"),
                 )
             } else if let Some(folder_id) = st.current_folder_id {
-                let has_subfolders = library
-                    .folders()
-                    .get_descendant_folder_ids(folder_id)
-                    .is_ok_and(|ids| ids.len() > 1);
+                // The folder snapshot in memory knows the children; the library walks the whole subtree for this and is
+                // asked only while no snapshot exists yet (this runs with every folder switch and every new list).
+                let has_subfolders = match st
+                    .folder_hierarchy
+                    .as_deref()
+                    .and_then(|tree| tree.nodes.get(&folder_id))
+                {
+                    Some(node) => !node.children.is_empty(),
+                    None => library
+                        .folders()
+                        .get_descendant_folder_ids(folder_id)
+                        .is_ok_and(|ids| ids.len() > 1),
+                };
 
                 if has_subfolders {
                     (true, None)

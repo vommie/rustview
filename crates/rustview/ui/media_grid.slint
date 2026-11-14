@@ -2,7 +2,7 @@ import { Theme } from "styles.slint";
 import { AppIcon, IconId, IconSize } from "icons.slint";
 import { MediaItemView } from "types.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
-import { MediaHeaderBar } from "media_header_bar.slint";
+import { GridSortBar } from "media_table_columns.slint";
 import { RubberbandOverlay } from "rubberband_selection.slint";
 import { ThumbnailBadgeLayer } from "thumbnail_badge.slint";
 import { ThumbnailBadgeConfig } from "thumbnail_badge_types.slint";
@@ -202,21 +202,28 @@ export component MediaTile inherits Rectangle {
             }
         }
 
-        Text {
-            text: item.filename;
-            color: root.is-drop-target ? Theme.accent : item.is-selected ? Theme.primary : (
-                item.is-pending ? Theme.status-pending : (
-                    item.is-deleted ? Theme.status-deleted : (
-                        item.is-corrupted ? Theme.status-corrupt : Theme.text
-                    )
-                )
-            );
-            font-size: 11px;
-            font-weight: (item.is-selected || root.is-drop-target) ? 700 : 400;
-            font-italic: item.is-pending || item.is-deleted;
-            horizontal-alignment: center;
-            overflow: elide;
+        // The name has a fixed place inside this box, so the layout never measures its text (a tile that scrolls in costs
+        // one text layout when it is drawn, none for the layout).
+        Rectangle {
             height: 18px;
+
+            Text {
+                width: parent.width;
+                height: parent.height;
+                text: item.filename;
+                color: root.is-drop-target ? Theme.accent : item.is-selected ? Theme.primary : (
+                    item.is-pending ? Theme.status-pending : (
+                        item.is-deleted ? Theme.status-deleted : (
+                            item.is-corrupted ? Theme.status-corrupt : Theme.text
+                        )
+                    )
+                );
+                font-size: 11px;
+                font-weight: (item.is-selected || root.is-drop-target) ? 700 : 400;
+                font-italic: item.is-pending || item.is-deleted;
+                horizontal-alignment: center;
+                overflow: elide;
+            }
         }
     }
 }
@@ -284,6 +291,8 @@ export component VirtualizedMediaGrid inherits Rectangle {
     callback item-middle-clicked(int /* id */);
     callback item-context-menu(int /* id */, length /* x */, length /* y */);
     callback sort-clicked(int /* column_index */);
+    /// A chip of the sort bar was dragged to another place of the columns' display order.
+    callback column-moved(int /* from_place */, int /* to_place */);
     callback background-clicked();
     callback background-context-menu(length /* x */, length /* y */);
     callback item-hover-changed(int /* id */, bool /* is_hover */);
@@ -296,6 +305,11 @@ export component VirtualizedMediaGrid inherits Rectangle {
     /// The id of the folder row under the pointer while a drag is going on, 0 = none (a medium is never a drop target).
     callback item-drag-over-row(int /* id */);
     callback ensure-focus();
+
+    /// The middle of the sort bar's chip of column `index`, for the performance probe.
+    pure public function probe-chip-x(index: int) -> length {
+        return sort-bar.chip-middle(index);
+    }
 
     /// The middle of the tile at list position `index` in the view, for the performance probe.
     pure public function probe-tile-x(index: int) -> length {
@@ -406,12 +420,11 @@ export component VirtualizedMediaGrid inherits Rectangle {
         padding: 0px;
         spacing: 0px;
 
-        MediaHeaderBar {
+        sort-bar := GridSortBar {
             sort-column: root.sort-column;
             sort-order: root.sort-order;
-            enable-resize: false;
-            auto-width: true;
             sort-clicked(idx) => { root.sort-clicked(idx); }
+            column-moved(from, to) => { root.column-moved(from, to); }
         }
 
         scroll-area := SmoothScrollArea {

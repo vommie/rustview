@@ -116,7 +116,8 @@ impl BridgeFolders {
 
         {
             let mut s = ctx.settings.get();
-            if s.general.remember_last_folder {
+            // Only a new place is stored: selecting the same folder again (a refresh) writes nothing.
+            if s.general.remember_last_folder && s.general.last_folder_path.as_ref() != Some(&normalized_path) {
                 s.general.last_folder_path = Some(normalized_path.clone());
                 ctx.settings.save_quiet_async(&s);
             }
@@ -425,6 +426,12 @@ impl BridgeFolders {
                             );
 
                             let _ = w_weak.upgrade_in_event_loop(move |w| {
+                                // The user may have left the folder meanwhile: the pictures still go to the RAM cache,
+                                // but the list that is shown now is another folder's and is left alone.
+                                let still_shown = {
+                                    let st = st_arc.read();
+                                    st.current_folder_id == Some(folder_id) && st.active_folder_token == request_token
+                                };
                                 {
                                     let mut st = st_arc.write();
                                     st.is_refreshing_media = false;
@@ -442,6 +449,9 @@ impl BridgeFolders {
                                             );
                                         }
 
+                                        if !still_shown {
+                                            continue;
+                                        }
                                         st.mark_list_bytes_dirty();
 
                                         if let Some(target_indexed) = st.all_folder_media.find_mut(item.media_id) {
@@ -451,6 +461,16 @@ impl BridgeFolders {
                                 }
 
                                 thumb_arc.tracker().reset();
+                                if !still_shown {
+                                    tracing::info!(
+                                        folder_id,
+                                        completed = report.completed_count,
+                                        "[FolderNavigation: StubsDetected] The folder was left before its external stubs were completed; the list shown now is not touched"
+                                    );
+                                    let busy = BridgeMedia::is_system_busy(&w, &thumb_arc, &st_arc);
+                                    w.set_is_system_busy(busy);
+                                    return;
+                                }
                                 BridgeMedia::reload(&w, &lib_arc, &thumb_arc, &set_arc, &st_arc, false, false);
                                 BridgeInspector::update(&w, &st_arc);
                                 BridgeTags::sync_tag_selection(&w, &lib_arc, &st_arc);

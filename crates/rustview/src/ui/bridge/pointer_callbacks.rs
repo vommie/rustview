@@ -108,6 +108,12 @@ impl UiBridge {
         let st_end = self.state.clone();
         let autoscroll_end = self.dnd_foldertree_autoscroller.clone();
         let browse_scroll_end = self.dnd_browse_scroller.clone();
+        let win_cancel = self.window.clone_strong();
+        let autoscroll_cancel = self.dnd_foldertree_autoscroller.clone();
+        let browse_scroll_cancel = self.dnd_browse_scroller.clone();
+        self.window.on_media_drag_cancelled(move || {
+            BridgeDnd::handle_drag_cancelled(&win_cancel, &autoscroll_cancel, &browse_scroll_cancel);
+        });
         self.window.on_media_drag_ended(move || {
             BridgeDnd::handle_drag_ended(&win_end, &lib_end, &st_end, &autoscroll_end, &browse_scroll_end);
         });

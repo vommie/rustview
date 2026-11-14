@@ -66,7 +66,7 @@ One step per line, `#` starts a comment (`src/ui/perf_probe/plan.rs`):
 | `quit` | Closes the application. |
 
 Elements (`probe-anchor` in `ui/main.slint`): `@left-resizer`, `@right-resizer`, `@left-splitter:N` and `@right-splitter:N`
-(the bar below panel group N of a sidebar), `@column:N` (the resize handle of table column N), `@header:N` (the header of table column N), `@item:N` (the tile or
+(the bar below panel group N of a sidebar), `@column:N` (the resize handle of table column N), `@header:N` (the header of table column N), `@chip:N` (the chip of column N in the sort bar of the thumbnail view), `@item:N` (the tile or
 row at list position N), `@view`, `@folder-tree`.
 
 The pointer events are the probe's own: they enter the window like real ones, and the real pointer is not moved. **A media
@@ -74,6 +74,7 @@ drag is never released over anything but a folder**: such a release offers the f
 
 The plans in `scripts/perf/plans/` are short (about 20 seconds each, so a run fits between other work on the machine):
 `grid.plan` (thumbnail view: scrolling, wheel), `table.plan` (table: scrolling, wheel, column resize), `loads.plan` (folder
-switches, jumps, sorting) and `resize.plan` (sidebars and splitters). They expect folders named `Flat-1k`, `Flat-5k`,
+switches, jumps, sorting), `resize.plan` (sidebars and splitters) and `columns.plan` (moving a table header and a
+chip of the sort bar). They expect folders named `Flat-1k`, `Flat-5k`,
 `Flat-20k` and `Flat-100k` (1,000 to 100,000 pictures each) below the root folder of the profile; `index-stress.plan`
 indexes them once.

@@ -1,0 +1,28 @@
+# Moving columns: a header of the table and a chip of the thumbnail view's sort bar are dragged over the others and
+# back (released where they started, so the order stays as it is).
+ready
+folder Flat-100k
+settle 800
+view table
+settle 800
+begin table_column_move
+press @header:1
+sweep 420 0 1.5 2
+release
+end
+settle 500
+begin table_column_resize
+press @column:0
+sweep 160 0 1.5 2
+release
+end
+settle 500
+view grid
+settle 800
+begin grid_chip_move
+press @chip:1
+sweep 300 0 1.5 2
+release
+end
+settle 400
+quit

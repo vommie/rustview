@@ -356,3 +356,346 @@ export component TableCell inherits Rectangle {
 
     @children
 }
+
+/// The drag of a chip of the thumbnail view's sort bar (its own state: the table's columns have theirs in `TableColumns`).
+export global SortBarDrag {
+    /// The display place of the chip that is dragged (-1: none), how far the pointer moved and the place it would take.
+    in-out property <int> place: -1;
+    in-out property <length> dx;
+    in-out property <int> to: -1;
+    in-out property <bool> settling;
+
+    public function end() {
+        root.place = -1;
+        root.to = -1;
+        root.settling = true;
+    }
+}
+
+/// One column in the sort bar of the thumbnail view: as wide as its title. A click sorts, a drag moves the column.
+component SortChip inherits Rectangle {
+    in property <int> column;
+    in property <int> active-sort-column: 0;
+    in property <int> active-sort-order: 0; // 0 = Ascending, 1 = Descending
+
+    callback sort-clicked(int /* column */);
+    callback dragged(length /* offset from the press */);
+    callback dropped();
+
+    property <bool> is-sorted: root.column == root.active-sort-column;
+    property <length> press-x;
+    property <bool> moving;
+
+    width: content.preferred-width;
+    height: 100%;
+    border-radius: 3px;
+    background: touch.has-hover && !root.moving ? Theme.surface-hover : Theme.surface;
+
+    touch := TouchArea {
+        mouse-cursor: root.moving ? MouseCursor.grabbing : MouseCursor.pointer;
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                root.press-x = self.mouse-x;
+                root.moving = false;
+            } else if event.kind == PointerEventKind.up && event.button == PointerEventButton.left {
+                if root.moving {
+                    root.moving = false;
+                    root.dropped();
+                } else {
+                    root.sort-clicked(root.column);
+                }
+            }
+        }
+        // 6 px of movement turn a press into a drag (a click sorts).
+        moved => {
+            if self.pressed && (root.moving || Math.abs(self.mouse-x - root.press-x) > 6px) {
+                root.moving = true;
+                root.dragged(self.mouse-x - root.press-x);
+            }
+        }
+    }
+
+    content := HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 5px;
+        alignment: start;
+
+        Text {
+            text: TableColumns.title(root.column);
+            color: root.is-sorted ? Theme.primary : Theme.text;
+            font-weight: 700;
+            font-size: 11px;
+            vertical-alignment: center;
+            horizontal-alignment: left;
+        }
+
+        if root.is-sorted: IconSlot {
+            icon: root.active-sort-order == 0 ? IconId.sort-ascending : IconId.sort-descending;
+            size: IconSize.sm;
+            color: Theme.primary;
+        }
+    }
+}
+
+/// The sort bar of the thumbnail view: the table's columns as chips, in the table's order. A chip is moved like a table
+/// header (ghost, gap, the chips in between move aside, Escape cancels), and the order is the same one.
+export component GridSortBar inherits Rectangle {
+    in property <int> sort-column: 0;
+    in property <int> sort-order: 0;
+
+    callback sort-clicked(int /* column */);
+    callback column-moved(int /* from_place */, int /* to_place */);
+
+    property <length> edge: 6px;
+    property <length> gap: 4px;
+    property <duration> motion: SortBarDrag.place >= 0 || SortBarDrag.settling ? ColumnMotion.shift : 0ms;
+    property <int> drag-column: SortBarDrag.place >= 0 && SortBarDrag.place < TableColumns.order.length ? TableColumns.order[SortBarDrag.place] : -1;
+    property <length> drag-w: root.drag-column >= 0 ? root.w(root.drag-column) : 0px;
+    property <int> to-column: SortBarDrag.to >= 0 && SortBarDrag.to < TableColumns.order.length ? TableColumns.order[SortBarDrag.to] : -1;
+    property <length> gap-x: root.to-column < 0 ? 0px
+        : SortBarDrag.to > SortBarDrag.place ? root.start(root.to-column) + root.w(root.to-column) - root.drag-w
+        : root.start(root.to-column);
+
+    height: 28px;
+    background: Theme.surface;
+    clip: true;
+
+    pure function w(c: int) -> length {
+        return c == 0 ? c0.width : c == 1 ? c1.width : c == 2 ? c2.width : c == 3 ? c3.width : c == 4 ? c4.width : c == 5 ? c5.width : c == 6 ? c6.width : c == 7 ? c7.width : c == 8 ? c8.width : c == 9 ? c9.width : c == 10 ? c10.width : c == 11 ? c11.width : c12.width;
+    }
+    /// The width (and the gap behind it) of chip `other` when it stands left of chip `column`.
+    pure function lead(column: int, other: int, width: length) -> length {
+        return TableColumns.rank[other] < TableColumns.rank[column] ? width + root.gap : 0px;
+    }
+    pure function start(c: int) -> length {
+        return root.edge + root.lead(c, 0, c0.width) + root.lead(c, 1, c1.width) + root.lead(c, 2, c2.width) + root.lead(c, 3, c3.width) + root.lead(c, 4, c4.width) + root.lead(c, 5, c5.width) + root.lead(c, 6, c6.width) + root.lead(c, 7, c7.width) + root.lead(c, 8, c8.width) + root.lead(c, 9, c9.width) + root.lead(c, 10, c10.width) + root.lead(c, 11, c11.width) + root.lead(c, 12, c12.width);
+    }
+    pure function shift(place: int) -> length {
+        if SortBarDrag.place < 0 || place == SortBarDrag.place || SortBarDrag.to < 0 {
+            return 0px;
+        }
+        if SortBarDrag.to > SortBarDrag.place && place > SortBarDrag.place && place <= SortBarDrag.to {
+            return -(root.drag-w + root.gap);
+        }
+        if SortBarDrag.to < SortBarDrag.place && place >= SortBarDrag.to && place < SortBarDrag.place {
+            return root.drag-w + root.gap;
+        }
+        return 0px;
+    }
+    pure function left-of(c: int, middle: length) -> int {
+        return root.start(c) + root.w(c) / 2 < middle ? 1 : 0;
+    }
+    pure function drop-place(from: int, middle: length) -> int {
+        let left = root.left-of(0, middle) + root.left-of(1, middle) + root.left-of(2, middle) + root.left-of(3, middle) + root.left-of(4, middle) + root.left-of(5, middle) + root.left-of(6, middle) + root.left-of(7, middle) + root.left-of(8, middle) + root.left-of(9, middle) + root.left-of(10, middle) + root.left-of(11, middle) + root.left-of(12, middle);
+        return Math.min(TableColumns.order.length - 1, left > from ? left - 1 : left);
+    }
+    /// The middle of the chip of column `c`.
+    pure public function chip-middle(c: int) -> length {
+        return root.start(c) + root.w(c) / 2;
+    }
+    function drag(place: int, dx: length) {
+        SortBarDrag.place = place;
+        SortBarDrag.dx = dx;
+        SortBarDrag.to = root.drop-place(place, root.start(TableColumns.order[place]) + dx + root.w(TableColumns.order[place]) / 2);
+    }
+    function drop(place: int) {
+        // Escape may have canceled the drag: then nothing moves.
+        if SortBarDrag.place == place {
+            if SortBarDrag.to >= 0 && SortBarDrag.to != place {
+                root.column-moved(place, SortBarDrag.to);
+            }
+            SortBarDrag.end();
+        }
+    }
+
+    c0 := SortChip {
+        x: root.start(0) + root.shift(TableColumns.rank[0]);
+        animate x { duration: root.motion; easing: ease-out; }
+        opacity: TableColumns.rank[0] == SortBarDrag.place ? 0 : 1;
+        column: 0;
+        active-sort-column: root.sort-column;
+        active-sort-order: root.sort-order;
+        sort-clicked(c) => { root.sort-clicked(c); }
+        dragged(dx) => { root.drag(TableColumns.rank[0], dx); }
+        dropped => { root.drop(TableColumns.rank[0]); }
+    }
+
+    c1 := SortChip {
+        x: root.start(1) + root.shift(TableColumns.rank[1]);
+        animate x { duration: root.motion; easing: ease-out; }
+        opacity: TableColumns.rank[1] == SortBarDrag.place ? 0 : 1;
+        column: 1;
+        active-sort-column: root.sort-column;
+        active-sort-order: root.sort-order;
+        sort-clicked(c) => { root.sort-clicked(c); }
+        dragged(dx) => { root.drag(TableColumns.rank[1], dx); }
+        dropped => { root.drop(TableColumns.rank[1]); }
+    }
+
+    c2 := SortChip {
+        x: root.start(2) + root.shift(TableColumns.rank[2]);
+        animate x { duration: root.motion; easing: ease-out; }
+        opacity: TableColumns.rank[2] == SortBarDrag.place ? 0 : 1;
+        column: 2;
+        active-sort-column: root.sort-column;
+        active-sort-order: root.sort-order;
+        sort-clicked(c) => { root.sort-clicked(c); }
+        dragged(dx) => { root.drag(TableColumns.rank[2], dx); }
+        dropped => { root.drop(TableColumns.rank[2]); }
+    }
+
+    c3 := SortChip {
+        x: root.start(3) + root.shift(TableColumns.rank[3]);
+        animate x { duration: root.motion; easing: ease-out; }
+        opacity: TableColumns.rank[3] == SortBarDrag.place ? 0 : 1;
+        column: 3;
+        active-sort-column: root.sort-column;
+        active-sort-order: root.sort-order;
+        sort-clicked(c) => { root.sort-clicked(c); }
+        dragged(dx) => { root.drag(TableColumns.rank[3], dx); }
+        dropped => { root.drop(TableColumns.rank[3]); }
+    }
+
+    c4 := SortChip {
+        x: root.start(4) + root.shift(TableColumns.rank[4]);
+        animate x { duration: root.motion; easing: ease-out; }
+        opacity: TableColumns.rank[4] == SortBarDrag.place ? 0 : 1;
+        column: 4;
+        active-sort-column: root.sort-column;
+        active-sort-order: root.sort-order;
+        sort-clicked(c) => { root.sort-clicked(c); }
+        dragged(dx) => { root.drag(TableColumns.rank[4], dx); }
+        dropped => { root.drop(TableColumns.rank[4]); }
+    }
+
+    c5 := SortChip {
+        x: root.start(5) + root.shift(TableColumns.rank[5]);
+        animate x { duration: root.motion; easing: ease-out; }
+        opacity: TableColumns.rank[5] == SortBarDrag.place ? 0 : 1;
+        column: 5;
+        active-sort-column: root.sort-column;
+        active-sort-order: root.sort-order;
+        sort-clicked(c) => { root.sort-clicked(c); }
+        dragged(dx) => { root.drag(TableColumns.rank[5], dx); }
+        dropped => { root.drop(TableColumns.rank[5]); }
+    }
+
+    c6 := SortChip {
+        x: root.start(6) + root.shift(TableColumns.rank[6]);
+        animate x { duration: root.motion; easing: ease-out; }
+        opacity: TableColumns.rank[6] == SortBarDrag.place ? 0 : 1;
+        column: 6;
+        active-sort-column: root.sort-column;
+        active-sort-order: root.sort-order;
+        sort-clicked(c) => { root.sort-clicked(c); }
+        dragged(dx) => { root.drag(TableColumns.rank[6], dx); }
+        dropped => { root.drop(TableColumns.rank[6]); }
+    }
+
+    c7 := SortChip {
+        x: root.start(7) + root.shift(TableColumns.rank[7]);
+        animate x { duration: root.motion; easing: ease-out; }
+        opacity: TableColumns.rank[7] == SortBarDrag.place ? 0 : 1;
+        column: 7;
+        active-sort-column: root.sort-column;
+        active-sort-order: root.sort-order;
+        sort-clicked(c) => { root.sort-clicked(c); }
+        dragged(dx) => { root.drag(TableColumns.rank[7], dx); }
+        dropped => { root.drop(TableColumns.rank[7]); }
+    }
+
+    c8 := SortChip {
+        x: root.start(8) + root.shift(TableColumns.rank[8]);
+        animate x { duration: root.motion; easing: ease-out; }
+        opacity: TableColumns.rank[8] == SortBarDrag.place ? 0 : 1;
+        column: 8;
+        active-sort-column: root.sort-column;
+        active-sort-order: root.sort-order;
+        sort-clicked(c) => { root.sort-clicked(c); }
+        dragged(dx) => { root.drag(TableColumns.rank[8], dx); }
+        dropped => { root.drop(TableColumns.rank[8]); }
+    }
+
+    c9 := SortChip {
+        x: root.start(9) + root.shift(TableColumns.rank[9]);
+        animate x { duration: root.motion; easing: ease-out; }
+        opacity: TableColumns.rank[9] == SortBarDrag.place ? 0 : 1;
+        column: 9;
+        active-sort-column: root.sort-column;
+        active-sort-order: root.sort-order;
+        sort-clicked(c) => { root.sort-clicked(c); }
+        dragged(dx) => { root.drag(TableColumns.rank[9], dx); }
+        dropped => { root.drop(TableColumns.rank[9]); }
+    }
+
+    c10 := SortChip {
+        x: root.start(10) + root.shift(TableColumns.rank[10]);
+        animate x { duration: root.motion; easing: ease-out; }
+        opacity: TableColumns.rank[10] == SortBarDrag.place ? 0 : 1;
+        column: 10;
+        active-sort-column: root.sort-column;
+        active-sort-order: root.sort-order;
+        sort-clicked(c) => { root.sort-clicked(c); }
+        dragged(dx) => { root.drag(TableColumns.rank[10], dx); }
+        dropped => { root.drop(TableColumns.rank[10]); }
+    }
+
+    c11 := SortChip {
+        x: root.start(11) + root.shift(TableColumns.rank[11]);
+        animate x { duration: root.motion; easing: ease-out; }
+        opacity: TableColumns.rank[11] == SortBarDrag.place ? 0 : 1;
+        column: 11;
+        active-sort-column: root.sort-column;
+        active-sort-order: root.sort-order;
+        sort-clicked(c) => { root.sort-clicked(c); }
+        dragged(dx) => { root.drag(TableColumns.rank[11], dx); }
+        dropped => { root.drop(TableColumns.rank[11]); }
+    }
+
+    c12 := SortChip {
+        x: root.start(12) + root.shift(TableColumns.rank[12]);
+        animate x { duration: root.motion; easing: ease-out; }
+        opacity: TableColumns.rank[12] == SortBarDrag.place ? 0 : 1;
+        column: 12;
+        active-sort-column: root.sort-column;
+        active-sort-order: root.sort-order;
+        sort-clicked(c) => { root.sort-clicked(c); }
+        dragged(dx) => { root.drag(TableColumns.rank[12], dx); }
+        dropped => { root.drop(TableColumns.rank[12]); }
+    }
+
+    if SortBarDrag.place >= 0 && SortBarDrag.to >= 0: ColumnDropGap {
+        x: root.gap-x;
+        y: 2px;
+        width: root.drag-w;
+        height: root.height - 4px;
+        animate x { duration: root.motion; easing: ease-out; }
+    }
+    if SortBarDrag.place >= 0: Rectangle {
+        x: Math.max(0px, Math.min(root.width - root.drag-w, root.start(root.drag-column) + SortBarDrag.dx));
+        y: 0;
+        width: root.drag-w;
+        height: root.height;
+        background: Theme.surface-selected.with-alpha(0.6);
+
+        DashedFrame { stroke: Theme.primary; }
+        Text {
+            x: 8px;
+            width: parent.width - 16px;
+            height: parent.height;
+            text: TableColumns.title(root.drag-column);
+            font-size: 11px;
+            font-weight: 600;
+            color: Theme.text;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+
+    Timer {
+        interval: 220ms;
+        running: SortBarDrag.settling;
+        triggered => { SortBarDrag.settling = false; }
+    }
+}

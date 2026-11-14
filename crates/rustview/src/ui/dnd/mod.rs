@@ -272,6 +272,25 @@ impl BridgeDnd {
         }
     }
 
+    /// Escape during a drag: the drag is over and nothing is dropped. The release that follows finds no drag any more
+    /// (`handle_drag_ended` returns at once).
+    pub fn handle_drag_cancelled(
+        window: &MainWindow,
+        autoscroller: &DndFolderTreeAutoScroller,
+        browse_scroller: &BrowseDragScroller,
+    ) {
+        if !window.get_is_dragging_media() {
+            return;
+        }
+        autoscroller.stop();
+        browse_scroller.stop();
+        window.set_is_dragging_media(false);
+        window.set_drop_target_folder_id(-1);
+        window.set_drop_target_row_id(0);
+        SystemDndHandler::cancel_ghost_overlay();
+        tracing::info!("[MediaDrag: Cancelled] The drag was ended with Escape");
+    }
+
     pub fn handle_drag_ended(
         window: &MainWindow,
         library: &Arc<Library>,

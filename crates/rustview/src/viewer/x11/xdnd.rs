@@ -172,6 +172,16 @@ fn drop_on(
             finished: false,
         });
     };
+    // A release over one of RustView's own windows is no drop onto another application: nothing is sent (the window
+    // would receive its own files as an external drop).
+    if is_own_application(&app_class) {
+        tracing::debug!("[Xdnd] The pointer is over a window of this application; nothing is dropped");
+        return Ok(XdndOutcome {
+            target_window: None,
+            app_class,
+            finished: false,
+        });
+    }
 
     // A 1x1 window that is the source of the drag: it owns the selection and receives the answers of the target.
     let source = conn.generate_id().map_err(x11_error)?;
@@ -382,6 +392,11 @@ fn proxy_of(session: &Session, atoms: &Atoms, window: Window) -> Option<Window> 
 }
 
 /// The class part of `WM_CLASS` (its last string).
+/// Whether a window of that application class (`WM_CLASS`) belongs to this application.
+fn is_own_application(app_class: &str) -> bool {
+    app_class.eq_ignore_ascii_case(rustview_core::util::app_identity::APP_ID)
+}
+
 fn window_class(session: &Session, atoms: &Atoms, window: Window) -> Option<String> {
     let reply = session
         .conn
@@ -400,6 +415,14 @@ fn window_class(session: &Session, atoms: &Atoms, window: Window) -> Option<Stri
 mod tests {
     use super::*;
     use x11rb::protocol::xproto::EventMask as Mask;
+
+    #[test]
+    fn a_window_of_this_application_is_no_drop_target() {
+        assert!(is_own_application("io.github.vommie.rustview"));
+        assert!(is_own_application("IO.GitHub.Vommie.RustView"));
+        assert!(!is_own_application("dolphin"));
+        assert!(!is_own_application("unknown"));
+    }
 
     const URI_LIST: &[u8] = b"file:///tmp/a%20b.jpg\r\nfile:///tmp/c.jpg\r\n";
 

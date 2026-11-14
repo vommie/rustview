@@ -18,7 +18,7 @@ import { Dock, DockMetrics, RailPeek } from "dock_types.slint";
 import { VirtualizedMediaGrid } from "media_grid.slint";
 import { ThumbnailBadgeConfig, ThumbnailBadgeOverflowMode } from "thumbnail_badge_types.slint";
 import { MediaTableView } from "media_table.slint";
-import { TableColumns } from "media_table_columns.slint";
+import { SortBarDrag, TableColumns } from "media_table_columns.slint";
 import { StatusBar } from "status_bar.slint";
 import { ContextMenuPopup } from "context_menu.slint";
 import { ResizerBar } from "resizer_bar.slint";
@@ -473,6 +473,8 @@ export component MainWindow inherits Window {
     callback media-drag-started(int /* id */, length /* x */, length /* y */);
     callback media-drag-moved(length /* x */, length /* y */);
     callback media-drag-ended();
+    /// Escape while media are dragged: nothing is dropped.
+    callback media-drag-cancelled();
     callback media-drag-over-row(int /* folder row id under the pointer, 0 = none */);
     callback folder-row-context-menu(int /* folder row id */, length /* x */, length /* y */);
     callback folder-row-hovered(int /* folder_id */);
@@ -665,6 +667,12 @@ export component MainWindow inherits Window {
                 y: table-view.absolute-position.y + 14px,
             };
         }
+        if name == "chip" {
+            return {
+                x: grid-view.absolute-position.x + grid-view.probe-chip-x(index),
+                y: grid-view.absolute-position.y + 14px,
+            };
+        }
         if name == "header" {
             return {
                 x: table-view.absolute-position.x + table-view.probe-header-x(index),
@@ -727,13 +735,24 @@ export component MainWindow inherits Window {
                 return reject;
             }
 
-            // A table column that is dragged: Escape puts it back.
-            if TableColumns.drag-place >= 0 {
+            // A table column or a chip of the sort bar that is dragged: Escape puts it back.
+            if TableColumns.drag-place >= 0 || SortBarDrag.place >= 0 {
                 if event.text == Key.Escape {
-                    TableColumns.end-drag();
+                    if TableColumns.drag-place >= 0 {
+                        TableColumns.end-drag();
+                    }
+                    if SortBarDrag.place >= 0 {
+                        SortBarDrag.end();
+                    }
                     return accept;
                 }
                 return reject;
+            }
+
+            // Media that are dragged: Escape ends the drag, nothing is dropped.
+            if root.is-dragging-media && event.text == Key.Escape {
+                root.media-drag-cancelled();
+                return accept;
             }
 
             if root.is-dragging-media || root.is-dragging-tab || Dock.dragging || root.rubberband-active {
@@ -951,6 +970,7 @@ export component MainWindow inherits Window {
                         }
                         item-hover-changed(id, hover) => { root.media-hover-changed(id, hover); }
                         sort-clicked(idx) => { root.sort-column-clicked(idx); }
+                        column-moved(from, to) => { root.table-column-moved(from, to); }
                         background-clicked => { root.background-clicked(); }
                         background-context-menu(x, y) => {
                             root.browse-background-context-menu(x + left-sidebar.width + resizer_left.width, y + top-toolbar.height + 26px);

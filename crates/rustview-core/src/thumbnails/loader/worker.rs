@@ -65,7 +65,11 @@ impl ThumbnailScheduler {
                             );
 
                             let t_app = Instant::now();
-                            if let Ok(primary_loc) = self.store.append(&compressed_primary) {
+                            // A pipeline that was canceled meanwhile (the folder changed) stores nothing: bytes without a
+                            // record would stay in the pack file for good.
+                            if !self.is_pipeline_stale(pipeline_id)
+                                && let Ok(primary_loc) = self.store.append(&compressed_primary)
+                            {
                                 benchmark.record_pack_append(
                                     compressed_primary.len() as u64,
                                     t_app.elapsed().as_micros().saturating_as::<u64>(),
@@ -171,7 +175,9 @@ impl ThumbnailScheduler {
                             );
 
                             let t_app = Instant::now();
-                            if let Ok(location) = self.store.append(&compressed_bytes) {
+                            if !self.is_pipeline_stale(pipeline_id)
+                                && let Ok(location) = self.store.append(&compressed_bytes)
+                            {
                                 benchmark.record_pack_append(
                                     compressed_bytes.len() as u64,
                                     t_app.elapsed().as_micros().saturating_as::<u64>(),

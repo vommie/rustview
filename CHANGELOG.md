@@ -16,8 +16,10 @@ and the stored thumbnails are untouched, `settings.json` only gains `view.table_
 
 - The columns of the Browse table can be moved: drag a header to another place. The column follows the pointer as a
   ghost, a gap shows where it lands and the columns in between move aside; Escape cancels. A click still sorts, the
-  right edge of a header still changes the width. The order is remembered (`view.table_column_order`; older settings
+  right edge of a header still changes the width. The sort bar of the thumbnail view shows the columns in the same
+  order, and its entries are moved the same way. The order is remembered (`view.table_column_order`; older settings
   files start with the default order) and Settings > Debug > Reset Layout restores it.
+- Escape ends a drag of media: nothing is moved, copied or dropped.
 - A probe for developers that measures the responsiveness of the UI: it plays a plan of steps (scrolling, jumps, folder
   switches, sorting, dragging resizers and headers) and logs every frame (`docs/perf/README.md`,
   `scripts/perf/`). It runs only when `RUSTVIEW_PERF_PLAN` names a plan.
@@ -36,6 +38,9 @@ and the stored thumbnails are untouched, `settings.json` only gains `view.table_
   movement: changes that follow each other closely are written once, a moment later (and when the application exits).
 - The tag tree is filled again only when the number of rows per column changes, not for every few pixels a resizer
   moves, and while a resizer is dragged it waits until the pointer rests (at most 0.4 s).
+- A folder switch does less: whether the folder has subfolders (the recursive view's button) comes from the folder
+  snapshot in memory instead of a walk through the library, and selecting the folder that is already remembered writes
+  no settings.
 
 ### Fixed
 
@@ -44,6 +49,12 @@ and the stored thumbnails are untouched, `settings.json` only gains `view.table_
 - The tag tree could be drawn with too few rows per column (the lower part of the panel stayed empty) until a resizer
   was moved: it relied on a size report that never came when the tree got its final height at once. The tree now reads
   its height whenever it is filled; the Tag History reads its width the same way.
+- Dragged media released over RustView itself, but not over a folder, were offered to RustView's own window as a drop
+  from another application. Nothing is dropped there now; a drop onto another application works as before.
+- Thumbnail generation that a folder switch canceled could still append a thumbnail's bytes to the thumbnail store
+  without recording it (space that was never used again). A canceled job stores nothing more.
+- External files that were completed for a folder the user had left meanwhile reloaded the list of the folder shown
+  now; they only go to the thumbnail cache.
 
 
 ## [0.6.15] - 2026-11-06
