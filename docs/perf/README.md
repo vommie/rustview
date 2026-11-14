@@ -8,6 +8,17 @@ any machine. Results of past work: [`RESULTS.md`](RESULTS.md) (Browse performanc
 The probe is part of every build and costs one relaxed atomic load per frame while it is not used. It never runs unless the
 environment variable `RUSTVIEW_PERF_PLAN` names a plan file.
 
+## Everything in one command
+
+```bash
+scripts/perf/measure.sh
+```
+
+`measure.sh` generates a library of 126,000 small pictures once (`scripts/perf/gen-library.py`, about 1.5 GB, needs
+`python-pillow` and `python-numpy`), indexes it once in an isolated profile, runs the plans three times each and prints the
+tables with the medians. Library, profile and logs live in `~/.cache/rustview-perf` (`--dir` changes it; delete the folder
+to get the space back); your own library and settings are not touched. Do not use the machine meanwhile.
+
 ## One run
 
 ```bash
