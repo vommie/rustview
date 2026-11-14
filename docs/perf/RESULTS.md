@@ -6,7 +6,7 @@ Branch `claude/sharp-faraday-xyc14n`, version 0.3.46. **No database migration** 
 **Measurement tools:** the scripted scroll probe (`RUSTVIEW_PERF`, `src/ui/perf_probe/`), the interval statistics, `scripts/perf/`,
 `examples/perf_seed.rs`, `examples/perf_scale.rs`, `benches/browse_data.rs` (criterion, including the `legacy_*` copies of the replaced structures)
 and the new unit tests were scaffolding. They were removed from the tree after the work was accepted and are available in git history
-(last commit that contains them: `927225e`). The tables below are the recorded results of those tools.
+(last commit that contains them: `f158da7`). The tables below are the recorded results of those tools.
 
 ## What changed (and why)
 | Finding in the baseline (362d290) | Change |

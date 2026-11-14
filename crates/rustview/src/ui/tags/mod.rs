@@ -20,6 +20,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 pub mod handler;
+pub mod refill_pace;
 pub mod selection_stats;
 pub mod tree;
 pub use handler::TagActionHandler;
@@ -30,6 +31,8 @@ mod callbacks;
 
 pub const MAX_TAG_ITEM_WIDTH: f32 = 180.0;
 pub const MIN_TAG_ITEM_WIDTH: f32 = 60.0;
+/// A tree lower than this has no size yet (`ui/tag_panel.slint` reports nothing below it either).
+pub const MIN_TREE_HEIGHT: f32 = 10.0;
 pub const TAG_ITEM_HEIGHT: f32 = 22.0;
 pub const TAG_ROW_SPACING: f32 = 2.0;
 pub const TAG_COLUMN_SPACING: f32 = 6.0;
@@ -76,6 +79,8 @@ impl BridgeTags {
         }
 
         let is_tab_mode = window.get_active_view_mode() == 1;
+        // The height the tree has right now; the stored one only while the tree has no size yet (a hidden sidebar).
+        let live_height = window.get_tag_tree_height();
 
         let (is_assign_raw, expanded_set, selected_query_tags, filter_text, is_regex, selected_file_ids, available_h) = {
             let s = state.read();
@@ -92,7 +97,11 @@ impl BridgeTags {
                 s.tag_filter_query.clone(),
                 s.tag_filter_is_regex,
                 file_ids,
-                s.tag_tree_available_height,
+                if live_height > MIN_TREE_HEIGHT {
+                    live_height
+                } else {
+                    s.tag_tree_available_height
+                },
             )
         };
 
@@ -139,6 +148,7 @@ impl BridgeTags {
         };
         {
             let mut st = state.write();
+            st.tag_tree_available_height = available_h;
             st.tag_tree_rows_per_column = rows_per_col;
         }
 

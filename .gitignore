@@ -29,9 +29,10 @@ packaging/pkg/
 packaging/src/
 packaging/*.pkg.tar.zst
 *.py
-# Tracked despite the patterns above: the license notices and their generator.
+# Tracked despite the patterns above: the license notices, their generator and the performance tools.
 !/LICENSES/*.txt
 !/scripts/attribution.py
+!/scripts/perf/*.py
 
 # Local agent and development files: they stay on the maintainer's machine, never in the public repository
 /CLAUDE.md

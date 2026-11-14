@@ -2,24 +2,11 @@ import { Theme } from "styles.slint";
 import { IconId, IconSize, IconSlot } from "icons.slint";
 import { MediaItemView } from "types.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
-import { MediaHeaderBar } from "media_header_bar.slint";
+import { ColumnDropGap, DashedFrame, TableCell, TableColumns, TableHeader } from "media_table_columns.slint";
 import { RubberbandOverlay } from "rubberband_selection.slint";
 
 export component MediaTableRow inherits Rectangle {
     in property <MediaItemView> item;
-    in property <length> col-filename-width: 260px;
-    in property <length> col-path-width: 180px;
-    in property <length> col-modified-date-width: 145px;
-    in property <length> col-created-date-width: 145px;
-    in property <length> col-size-width: 95px;
-    in property <length> col-rating-width: 65px;
-    in property <length> col-tags-width: 65px;
-    in property <length> col-width-width: 70px;
-    in property <length> col-height-width: 70px;
-    in property <length> col-ar-width: 65px;
-    in property <length> col-duration-width: 110px;
-    in property <length> col-format-width: 75px;
-    in property <length> col-flags-width: 85px;
 
     in property <length> row-height: 28px;
     in property <length> scroll-offset-x: 0px;
@@ -35,6 +22,9 @@ export component MediaTableRow inherits Rectangle {
     callback ensure-focus();
 
     height: root.row-height;
+    // Clipped: a row that is not in the view (the rows kept ready above and below it) is skipped as a whole when the view
+    // is drawn or a pointer event is delivered.
+    clip: true;
     // Strict Priority: Drop target > Selected > Pending External Stub > Deleted > Corrupted > Normal
     background: root.is-drop-target ? Theme.primary.with-alpha(0.267) : item.is-selected ? Theme.surface-selected : (
         row-touch.has-hover ? Theme.surface-hover : (
@@ -109,291 +99,60 @@ export component MediaTableRow inherits Rectangle {
         }
     }
 
-    HorizontalLayout {
-        padding: 0px;
-        spacing: 0px;
+    // The cells have fixed places (`TableColumns`): no layout measures their texts, and the order of the columns is the
+    // user's (a header can be dragged).
+    TableCell {
+        column: 0;
+        text: item.filename;
+        inset: item.is-folder ? 10px + IconSize.md + 6px : 10px;
+        weight: root.is-drop-target ? 700 : 400;
+        italic: item.is-pending || item.is-deleted;
+        text-color: root.is-drop-target ? Theme.accent : item.is-selected ? Theme.primary : (
+            item.is-pending ? Theme.status-pending : (
+                item.is-deleted ? Theme.status-deleted : (
+                    item.is-corrupted ? Theme.status-corrupt : Theme.text
+                )
+            )
+        );
 
-        // Column 0: Filename
-        Rectangle {
-            width: root.col-filename-width;
-            clip: true;
-
-            HorizontalLayout {
-                padding-left: 10px;
-                padding-right: 10px;
-                spacing: 6px;
-                alignment: start;
-
-                if item.is-folder : IconSlot {
-                    icon: item.is-folder-up ? IconId.folder-up : IconId.folder;
-                    color: root.is-drop-target ? Theme.accent : (item.is-deleted ? Theme.status-deleted : (item.is-folder-up ? Theme.text-muted : Theme.primary));
-                    size: IconSize.md;
-                }
-
-                Text {
-                    text: item.filename;
-                    font-weight: root.is-drop-target ? 700 : 400;
-                    color: root.is-drop-target ? Theme.accent : item.is-selected ? Theme.primary : (
-                        item.is-pending ? Theme.status-pending : (
-                            item.is-deleted ? Theme.status-deleted : (
-                                item.is-corrupted ? Theme.status-corrupt : Theme.text
-                            )
-                        )
-                    );
-                    font-size: 11px;
-                    font-italic: item.is-pending || item.is-deleted;
-                    vertical-alignment: center;
-                    overflow: elide;
-                }
-            }
+        if item.is-folder: IconSlot {
+            x: 10px;
+            height: parent.height;
+            icon: item.is-folder-up ? IconId.folder-up : IconId.folder;
+            color: root.is-drop-target ? Theme.accent : (item.is-deleted ? Theme.status-deleted : (item.is-folder-up ? Theme.text-muted : Theme.primary));
+            size: IconSize.md;
         }
-
-        // Column 1: Path
-        Rectangle {
-            width: root.col-path-width;
-            clip: true;
-
-            HorizontalLayout {
-                padding-left: 10px;
-                padding-right: 10px;
-                alignment: start;
-
-                Text {
-                    text: item.path_str;
-                    color: Theme.text-muted;
-                    font-size: 11px;
-                    vertical-alignment: center;
-                    overflow: elide;
-                }
-            }
-        }
-
-        // Column 2: Modified Date
-        Rectangle {
-            width: root.col-modified-date-width;
-            clip: true;
-
-            HorizontalLayout {
-                padding-left: 10px;
-                padding-right: 10px;
-                alignment: start;
-
-                Text {
-                    text: item.modified_date_str;
-                    color: Theme.text-muted;
-                    font-size: 11px;
-                    vertical-alignment: center;
-                    overflow: elide;
-                }
-            }
-        }
-
-        // Column 3: Created Date
-        Rectangle {
-            width: root.col-created-date-width;
-            clip: true;
-
-            HorizontalLayout {
-                padding-left: 10px;
-                padding-right: 10px;
-                alignment: start;
-
-                Text {
-                    text: item.created_date_str;
-                    color: Theme.text-muted;
-                    font-size: 11px;
-                    vertical-alignment: center;
-                    overflow: elide;
-                }
-            }
-        }
-
-        // Column 4: Filesize (MB)
-        Rectangle {
-            width: root.col-size-width;
-            clip: true;
-
-            HorizontalLayout {
-                padding-left: 10px;
-                padding-right: 10px;
-                alignment: start;
-
-                Text {
-                    text: item.filesize_str;
-                    color: Theme.text-muted;
-                    font-size: 11px;
-                    vertical-alignment: center;
-                    overflow: elide;
-                }
-            }
-        }
-
-        // Column 5: Rating
-        Rectangle {
-            width: root.col-rating-width;
-            clip: true;
-
-            HorizontalLayout {
-                padding-left: 10px;
-                padding-right: 10px;
-                alignment: start;
-
-                Text {
-                    text: item.rating_str;
-                    color: item.rating > 0 ? Theme.rating-color(item.rating) : Theme.text-muted;
-                    font-weight: item.rating > 0 ? 700 : 400;
-                    font-size: 11px;
-                    vertical-alignment: center;
-                    overflow: elide;
-                }
-            }
-        }
-
-        // Column 6: Tags
-        Rectangle {
-            width: root.col-tags-width;
-            clip: true;
-
-            HorizontalLayout {
-                padding-left: 10px;
-                padding-right: 10px;
-                alignment: start;
-
-                Text {
-                    text: item.tags_str;
-                    color: item.tags_count > 0 ? Theme.primary : Theme.text-muted;
-                    font-weight: item.tags_count > 0 ? 700 : 400;
-                    font-size: 11px;
-                    vertical-alignment: center;
-                    overflow: elide;
-                }
-            }
-        }
-
-        // Column 7: Width
-        Rectangle {
-            width: root.col-width-width;
-            clip: true;
-
-            HorizontalLayout {
-                padding-left: 10px;
-                padding-right: 10px;
-                alignment: start;
-
-                Text {
-                    text: item.width_str;
-                    color: Theme.text-muted;
-                    font-size: 11px;
-                    vertical-alignment: center;
-                    overflow: elide;
-                }
-            }
-        }
-
-        // Column 8: Height
-        Rectangle {
-            width: root.col-height-width;
-            clip: true;
-
-            HorizontalLayout {
-                padding-left: 10px;
-                padding-right: 10px;
-                alignment: start;
-
-                Text {
-                    text: item.height_str;
-                    color: Theme.text-muted;
-                    font-size: 11px;
-                    vertical-alignment: center;
-                    overflow: elide;
-                }
-            }
-        }
-
-        // Column 9: AR
-        Rectangle {
-            width: root.col-ar-width;
-            clip: true;
-
-            HorizontalLayout {
-                padding-left: 10px;
-                padding-right: 10px;
-                alignment: start;
-
-                Text {
-                    text: item.ar_str;
-                    color: Theme.text-muted;
-                    font-size: 11px;
-                    vertical-alignment: center;
-                    overflow: elide;
-                }
-            }
-        }
-
-        // Column 10: Duration
-        Rectangle {
-            width: root.col-duration-width;
-            clip: true;
-
-            HorizontalLayout {
-                padding-left: 10px;
-                padding-right: 10px;
-                alignment: start;
-
-                Text {
-                    text: item.duration_str;
-                    color: Theme.text-muted;
-                    font-size: 11px;
-                    vertical-alignment: center;
-                    overflow: elide;
-                }
-            }
-        }
-
-        // Column 11: Format
-        Rectangle {
-            width: root.col-format-width;
-            clip: true;
-
-            HorizontalLayout {
-                padding-left: 10px;
-                padding-right: 10px;
-                alignment: start;
-
-                Text {
-                    text: item.format_str;
-                    color: Theme.text-muted;
-                    font-size: 11px;
-                    vertical-alignment: center;
-                    overflow: elide;
-                }
-            }
-        }
-
-        // Column 12: Flags
-        Rectangle {
-            width: root.col-flags-width;
-            clip: true;
-
-            HorizontalLayout {
-                padding-left: 10px;
-                padding-right: 10px;
-                alignment: start;
-
-                Text {
-                    text: item.flags_str;
-                    color: item.is-pending ? Theme.status-pending : (
-                        item.is-deleted ? Theme.status-deleted : (
-                            item.is-corrupted ? Theme.status-corrupt : Theme.status-ok
-                        )
-                    );
-                    font-weight: (item.is-pending || item.is-deleted || item.is-corrupted) ? 700 : 400;
-                    font-size: 11px;
-                    vertical-alignment: center;
-                    overflow: elide;
-                }
-            }
-        }
+    }
+    TableCell { column: 1; text: item.path_str; }
+    TableCell { column: 2; text: item.modified_date_str; }
+    TableCell { column: 3; text: item.created_date_str; }
+    TableCell { column: 4; text: item.filesize_str; }
+    TableCell {
+        column: 5;
+        text: item.rating_str;
+        text-color: item.rating > 0 ? Theme.rating-color(item.rating) : Theme.text-muted;
+        weight: item.rating > 0 ? 700 : 400;
+    }
+    TableCell {
+        column: 6;
+        text: item.tags_str;
+        text-color: item.tags_count > 0 ? Theme.primary : Theme.text-muted;
+        weight: item.tags_count > 0 ? 700 : 400;
+    }
+    TableCell { column: 7; text: item.width_str; }
+    TableCell { column: 8; text: item.height_str; }
+    TableCell { column: 9; text: item.ar_str; }
+    TableCell { column: 10; text: item.duration_str; }
+    TableCell { column: 11; text: item.format_str; }
+    TableCell {
+        column: 12;
+        text: item.flags_str;
+        text-color: item.is-pending ? Theme.status-pending : (
+            item.is-deleted ? Theme.status-deleted : (
+                item.is-corrupted ? Theme.status-corrupt : Theme.status-ok
+            )
+        );
+        weight: (item.is-pending || item.is-deleted || item.is-corrupted) ? 700 : 400;
     }
 }
 
@@ -417,19 +176,19 @@ export component MediaTableView inherits Rectangle {
     in property <length> rubberband-height: 0px;
 
     // All 13 Table Column Widths
-    in-out property <length> col-filename-width: 260px;
-    in-out property <length> col-path-width: 180px;
-    in-out property <length> col-modified-date-width: 145px;
-    in-out property <length> col-created-date-width: 145px;
-    in-out property <length> col-size-width: 95px;
-    in-out property <length> col-rating-width: 65px;
-    in-out property <length> col-tags-width: 65px;
-    in-out property <length> col-width-width: 70px;
-    in-out property <length> col-height-width: 70px;
-    in-out property <length> col-ar-width: 65px;
-    in-out property <length> col-duration-width: 110px;
-    in-out property <length> col-format-width: 75px;
-    in-out property <length> col-flags-width: 85px;
+    in-out property <length> col-filename-width <=> TableColumns.w0;
+    in-out property <length> col-path-width <=> TableColumns.w1;
+    in-out property <length> col-modified-date-width <=> TableColumns.w2;
+    in-out property <length> col-created-date-width <=> TableColumns.w3;
+    in-out property <length> col-size-width <=> TableColumns.w4;
+    in-out property <length> col-rating-width <=> TableColumns.w5;
+    in-out property <length> col-tags-width <=> TableColumns.w6;
+    in-out property <length> col-width-width <=> TableColumns.w7;
+    in-out property <length> col-height-width <=> TableColumns.w8;
+    in-out property <length> col-ar-width <=> TableColumns.w9;
+    in-out property <length> col-duration-width <=> TableColumns.w10;
+    in-out property <length> col-format-width <=> TableColumns.w11;
+    in-out property <length> col-flags-width <=> TableColumns.w12;
 
     callback item-clicked(int /* id */, bool /* ctrl */, bool /* shift */);
     callback item-middle-clicked(int /* id */);
@@ -437,6 +196,8 @@ export component MediaTableView inherits Rectangle {
     callback sort-clicked(int /* column_index */);
     callback column-resized(int /* column_index */, length /* new_width */);
     callback column-resize-finished(int /* column_index */, length /* final_width */);
+    /// A header was dragged to another place of the display order.
+    callback column-moved(int /* from_place */, int /* to_place */);
     callback background-clicked();
     callback background-context-menu(length /* x */, length /* y */);
     /// The viewport moved or changed size: Rust keeps the rows around it filled (see `ui::browse_window`).
@@ -454,19 +215,7 @@ export component MediaTableView inherits Rectangle {
     callback rubberband-moved(length /* content_x */, length /* content_y */, length /* view_x */, length /* view_y */);
     callback rubberband-ended();
 
-    property <length> total-columns-width: root.col-filename-width
-        + root.col-path-width
-        + root.col-modified-date-width
-        + root.col-created-date-width
-        + root.col-size-width
-        + root.col-rating-width
-        + root.col-tags-width
-        + root.col-width-width
-        + root.col-height-width
-        + root.col-ar-width
-        + root.col-duration-width
-        + root.col-format-width
-        + root.col-flags-width;
+    property <length> total-columns-width: TableColumns.total;
 
     property <length> content-scroll-width: Math.max(self.width, root.total-columns-width);
 
@@ -512,6 +261,23 @@ export component MediaTableView inherits Rectangle {
 
     public function scroll-by(dy: length) {
         scroll-area.handle-scroll(0px, dy);
+    }
+
+    /// Where the handle that resizes column `index` is in the view, for the performance probe.
+    pure public function probe-column-edge(index: int) -> length {
+        let edge = TableColumns.x(index) + TableColumns.w(index);
+        // Two pixels left of the edge: the right half of the handle lies under the next column's header.
+        return edge + scroll-area.clamped-x - 2px;
+    }
+
+    /// The middle of the header of column `index` in the view, for the performance probe.
+    pure public function probe-header-x(index: int) -> length {
+        return TableColumns.x(index) + TableColumns.w(index) / 2 + scroll-area.clamped-x;
+    }
+
+    /// The middle of the row at list position `index` in the view, for the performance probe.
+    pure public function probe-row-y(index: int) -> length {
+        return 28px + (index + 0.5) * root.row-height + scroll-area.clamped-y;
     }
 
     pure public function get-viewport-y() -> length {
@@ -564,31 +330,16 @@ export component MediaTableView inherits Rectangle {
                 width: root.content-scroll-width;
                 height: 100%;
 
-                MediaHeaderBar {
+                TableHeader {
                     width: 100%;
                     height: 100%;
                     sort-column: root.sort-column;
                     sort-order: root.sort-order;
-                    enable-resize: true;
-                    auto-width: false;
-
-                    col-filename-width <=> root.col-filename-width;
-                    col-path-width <=> root.col-path-width;
-                    col-modified-date-width <=> root.col-modified-date-width;
-                    col-created-date-width <=> root.col-created-date-width;
-                    col-size-width <=> root.col-size-width;
-                    col-rating-width <=> root.col-rating-width;
-                    col-tags-width <=> root.col-tags-width;
-                    col-width-width <=> root.col-width-width;
-                    col-height-width <=> root.col-height-width;
-                    col-ar-width <=> root.col-ar-width;
-                    col-duration-width <=> root.col-duration-width;
-                    col-format-width <=> root.col-format-width;
-                    col-flags-width <=> root.col-flags-width;
 
                     sort-clicked(idx) => { root.sort-clicked(idx); }
                     column-resized(idx, w) => { root.column-resized(idx, w); }
                     column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
+                    column-moved(from, to) => { root.column-moved(from, to); }
                 }
             }
         }
@@ -688,20 +439,6 @@ export component MediaTableView inherits Rectangle {
                     visible: item.index >= 0;
                     is-drop-target: item.is-folder && item.id == root.drop-target-row-id;
 
-                    col-filename-width: root.col-filename-width;
-                    col-path-width: root.col-path-width;
-                    col-modified-date-width: root.col-modified-date-width;
-                    col-created-date-width: root.col-created-date-width;
-                    col-size-width: root.col-size-width;
-                    col-rating-width: root.col-rating-width;
-                    col-tags-width: root.col-tags-width;
-                    col-width-width: root.col-width-width;
-                    col-height-width: root.col-height-width;
-                    col-ar-width: root.col-ar-width;
-                    col-duration-width: root.col-duration-width;
-                    col-format-width: root.col-format-width;
-                    col-flags-width: root.col-flags-width;
-
                     scroll-offset-x: scroll-area.clamped-x;
 
                     ensure-focus => { root.ensure-focus(); }
@@ -740,5 +477,41 @@ export component MediaTableView inherits Rectangle {
                 }
             }
         }
+    }
+    // A header that is dragged: where the column lands, then the column itself under the pointer (over header and rows).
+    if TableColumns.drag-place >= 0 && TableColumns.drag-to >= 0: ColumnDropGap {
+        x: TableColumns.gap-x + scroll-area.clamped-x;
+        y: 1px;
+        width: TableColumns.drag-w;
+        height: root.height - 2px;
+        animate x { duration: TableColumns.motion; easing: ease-out; }
+    }
+    if TableColumns.drag-place >= 0: Rectangle {
+        x: Math.max(0px, Math.min(TableColumns.total - TableColumns.drag-w, TableColumns.x(TableColumns.drag-column) + TableColumns.drag-dx))
+            + scroll-area.clamped-x;
+        y: 0;
+        width: TableColumns.drag-w;
+        height: root.height;
+        background: Theme.surface-selected.with-alpha(0.6);
+
+        DashedFrame { stroke: Theme.primary; }
+        Text {
+            x: 8px;
+            y: 0;
+            width: parent.width - 16px;
+            height: 28px;
+            text: TableColumns.title(TableColumns.drag-column);
+            font-size: 11px;
+            font-weight: 600;
+            color: Theme.text;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+
+    Timer {
+        interval: 220ms;
+        running: TableColumns.settling;
+        triggered => { TableColumns.settling = false; }
     }
 }

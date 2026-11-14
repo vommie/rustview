@@ -21,6 +21,9 @@ use std::time::Instant;
 /// persistence, height restoration, and interactive toggles.
 pub struct BridgeTagHistory;
 
+/// A panel narrower than this has no size yet (`ui/tag_history_panel.slint` reports nothing below it either).
+const MIN_HISTORY_WIDTH: f32 = 20.0;
+
 impl BridgeTagHistory {
     /// Validates and initializes Tag History from settings and database, synchronizing with UI.
     pub fn init(window: &MainWindow, library: &Library, settings: &SettingsManager, state: &RwLock<UiState>) {
@@ -67,6 +70,8 @@ impl BridgeTagHistory {
         let t0 = Instant::now();
         let is_tab_mode = window.get_active_view_mode() == 1;
 
+        // The width the panel has right now; the stored one only while the panel has no size yet (a hidden sidebar).
+        let live_width = window.get_tag_history_width();
         let (history_ids, history_height, available_w, selected_file_ids, has_selection) = {
             let s = state.read();
             let file_ids = if is_tab_mode {
@@ -80,7 +85,11 @@ impl BridgeTagHistory {
             (
                 s.tag_history_ids.clone(),
                 s.tag_history_height,
-                s.tag_history_available_width,
+                if live_width > MIN_HISTORY_WIDTH {
+                    live_width
+                } else {
+                    s.tag_history_available_width
+                },
                 file_ids,
                 has_sel,
             )

@@ -213,6 +213,9 @@ pub struct ViewSettings {
     pub col_duration_width: f32,
     pub col_format_width: f32,
     pub col_flags_width: f32,
+    /// The columns of the Browse table in display order, by key (`settings/table_columns.rs`); empty in a settings file
+    /// of 0.6.15 or older, which means the default order.
+    pub table_column_order: Vec<String>,
 
     pub sidebar_left_width: f32,
     pub sidebar_right_width: f32,
@@ -265,6 +268,7 @@ impl Default for ViewSettings {
             col_duration_width: DEFAULT_COL_DURATION_WIDTH,
             col_format_width: DEFAULT_COL_FORMAT_WIDTH,
             col_flags_width: DEFAULT_COL_FLAGS_WIDTH,
+            table_column_order: crate::settings::table_columns::default_order(),
 
             sidebar_left_width: DEFAULT_SIDEBAR_LEFT_WIDTH,
             sidebar_right_width: DEFAULT_SIDEBAR_RIGHT_WIDTH,

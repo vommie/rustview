@@ -1,0 +1,358 @@
+import { Theme } from "styles.slint";
+import { IconId, IconSize, IconSlot } from "icons.slint";
+
+/// How long a column takes to move aside while another one is dragged (as in RustCut and RustMule).
+export global ColumnMotion {
+    out property <duration> shift: 140ms;
+}
+
+/// Where the dragged column would land: a faint outline as wide as the column.
+export component ColumnDropGap inherits Rectangle {
+    border-radius: 4px;
+    background: Theme.primary.with-alpha(0.08);
+    border-width: 1px;
+    border-color: Theme.primary.with-alpha(0.55);
+}
+
+/// A dashed outline (Slint draws no dashed borders): dashes along the four edges.
+export component DashedFrame inherits Rectangle {
+    in property <color> stroke;
+    property <length> dash: 5px;
+    property <length> step: 9px;
+
+    for i in Math.floor(root.width / root.step): Rectangle {
+        x: i * root.step;
+        y: 0;
+        width: root.dash;
+        height: 1px;
+        background: root.stroke;
+    }
+
+    for i in Math.floor(root.width / root.step): Rectangle {
+        x: i * root.step;
+        y: root.height - 1px;
+        width: root.dash;
+        height: 1px;
+        background: root.stroke;
+    }
+
+    for i in Math.floor(root.height / root.step): Rectangle {
+        x: 0;
+        y: i * root.step;
+        width: 1px;
+        height: root.dash;
+        background: root.stroke;
+    }
+
+    for i in Math.floor(root.height / root.step): Rectangle {
+        x: root.width - 1px;
+        y: i * root.step;
+        width: 1px;
+        height: root.dash;
+        background: root.stroke;
+    }
+}
+
+/// The columns of the Browse table: their widths, their order and, derived from both, where each one starts.
+///
+/// A column is known by its number (0 = Filename ... 12 = Flags, the numbers the sort settings use). The widths are the
+/// window's `col-*-width` properties (`settings.json`: `view.col_*_width`), the order comes from Rust
+/// (`view.table_column_order`). Header cells and row cells read their place from here, so resizing or moving a column
+/// changes a handful of properties and no model.
+export global TableColumns {
+    in-out property <length> w0: 260px;
+    in-out property <length> w1: 180px;
+    in-out property <length> w2: 145px;
+    in-out property <length> w3: 145px;
+    in-out property <length> w4: 95px;
+    in-out property <length> w5: 65px;
+    in-out property <length> w6: 65px;
+    in-out property <length> w7: 70px;
+    in-out property <length> w8: 70px;
+    in-out property <length> w9: 65px;
+    in-out property <length> w10: 110px;
+    in-out property <length> w11: 75px;
+    in-out property <length> w12: 85px;
+
+    /// The columns in display order, and the display place of every column (`rank[column]`).
+    in property <[int]> order: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+    in property <[int]> rank: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+
+    /// The width of column `other` when it stands left of column `column`.
+    pure function lead(column: int, other: int, width: length) -> length {
+        return root.rank[other] < root.rank[column] ? width : 0px;
+    }
+    pure function start(c: int) -> length {
+        return root.lead(c, 0, root.w0) + root.lead(c, 1, root.w1) + root.lead(c, 2, root.w2) + root.lead(c, 3, root.w3)
+            + root.lead(c, 4, root.w4) + root.lead(c, 5, root.w5) + root.lead(c, 6, root.w6) + root.lead(c, 7, root.w7)
+            + root.lead(c, 8, root.w8) + root.lead(c, 9, root.w9) + root.lead(c, 10, root.w10)
+            + root.lead(c, 11, root.w11) + root.lead(c, 12, root.w12);
+    }
+    out property <length> x0: root.start(0);
+    out property <length> x1: root.start(1);
+    out property <length> x2: root.start(2);
+    out property <length> x3: root.start(3);
+    out property <length> x4: root.start(4);
+    out property <length> x5: root.start(5);
+    out property <length> x6: root.start(6);
+    out property <length> x7: root.start(7);
+    out property <length> x8: root.start(8);
+    out property <length> x9: root.start(9);
+    out property <length> x10: root.start(10);
+    out property <length> x11: root.start(11);
+    out property <length> x12: root.start(12);
+    out property <length> total: root.w0 + root.w1 + root.w2 + root.w3 + root.w4 + root.w5 + root.w6 + root.w7 + root.w8
+        + root.w9 + root.w10 + root.w11 + root.w12;
+
+    /// Where column `c` starts, left edge of the table = 0.
+    pure public function x(c: int) -> length {
+        return c == 0 ? root.x0 : c == 1 ? root.x1 : c == 2 ? root.x2 : c == 3 ? root.x3 : c == 4 ? root.x4
+            : c == 5 ? root.x5 : c == 6 ? root.x6 : c == 7 ? root.x7 : c == 8 ? root.x8 : c == 9 ? root.x9
+            : c == 10 ? root.x10 : c == 11 ? root.x11 : root.x12;
+    }
+    pure public function w(c: int) -> length {
+        return c == 0 ? root.w0 : c == 1 ? root.w1 : c == 2 ? root.w2 : c == 3 ? root.w3 : c == 4 ? root.w4
+            : c == 5 ? root.w5 : c == 6 ? root.w6 : c == 7 ? root.w7 : c == 8 ? root.w8 : c == 9 ? root.w9
+            : c == 10 ? root.w10 : c == 11 ? root.w11 : root.w12;
+    }
+    public function set-w(c: int, width: length) {
+        if c == 0 { root.w0 = width; } else if c == 1 { root.w1 = width; } else if c == 2 { root.w2 = width; }
+        else if c == 3 { root.w3 = width; } else if c == 4 { root.w4 = width; } else if c == 5 { root.w5 = width; }
+        else if c == 6 { root.w6 = width; } else if c == 7 { root.w7 = width; } else if c == 8 { root.w8 = width; }
+        else if c == 9 { root.w9 = width; } else if c == 10 { root.w10 = width; } else if c == 11 { root.w11 = width; }
+        else { root.w12 = width; }
+    }
+    pure public function min-w(c: int) -> length {
+        return c <= 1 ? 80px : c <= 3 ? 90px : c == 4 ? 70px : c <= 8 ? 50px : c == 9 ? 45px : c == 10 ? 80px : 55px;
+    }
+    pure public function title(c: int) -> string {
+        return c == 0 ? "Filename" : c == 1 ? "Path" : c == 2 ? "Modified Date" : c == 3 ? "Created Date"
+            : c == 4 ? "Filesize (MB)" : c == 5 ? "Rating" : c == 6 ? "Tags" : c == 7 ? "Width" : c == 8 ? "Height"
+            : c == 9 ? "AR" : c == 10 ? "Duration" : c == 11 ? "Format" : "Flags";
+    }
+
+    // Moving a column, as in RustCut and RustMule: the grabbed column's ghost follows the pointer, a gap shows where it
+    // lands and the columns in between move aside (animated); Escape cancels.
+    /// The display place of the column that is dragged (-1: none), how far the pointer moved and the place it would take.
+    in-out property <int> drag-place: -1;
+    in-out property <length> drag-dx;
+    in-out property <int> drag-to: -1;
+    /// The columns still move to their new places after a drop or a cancel.
+    in-out property <bool> settling;
+    out property <int> drag-column: root.drag-place >= 0 && root.drag-place < root.order.length ? root.order[root.drag-place] : -1;
+    out property <length> drag-w: root.drag-column >= 0 ? root.w(root.drag-column) : 0px;
+    /// Columns animate only while a drag runs or settles, never while a column is resized.
+    out property <duration> motion: root.drag-place >= 0 || root.settling ? ColumnMotion.shift : 0ms;
+    out property <length> gap-x: root.drag-to < 0 || root.drag-to >= root.order.length ? 0px
+        : root.drag-to > root.drag-place ? root.x(root.order[root.drag-to]) + root.w(root.order[root.drag-to]) - root.drag-w
+        : root.x(root.order[root.drag-to]);
+
+    /// How far the column at display place `place` moves aside for the dragged one.
+    pure public function shift(place: int) -> length {
+        if root.drag-place < 0 || place == root.drag-place || root.drag-to < 0 {
+            return 0px;
+        }
+        if root.drag-to > root.drag-place && place > root.drag-place && place <= root.drag-to {
+            return -root.drag-w;
+        }
+        if root.drag-to < root.drag-place && place >= root.drag-to && place < root.drag-place {
+            return root.drag-w;
+        }
+        return 0px;
+    }
+
+    pure function left-of(c: int, middle: length) -> int {
+        return root.x(c) + root.w(c) / 2 < middle ? 1 : 0;
+    }
+    /// The display place a column dragged from `from` takes when the middle of its ghost is at `middle`: the number of
+    /// columns whose middle lies left of it (the dragged one itself does not count twice).
+    pure public function drop-place(from: int, middle: length) -> int {
+        let left = root.left-of(0, middle) + root.left-of(1, middle) + root.left-of(2, middle) + root.left-of(3, middle)
+            + root.left-of(4, middle) + root.left-of(5, middle) + root.left-of(6, middle) + root.left-of(7, middle)
+            + root.left-of(8, middle) + root.left-of(9, middle) + root.left-of(10, middle) + root.left-of(11, middle)
+            + root.left-of(12, middle);
+        return Math.min(root.order.length - 1, left > from ? left - 1 : left);
+    }
+    public function end-drag() {
+        root.drag-place = -1;
+        root.drag-to = -1;
+        root.settling = true;
+    }
+}
+
+/// The header of one table column: a click sorts, a drag moves the column, the right edge changes its width.
+export component TableHeaderCell inherits Rectangle {
+    /// The column's number and its display place.
+    in property <int> column;
+    in property <int> place;
+    in property <int> active-sort-column: 0;
+    in property <int> active-sort-order: 0; // 0 = Ascending, 1 = Descending
+
+    callback sort-clicked(int /* column */);
+    callback column-resized(int /* column */, length /* new_width */);
+    callback column-resize-finished(int /* column */, length /* final_width */);
+    /// The column was dropped at another display place.
+    callback moved-to(int /* from_place */, int /* to_place */);
+
+    property <bool> is-sorted: root.column == root.active-sort-column;
+    property <length> press-x;
+    property <bool> moving;
+    property <length> start-abs;
+    property <length> start-width;
+    property <bool> resizing;
+
+    background: touch.has-hover && !root.moving ? Theme.surface-hover : Theme.surface;
+
+    touch := TouchArea {
+        mouse-cursor: root.moving ? MouseCursor.grabbing : MouseCursor.pointer;
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                root.press-x = self.mouse-x;
+                root.moving = false;
+            } else if event.kind == PointerEventKind.up && event.button == PointerEventButton.left {
+                if root.moving {
+                    root.moving = false;
+                    // Escape may have canceled the drag: then nothing moves.
+                    if TableColumns.drag-place == root.place {
+                        if TableColumns.drag-to >= 0 && TableColumns.drag-to != root.place {
+                            root.moved-to(root.place, TableColumns.drag-to);
+                        }
+                        TableColumns.end-drag();
+                    }
+                } else {
+                    root.sort-clicked(root.column);
+                }
+            }
+        }
+        // 6 px of movement turn a press into a drag (a click sorts).
+        moved => {
+            if self.pressed && (root.moving || Math.abs(self.mouse-x - root.press-x) > 6px) {
+                root.moving = true;
+                TableColumns.drag-place = root.place;
+                TableColumns.drag-dx = self.mouse-x - root.press-x;
+                TableColumns.drag-to = TableColumns.drop-place(root.place,
+                    TableColumns.x(root.column) + TableColumns.drag-dx + root.width / 2);
+            }
+        }
+    }
+
+    Text {
+        x: 8px;
+        width: Math.max(0px, parent.width - 16px - (root.is-sorted ? IconSize.sm + 5px : 0px));
+        height: parent.height;
+        text: TableColumns.title(root.column);
+        color: root.is-sorted ? Theme.primary : Theme.text;
+        font-weight: 700;
+        font-size: 11px;
+        vertical-alignment: center;
+        horizontal-alignment: left;
+        overflow: elide;
+    }
+
+    // Directional sort indicator (ascending / descending), right of the title.
+    if root.is-sorted: IconSlot {
+        x: parent.width - 8px - self.width;
+        height: parent.height;
+        icon: root.active-sort-order == 0 ? IconId.sort-ascending : IconId.sort-descending;
+        size: IconSize.sm;
+        color: Theme.primary;
+    }
+
+    Rectangle {
+        x: parent.width - 1px;
+        width: 1px;
+        height: 100%;
+        background: Theme.border;
+    }
+
+    // The right edge: a drag changes the width.
+    edge := TouchArea {
+        x: parent.width - 5px;
+        width: 6px;
+        height: 100%;
+        mouse-cursor: MouseCursor.col-resize;
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                root.start-abs = self.absolute-position.x + self.mouse-x;
+                root.start-width = root.width;
+                root.resizing = false;
+            } else if event.kind == PointerEventKind.up && event.button == PointerEventButton.left && root.resizing {
+                root.resizing = false;
+                root.column-resize-finished(root.column, root.width);
+            }
+        }
+        moved => {
+            if self.pressed && Math.abs(self.absolute-position.x + self.mouse-x - root.start-abs) >= 2px {
+                root.resizing = true;
+            }
+            if self.pressed && root.resizing {
+                TableColumns.set-w(root.column, Math.max(TableColumns.min-w(root.column),
+                    root.start-width + self.absolute-position.x + self.mouse-x - root.start-abs));
+                root.column-resized(root.column, root.width);
+            }
+        }
+    }
+}
+
+/// The header of the table: the columns in their display order.
+export component TableHeader inherits Rectangle {
+    in property <int> sort-column: 0;
+    in property <int> sort-order: 0;
+
+    callback sort-clicked(int /* column */);
+    callback column-resized(int /* column */, length /* new_width */);
+    callback column-resize-finished(int /* column */, length /* final_width */);
+    callback column-moved(int /* from_place */, int /* to_place */);
+
+    background: Theme.surface;
+
+    for column[place] in TableColumns.order: TableHeaderCell {
+        x: TableColumns.x(column) + TableColumns.shift(place);
+        animate x { duration: TableColumns.motion; easing: ease-out; }
+        width: TableColumns.w(column);
+        height: parent.height;
+        opacity: place == TableColumns.drag-place ? 0 : 1;
+        column: column;
+        place: place;
+        active-sort-column: root.sort-column;
+        active-sort-order: root.sort-order;
+        sort-clicked(c) => { root.sort-clicked(c); }
+        column-resized(c, w) => { root.column-resized(c, w); }
+        column-resize-finished(c, w) => { root.column-resize-finished(c, w); }
+        moved-to(from, to) => { root.column-moved(from, to); }
+    }
+}
+
+/// One cell of a table row. It has a fixed place and size, so its text is never measured for a layout: a row that scrolls
+/// in costs one text layout per visible cell when it is drawn, and a row outside the view costs nothing.
+export component TableCell inherits Rectangle {
+    in property <int> column;
+    in property <string> text;
+    in property <color> text-color: Theme.text-muted;
+    in property <int> weight: 400;
+    in property <bool> italic: false;
+    /// Room in front of the text (the name column keeps it for the folder icon).
+    in property <length> inset: 10px;
+
+    x: TableColumns.x(root.column) + TableColumns.shift(TableColumns.rank[root.column]);
+    animate x { duration: TableColumns.motion; easing: ease-out; }
+    width: TableColumns.w(root.column);
+    height: 100%;
+    opacity: root.column == TableColumns.drag-column ? 0 : 1;
+    clip: true;
+
+    Text {
+        x: root.inset;
+        width: Math.max(0px, root.width - root.inset - 10px);
+        height: root.height;
+        text: root.text;
+        color: root.text-color;
+        font-size: 11px;
+        font-weight: root.weight;
+        font-italic: root.italic;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+
+    @children
+}

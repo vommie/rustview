@@ -147,19 +147,27 @@ impl TagTreeBuilder {
             .to_int::<usize>()
     }
 
-    pub fn chunk_into_columns(nodes: &[TagNodeView], available_height: f32) -> (Vec<TagColumnView>, usize) {
-        let total_items = nodes.len();
-        if total_items == 0 {
-            return (Vec::new(), 1);
-        }
-
+    /// How many rows of the normal tree fit into one column of `available_height` (at least one).
+    pub fn rows_per_column(available_height: f32) -> usize {
         let usable_h = (available_height - (TAG_PADDING_V * 2.0)).max(TAG_ITEM_HEIGHT);
         let stride_y = TAG_ITEM_HEIGHT + TAG_ROW_SPACING;
-        let rows_per_col = ((usable_h + TAG_ROW_SPACING) / stride_y)
+        ((usable_h + TAG_ROW_SPACING) / stride_y)
             .floor()
             .max(1.0)
-            .to_int::<usize>();
+            .to_int::<usize>()
+    }
 
+    /// The rows per column of the tree in its current mode: the only thing of the tree's layout that depends on its height.
+    pub fn rows_for(compact: bool, available_height: f32) -> usize {
+        if compact {
+            Self::rows_per_compact_column(available_height)
+        } else {
+            Self::rows_per_column(available_height)
+        }
+    }
+
+    pub fn chunk_into_columns(nodes: &[TagNodeView], available_height: f32) -> (Vec<TagColumnView>, usize) {
+        let rows_per_col = Self::rows_per_column(available_height);
         let mut columns = Vec::new();
         for chunk in nodes.chunks(rows_per_col) {
             columns.push(TagColumnView {
@@ -315,6 +323,69 @@ impl TagTreeSync {
 #[cfg(test)]
 mod tests {
     use super::TagTreeBuilder;
+
+    #[test]
+    fn the_rows_of_a_column_follow_the_height_of_the_tree() {
+        // n rows take n * 22 + (n - 1) * 2 inside the padding of 4 + 4.
+        assert_eq!(TagTreeBuilder::rows_per_column(450.0), 18);
+        assert_eq!(TagTreeBuilder::rows_per_column(518.7), 21);
+        assert_eq!(TagTreeBuilder::rows_per_column(900.0), 37);
+        assert_eq!(TagTreeBuilder::rows_per_column(0.0), 1);
+        // A resizer that moves by a few pixels rarely changes the rows: the tree is refilled only when they change.
+        assert_eq!(
+            TagTreeBuilder::rows_for(false, 500.0),
+            TagTreeBuilder::rows_for(false, 505.0)
+        );
+        assert_ne!(
+            TagTreeBuilder::rows_for(false, 500.0),
+            TagTreeBuilder::rows_for(false, 530.0)
+        );
+        assert_eq!(
+            TagTreeBuilder::rows_for(true, 613.0),
+            TagTreeBuilder::rows_per_compact_column(613.0)
+        );
+        // An empty tree still knows its rows, so a later height report is compared with the right number.
+        let (columns, rows) = TagTreeBuilder::chunk_into_columns(&[], 518.7);
+        assert_eq!(columns.len(), 0);
+        assert_eq!(rows, 21);
+    }
+
+    /// The tag tree was drawn with the rows of a default height (lower part empty) when its height report never came:
+    /// the report belongs to an element that lives as long as the panel, and Rust reads the height itself.
+    #[test]
+    fn the_tree_height_does_not_depend_on_a_report_of_the_late_created_lists() {
+        let panel = include_str!("../../../ui/tag_panel.slint");
+        let area = panel
+            .split("tree-area := Rectangle {")
+            .nth(1)
+            .expect("the tree area exists");
+        let before_lists = area
+            .split("if !root.compact-tree: TagTreeList")
+            .next()
+            .expect("the lists follow");
+        assert!(
+            before_lists.contains("changed height =>"),
+            "the tree area itself reports its height"
+        );
+        assert!(panel.contains("out property <length> tree-height: tree-area.height;"));
+        let after_area = panel
+            .split("tree-area := Rectangle {")
+            .nth(1)
+            .expect("the tree area exists");
+        let lists = after_area
+            .split("if !root.compact-tree: TagTreeList")
+            .nth(1)
+            .expect("the lists follow");
+        assert!(
+            !lists.contains("tree-geometry-changed(h) =>"),
+            "the lists no longer forward their own report"
+        );
+        let bridge = include_str!("mod.rs");
+        assert!(
+            bridge.contains("window.get_tag_tree_height()"),
+            "reload_tags reads the live height"
+        );
+    }
 
     #[test]
     fn compact_columns_hold_more_rows_than_normal_ones() {

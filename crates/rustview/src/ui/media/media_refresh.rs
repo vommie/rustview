@@ -5,7 +5,7 @@ use crate::ui::MainWindow;
 use crate::ui::browse_window::{apply_record, update_tile};
 use crate::ui::file_dialogs::missing::{MissingFileDialogController, MissingFileItem};
 use crate::ui::media::inspector::BridgeInspector;
-use crate::ui::models::rgb8_to_shared_buffer;
+use crate::ui::models::thumbnail_image;
 use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::tabs::BridgeViewerTabs;
@@ -20,7 +20,7 @@ use rustview_core::media::{MediaFormat, MediaHasher, MediaType};
 use rustview_core::settings::{LogObscurer, SettingsManager};
 use rustview_core::thumbnails::{ThumbnailConfig, ThumbnailGenerator, ThumbnailManager, VideoPreviewRecord};
 use rustview_core::util::cast::SaturatingAs;
-use slint::{ComponentHandle, Image};
+use slint::ComponentHandle;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -437,13 +437,12 @@ impl BridgeMedia {
 
                         for item in &successful_items {
                             if item.primary_width > 0 && item.primary_height > 0 && !item.primary_pixels.is_empty() {
-                                let shared_buf = rgb8_to_shared_buffer(
-                                    &item.primary_pixels,
+                                st.thumbs.insert_rgb(
+                                    item.media_id,
                                     item.primary_width,
                                     item.primary_height,
+                                    &item.primary_pixels,
                                 );
-
-                                st.thumbs.insert(item.media_id, shared_buf.clone());
                             }
 
                             st.mark_list_bytes_dirty();
@@ -475,7 +474,7 @@ impl BridgeMedia {
                             let indexed = st_read.record_by_id(item.media_id);
                             update_tile(&w, &st_read, item.media_id, |view| {
                                 if let Some(buf) = fresh_image {
-                                    view.thumbnail = Image::from_rgb8(buf);
+                                    view.thumbnail = thumbnail_image(buf);
                                 }
                                 if let Some(indexed) = indexed {
                                     apply_record(view, indexed);

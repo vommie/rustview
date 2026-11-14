@@ -1,0 +1,30 @@
+# Thumbnail view of a 100,000-item folder: scrolling from slow to very fast, and the mouse wheel.
+ready
+view grid
+folder Flat-100k
+settle 1200
+begin grid_scroll_3000
+scroll 3000 3
+end
+settle 600
+begin grid_scroll_12000
+scroll 12000 3
+end
+settle 600
+begin grid_scroll_25000
+scroll 25000 3
+end
+settle 600
+begin grid_scroll_40000
+scroll 40000 3
+end
+settle 600
+begin grid_wheel_25
+wheel 25 3
+end
+settle 600
+begin grid_back_12000
+scroll -12000 3
+end
+settle 400
+quit

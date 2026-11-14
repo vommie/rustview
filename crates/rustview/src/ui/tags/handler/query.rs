@@ -6,7 +6,6 @@ use super::{QueryTimings, TagActionHandler};
 use crate::ui::list_loader;
 use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::media::{BridgeMedia, MediaReloadOptions, PendingList};
-use crate::ui::models::rgb8_to_shared_buffer;
 use crate::ui::status_bar::StatusBarBridge;
 use rustview_core::library::models::{FolderId, MediaId, MediaRecord, MediaSearchParams};
 use rustview_core::query::{MediaStore, ScopeMode, lay_out};
@@ -317,12 +316,12 @@ impl TagActionHandler {
                                         && item.primary_height > 0
                                         && !item.primary_pixels.is_empty()
                                     {
-                                        let shared_buf = rgb8_to_shared_buffer(
-                                            &item.primary_pixels,
+                                        st.thumbs.insert_rgb(
+                                            item.media_id,
                                             item.primary_width,
                                             item.primary_height,
+                                            &item.primary_pixels,
                                         );
-                                        st.thumbs.insert(item.media_id, shared_buf);
                                     }
 
                                     st.mark_list_bytes_dirty();

@@ -161,4 +161,5 @@ fn release_resources(t: &ShutdownTargets<'_>) {
     crate::ui::dock::release();
     SystemDndHandler::cancel_ghost_overlay();
     t.settings.flush();
+    crate::ui::perf_probe::flush();
 }

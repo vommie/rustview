@@ -7,7 +7,6 @@ use crate::ui::favorites::BridgeFavorites;
 use crate::ui::list_loader;
 use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::media::{BridgeMedia, MediaReloadOptions, PendingList};
-use crate::ui::models::rgb8_to_shared_buffer;
 use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::tags::BridgeTags;
@@ -435,12 +434,12 @@ impl BridgeFolders {
                                             && item.primary_height > 0
                                             && !item.primary_pixels.is_empty()
                                         {
-                                            let shared_buf = rgb8_to_shared_buffer(
-                                                &item.primary_pixels,
+                                            st.thumbs.insert_rgb(
+                                                item.media_id,
                                                 item.primary_width,
                                                 item.primary_height,
+                                                &item.primary_pixels,
                                             );
-                                            st.thumbs.insert(item.media_id, shared_buf);
                                         }
 
                                         st.mark_list_bytes_dirty();

@@ -1,6 +1,7 @@
 //! The callbacks of the tag panel.
 
-use super::{BridgeTags, TagActionContext, TagTreeSync};
+use super::refill_pace::{Refill, RefillPace};
+use super::{BridgeTags, TagActionContext, TagTreeBuilder, TagTreeSync};
 use crate::ui::MainWindow;
 use crate::ui::media::BridgeMedia;
 use crate::ui::state::UiState;
@@ -14,6 +15,17 @@ use rustview_core::util::cast::{SaturatingAs, WrappingAs};
 use slint::ComponentHandle;
 use std::sync::Arc;
 use std::time::Instant;
+
+/// The pace of the tag tree's refills after height changes and the timer of a waiting one (UI thread).
+#[derive(Default)]
+struct PendingRefill {
+    pace: RefillPace,
+    timer: slint::Timer,
+}
+
+thread_local! {
+    static REFILL: std::cell::RefCell<PendingRefill> = std::cell::RefCell::default();
+}
 
 impl BridgeTags {
     pub fn register_callbacks(
@@ -218,23 +230,51 @@ impl BridgeTags {
         let st_geom = state;
         let win_geom = window.clone_strong();
         window.on_tag_tree_geometry_changed(move |available_h| {
-            let (height_changed, prev_h) = {
+            // Only the number of rows per column depends on the height: the tree is filled again when that number
+            // changes, not for every pixel a resizer moves.
+            let rows = TagTreeBuilder::rows_for(win_geom.get_tag_tree_compact(), available_h);
+            let (rows_changed, prev_h, prev_rows) = {
                 let mut st = st_geom.write();
-                let prev = st.tag_tree_available_height;
-                let changed = (prev - available_h).abs() > 4.0;
-                if changed {
-                    st.tag_tree_available_height = available_h;
-                }
-                (changed, prev)
+                let prev_h = st.tag_tree_available_height;
+                st.tag_tree_available_height = available_h;
+                (st.tag_tree_rows_per_column != rows, prev_h, st.tag_tree_rows_per_column)
             };
 
-            if height_changed {
+            if rows_changed {
                 tracing::debug!(
                     prev_height = prev_h,
                     new_height = available_h,
+                    prev_rows,
+                    rows,
                     "[TagTree: GeometryChanged] Tag tree container height updated, recalculating waterfall layout..."
                 );
-                Self::reload_tags(&win_geom, &lib_geom, &st_geom);
+                let now = Instant::now();
+                let decision = REFILL.with(|refill| refill.borrow_mut().pace.on_change(now));
+                match decision {
+                    Refill::Now => {
+                        REFILL.with(|refill| {
+                            let mut refill = refill.borrow_mut();
+                            refill.timer.stop();
+                            refill.pace.filled(now);
+                        });
+                        Self::reload_tags(&win_geom, &lib_geom, &st_geom);
+                    }
+                    // A resizer is being dragged: the tree follows when the height rests (`refill_pace.rs`).
+                    Refill::After(wait) => {
+                        let (window, library, state) = (win_geom.as_weak(), lib_geom.clone(), st_geom.clone());
+                        REFILL.with(|refill| {
+                            refill
+                                .borrow()
+                                .timer
+                                .start(slint::TimerMode::SingleShot, wait, move || {
+                                    REFILL.with(|refill| refill.borrow_mut().pace.filled(Instant::now()));
+                                    if let Some(window) = window.upgrade() {
+                                        Self::reload_tags(&window, &library, &state);
+                                    }
+                                });
+                        });
+                    }
+                }
             }
         });
     }

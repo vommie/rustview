@@ -1,0 +1,11 @@
+# Indexes a library whose root folder holds the folders Flat-1k, Flat-5k, Flat-20k and Flat-100k: the folder tree, then
+# every folder with its thumbnails. The events folder_index_us in the log are the times of scan plus thumbnail generation.
+ready
+tree
+view grid
+folder Flat-1k index
+folder Flat-5k index
+folder Flat-20k index
+folder Flat-100k index
+settle 2000
+quit

@@ -4,7 +4,7 @@ members = ["crates/rustview-core", "crates/rustview"]
 default-members = ["crates/rustview-core", "crates/rustview"]
 
 [workspace.package]
-version = "0.6.15"
+version = "0.6.16"
 edition = "2024"
 # The lowest toolchain known to work: the code uses `AtomicUsize::try_update` (1.95). rust-toolchain.toml pins `stable`.
 rust-version = "1.95"
@@ -71,7 +71,7 @@ url = "2"
 procfs = { version = "0.18", default-features = false }
 proc-mounts = "0.3"
 signal-hook = "0.4"
-rustix = { version = "1", features = ["system", "fs", "process"] }
+rustix = { version = "1", features = ["system", "fs", "process", "time"] }
 # Installed applications (desktop entries, their Exec lines) and their icons from the icon themes.
 freedesktop-desktop-entry = { version = "0.8", default-features = false }
 freedesktop-icons = "0.4"

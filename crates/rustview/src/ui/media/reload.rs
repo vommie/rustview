@@ -306,8 +306,14 @@ impl BridgeMedia {
             let geometry = st_write.view_geometry.unwrap_or_else(|| {
                 ViewGeometry::new(DEFAULT_GRID_COLUMNS, DEFAULT_VISIBLE_ROWS, margin_rows_for(is_table))
             });
-            let first_row = options.anchor_index.unwrap_or(0) / geometry.columns;
             window.set_total_items_count(view_len.saturating_as::<i32>());
+            // Without an anchor the view stays where it is scrolled to (a sort, a filter change): the pool has to hold the
+            // rows the view shows there. Nothing reports the viewport again when neither its place nor the row count
+            // changed, so the place is read here, after the new count has clamped it.
+            let anchor = options
+                .anchor_index
+                .unwrap_or_else(|| window.invoke_get_top_visible_index().saturating_as::<usize>());
+            let first_row = anchor / geometry.columns;
             let outcome = sync_window(window, &mut st_write, thumbnails, geometry, first_row, view_len, true);
             tracing::debug!(
                 items = matched_len,
@@ -319,6 +325,7 @@ impl BridgeMedia {
         }
 
         Self::update_fallback_view(window, &app_settings, state);
+        crate::ui::perf_probe::note_list_committed(matched_len);
 
         if let Some(ref bench) = bench_opt {
             bench.slint_commit_time_us.store(

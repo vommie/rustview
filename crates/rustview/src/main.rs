@@ -174,6 +174,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }))));
     let after_first_frame_render = after_first_frame.clone();
     if let Err(e) = main_window.window().set_rendering_notifier(move |state, graphics_api| {
+        rustview::ui::perf_probe::on_rendering(&state);
         rustview::viewer::video_surface::hosts::on_rendering(
             rustview::viewer::video_surface::MAIN_WINDOW,
             &state,
@@ -398,6 +399,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Wire UI Bridge
+    let (probe_library, probe_thumbnails) = (library.clone(), thumbnails.clone());
     let bridge = Rc::new(UiBridge::new(
         main_window.clone_strong(),
         library,
@@ -405,6 +407,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         settings.clone(),
         &data_dir,
     ));
+    // Developer probe: runs only when its environment variable names a plan.
+    if let Err(reason) = rustview::ui::perf_probe::start_if_requested(rustview::ui::perf_probe::Context {
+        window: main_window.as_weak(),
+        library: probe_library,
+        thumbnails: probe_thumbnails,
+        settings: settings.clone(),
+        state: bridge.state().clone(),
+    }) {
+        tracing::error!(reason, "[PerfProbe] The run cannot start");
+        return Err(reason.into());
+    }
 
     // Close request (title bar, Alt+F4, termination signal): persist the window state, then shut everything down in order.
     let main_weak_close = main_window.as_weak();

@@ -6,7 +6,11 @@ use crate::media::FormatPolicy;
 use parking_lot::RwLock;
 use std::path::Path;
 use std::sync::Arc;
-use std::time::Instant;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::time::{Duration, Instant};
+
+/// How long a background save waits for further changes before it writes (see `save_quiet_async`).
+const ASYNC_SAVE_DELAY: Duration = Duration::from_millis(300);
 
 pub type SettingsChangeHook = Box<dyn Fn(&AppSettings, &AppSettings, &SettingsDiff) + Send + Sync>;
 
@@ -15,6 +19,10 @@ pub struct SettingsManager {
     store: SettingsStore,
     current: Arc<RwLock<AppSettings>>,
     hooks: RwLock<Vec<SettingsChangeHook>>,
+    /// A background saver waits to write; further background saves ride along with it.
+    save_pending: Arc<AtomicBool>,
+    /// Background savers started so far (diagnostics and tests).
+    savers_started: AtomicU64,
 }
 
 impl SettingsManager {
@@ -29,6 +37,8 @@ impl SettingsManager {
             store,
             current,
             hooks: RwLock::new(Vec::new()),
+            save_pending: Arc::new(AtomicBool::new(false)),
+            savers_started: AtomicU64::new(0),
         })
     }
 
@@ -113,7 +123,9 @@ impl SettingsManager {
         }
     }
 
-    /// Persists settings in-memory immediately and flushes JSON to disk in a non-blocking background thread.
+    /// Takes the settings over in memory at once and writes them to disk a moment later on a background thread. Calls that
+    /// follow each other closely (a resizer that is dragged reports every pointer movement) share one write: while a saver
+    /// waits, a further call only updates the memory, and the saver writes whatever is current when its wait is over.
     pub fn save_quiet_async(&self, settings: &AppSettings) {
         LogObscurer::set_obfuscate(settings.debug.obfuscate_logs);
         FormatPolicy::set(settings.formats.format_mask());
@@ -121,14 +133,31 @@ impl SettingsManager {
             let mut writer = self.current.write();
             *writer = settings.clone();
         }
+        if self.save_pending.swap(true, Ordering::AcqRel) {
+            return;
+        }
         let store = self.store.clone();
         let current = self.current.clone();
-        std::thread::Builder::new()
+        let pending = self.save_pending.clone();
+        let spawned = std::thread::Builder::new()
             .name("settings-async-saver".into())
             .spawn(move || {
-                let _ = store.save_latest(|| current.read().clone());
-            })
-            .ok();
+                std::thread::sleep(ASYNC_SAVE_DELAY);
+                // Cleared before the state is read: a change that arrives from here on starts a saver of its own.
+                pending.store(false, Ordering::Release);
+                if let Err(e) = store.save_latest(|| current.read().clone()) {
+                    tracing::error!(error = %e, "[SettingsManager] Failed to persist settings to disk");
+                }
+            });
+        match spawned {
+            Ok(_) => {
+                self.savers_started.fetch_add(1, Ordering::Relaxed);
+            }
+            Err(e) => {
+                self.save_pending.store(false, Ordering::Release);
+                tracing::error!(error = %e, "[SettingsManager] No thread for saving the settings; they are written when the application exits");
+            }
+        }
     }
 
     /// Registers an event hook that receives the previous settings, new settings, and the computed granular diff.
@@ -137,5 +166,51 @@ impl SettingsManager {
         F: Fn(&AppSettings, &AppSettings, &SettingsDiff) + Send + Sync + 'static,
     {
         self.hooks.write().push(Box::new(hook));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_burst_of_background_saves_is_written_once_with_the_last_state() {
+        let dir = tempfile::tempdir().expect("a temporary folder");
+        let manager = SettingsManager::new(dir.path());
+        let mut settings = manager.get();
+        for width in 1..=50u8 {
+            settings.view.sidebar_left_width = 200.0 + f32::from(width);
+            manager.save_quiet_async(&settings);
+        }
+        assert_eq!(
+            manager.savers_started.load(Ordering::Relaxed),
+            1,
+            "one saver for the whole burst"
+        );
+        assert!(
+            (manager.get().view.sidebar_left_width - 250.0).abs() < f32::EPSILON,
+            "memory holds the last state at once"
+        );
+
+        std::thread::sleep(ASYNC_SAVE_DELAY * 3);
+        let stored = SettingsStore::new(dir.path()).load();
+        assert!(
+            (stored.view.sidebar_left_width - 250.0).abs() < f32::EPSILON,
+            "the file holds the last state"
+        );
+
+        settings.view.sidebar_left_width = 300.0;
+        manager.save_quiet_async(&settings);
+        assert_eq!(
+            manager.savers_started.load(Ordering::Relaxed),
+            2,
+            "a later change starts a saver again"
+        );
+        manager.flush();
+        let stored = SettingsStore::new(dir.path()).load();
+        assert!(
+            (stored.view.sidebar_left_width - 300.0).abs() < f32::EPSILON,
+            "a flush does not wait for the saver"
+        );
     }
 }

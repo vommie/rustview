@@ -22,7 +22,7 @@ pub use generator::ThumbnailGenerator;
 pub use gif::{AnimatedFrame, AnimatedPreview, GifThumbnailer};
 pub use loader::{PipelineItem, PreparedTarget, ReadyThumbnailItem, ThumbnailScheduler};
 pub use progress::{PipelinePhase, ThumbnailProgressSnapshot, ThumbnailProgressTracker};
-pub use ram_cache::{CachedThumbnail, RamCacheStats, ThumbnailRamCache};
+pub use ram_cache::{CachedThumbnail, RamCacheStats, ThumbnailPixels, ThumbnailRamCache};
 pub use store::PackStore;
 pub use types::{
     DEFAULT_THUMBNAIL_BOUND, FitMode, ScalingAlgorithm, THUMBNAIL_BYTE_SIZE, THUMBNAIL_CHANNELS, THUMBNAIL_PIXELS,
@@ -34,7 +34,6 @@ pub use types::{
 use crate::library::Library;
 use crate::library::models::MediaId;
 use crate::telemetry::benchmark::ThumbnailPipelineBenchmark;
-use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -87,13 +86,13 @@ impl ThumbnailManager {
     /// Blocking lookup in the RAM cache, then in the pack store. Never call this on the UI thread: use
     /// [`Self::cached_thumbnail`] and [`Self::request_view_thumbnails`] there.
     #[inline]
-    pub fn try_load_existing(&self, media_id: MediaId) -> Option<SharedPixelBuffer<Rgb8Pixel>> {
+    pub fn try_load_existing(&self, media_id: MediaId) -> Option<ThumbnailPixels> {
         self.scheduler.try_load_existing(media_id)
     }
 
     /// The thumbnail if it is in RAM (no I/O, no decode); safe on the UI thread.
     #[inline]
-    pub fn cached_thumbnail(&self, media_id: MediaId) -> Option<SharedPixelBuffer<Rgb8Pixel>> {
+    pub fn cached_thumbnail(&self, media_id: MediaId) -> Option<ThumbnailPixels> {
         self.scheduler.cached_thumbnail(media_id)
     }
 

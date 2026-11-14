@@ -77,6 +77,7 @@ pub fn reset_layout(
     view.col_duration_width = defaults.col_duration_width;
     view.col_format_width = defaults.col_format_width;
     view.col_flags_width = defaults.col_flags_width;
+    view.table_column_order.clone_from(&defaults.table_column_order);
     view.dock = None;
     settings.save_quiet(&app_settings);
 
@@ -103,6 +104,7 @@ pub fn reset_layout(
     window.set_col_duration_width(defaults.col_duration_width);
     window.set_col_format_width(defaults.col_format_width);
     window.set_col_flags_width(defaults.col_flags_width);
+    crate::ui::table_columns::apply(window, &defaults.table_column_order);
     // The dock goes back to its default arrangement (it saves itself, `view.dock`).
     crate::ui::dock::reset_layout();
     if table_view_changed {

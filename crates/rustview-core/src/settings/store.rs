@@ -343,6 +343,9 @@ impl SettingsStore {
             settings.view.col_flags_width = settings.view.col_flags_width.clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
         }
 
+        // Every table column exactly once (an older file has no order, a hand-edited one may have anything).
+        settings.view.table_column_order = super::table_columns::sanitize(&settings.view.table_column_order);
+
         // Sanitize sidebar widths
         settings.view.sidebar_left_width = settings
             .view

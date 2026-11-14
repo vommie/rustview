@@ -300,6 +300,12 @@ export component DockSidebar inherits Rectangle {
 
     property <length> extra: Math.max(0px, root.height - root.total-fixed);
 
+    /// The middle of the bar below group `i`, for the performance probe.
+    pure public function probe-splitter-y(i: int) -> length {
+        return root.groups[i].fixed_before + root.groups[i].fixed
+            + (root.groups[i].frac_before + root.groups[i].frac) * root.extra + DockMetrics.resizer / 2;
+    }
+
     background: Theme.background;
     clip: true;
 

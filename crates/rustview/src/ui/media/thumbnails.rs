@@ -1,6 +1,7 @@
 use crate::ui::MainWindow;
 use crate::ui::browse_window::{apply_record, update_tile};
 use crate::ui::media::BridgeMedia;
+use crate::ui::models::thumbnail_image;
 use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::thumbnail_regeneration::ThumbnailRegeneration;
@@ -8,7 +9,7 @@ use parking_lot::RwLock;
 use rustview_core::telemetry::BenchmarkReportFormatter;
 use rustview_core::thumbnails::ThumbnailManager;
 use rustview_core::util::cast::SaturatingAs;
-use slint::{Image, Timer};
+use slint::Timer;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -139,7 +140,7 @@ impl BridgeThumbnails {
                 }
 
                 let t_row = Instant::now();
-                let picture = item_data.pixel_buffer.map(Image::from_rgb8);
+                let picture = item_data.pixel_buffer.map(thumbnail_image);
                 let record = st.record_by_id(media_id);
                 update_tile(window, &st, media_id, |row| {
                     if !is_table {

@@ -3,10 +3,15 @@
 //! Entries are reference-counted pixel buffers, so a tile that shows a thumbnail, the cache and a drag ghost all share one
 //! allocation and a hit never copies pixels. Eviction removes the least recently used entries until the budget holds; an
 //! entry that a tile still shows stays alive through its own reference, the cache only forgets it.
+//!
+//! The pixels are opaque RGBA (four bytes each): the renderer draws that layout as it is, while it had to convert RGB (three
+//! bytes) pixel by pixel on the UI thread the first time a thumbnail was drawn, about 0.3 ms per thumbnail and a third of
+//! the UI thread's time while the thumbnail view scrolled fast (`docs/perf/2026-11-responsiveness.md`). The worker threads
+//! that decode a thumbnail expand it instead. The stored thumbnails are not affected.
 
 use crate::library::models::MediaId;
 use parking_lot::Mutex;
-use slint::{Rgb8Pixel, SharedPixelBuffer};
+use slint::{Rgba8Pixel, SharedPixelBuffer};
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
 
@@ -32,16 +37,19 @@ impl Hasher for IdHasher {
 
 pub type IdBuildHasher = BuildHasherDefault<IdHasher>;
 
+/// The decoded pixels of a thumbnail as the RAM cache keeps them and the UI draws them: opaque RGBA.
+pub type ThumbnailPixels = SharedPixelBuffer<Rgba8Pixel>;
+
 /// A decoded thumbnail with its size; the pixels are shared with the cache and with every tile that shows them.
 #[derive(Debug, Clone)]
 pub struct CachedThumbnail {
     pub width: u32,
     pub height: u32,
-    pub pixels: SharedPixelBuffer<Rgb8Pixel>,
+    pub pixels: ThumbnailPixels,
 }
 
 impl CachedThumbnail {
-    pub fn new(pixels: SharedPixelBuffer<Rgb8Pixel>) -> Self {
+    pub fn new(pixels: ThumbnailPixels) -> Self {
         Self {
             width: pixels.width(),
             height: pixels.height(),
@@ -49,12 +57,15 @@ impl CachedThumbnail {
         }
     }
 
-    /// Copies tightly packed RGB8 bytes into a new shared buffer.
+    /// Expands tightly packed RGB8 bytes into a new shared buffer of opaque RGBA pixels. Meant for the threads that decode
+    /// or generate thumbnails, not for the UI thread.
     pub fn from_rgb8(width: u32, height: u32, rgb: &[u8]) -> Self {
-        let mut pixels = SharedPixelBuffer::<Rgb8Pixel>::new(width, height);
-        let target = pixels.make_mut_bytes();
-        let len = target.len().min(rgb.len());
-        target[..len].copy_from_slice(&rgb[..len]);
+        let mut pixels = ThumbnailPixels::new(width, height);
+        let (target, _) = pixels.make_mut_bytes().as_chunks_mut::<4>();
+        let (source, _) = rgb.as_chunks::<3>();
+        for (target, source) in target.iter_mut().zip(source) {
+            *target = [source[0], source[1], source[2], u8::MAX];
+        }
         Self { width, height, pixels }
     }
 }
@@ -63,7 +74,7 @@ const NIL: usize = usize::MAX;
 
 struct Node {
     id: MediaId,
-    pixels: SharedPixelBuffer<Rgb8Pixel>,
+    pixels: ThumbnailPixels,
     bytes: usize,
     prev: usize,
     next: usize,
@@ -99,8 +110,8 @@ pub struct ThumbnailRamCache {
     inner: Mutex<Inner>,
 }
 
-fn buffer_bytes(pixels: &SharedPixelBuffer<Rgb8Pixel>) -> usize {
-    pixels.width() as usize * pixels.height() as usize * std::mem::size_of::<Rgb8Pixel>()
+fn buffer_bytes(pixels: &ThumbnailPixels) -> usize {
+    pixels.width() as usize * pixels.height() as usize * std::mem::size_of::<Rgba8Pixel>()
 }
 
 impl Inner {
@@ -170,7 +181,7 @@ impl ThumbnailRamCache {
     }
 
     /// The cached pixels (a reference-count bump, no copy); the entry becomes the most recently used.
-    pub fn get(&self, id: MediaId) -> Option<SharedPixelBuffer<Rgb8Pixel>> {
+    pub fn get(&self, id: MediaId) -> Option<ThumbnailPixels> {
         let mut inner = self.inner.lock();
         let Some(&slot) = inner.index.get(&id) else {
             inner.misses += 1;
@@ -195,7 +206,7 @@ impl ThumbnailRamCache {
 
     /// Stores the pixels (replacing an older entry of the same id) and evicts down to the budget. An entry larger than the whole
     /// budget is not stored.
-    pub fn insert(&self, id: MediaId, pixels: SharedPixelBuffer<Rgb8Pixel>) {
+    pub fn insert(&self, id: MediaId, pixels: ThumbnailPixels) {
         let bytes = buffer_bytes(&pixels);
         let mut inner = self.inner.lock();
         if bytes > inner.budget_bytes {
@@ -224,7 +235,7 @@ impl ThumbnailRamCache {
         inner.evict_to_budget();
     }
 
-    /// Copies tightly packed RGB8 bytes into a shared buffer, stores it and returns it.
+    /// Expands tightly packed RGB8 bytes into a shared buffer (see `CachedThumbnail::from_rgb8`), stores it and returns it.
     pub fn insert_rgb(&self, id: MediaId, width: u32, height: u32, rgb: &[u8]) -> CachedThumbnail {
         let thumbnail = CachedThumbnail::from_rgb8(width, height, rgb);
         self.insert(id, thumbnail.pixels.clone());
@@ -265,5 +276,31 @@ impl ThumbnailRamCache {
             misses: inner.misses,
             evictions: inner.evictions,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rgb_bytes_become_opaque_rgba_pixels() {
+        let thumbnail = CachedThumbnail::from_rgb8(2, 1, &[10, 20, 30, 40, 50, 60]);
+        assert_eq!((thumbnail.width, thumbnail.height), (2, 1));
+        assert_eq!(thumbnail.pixels.as_bytes(), &[10, 20, 30, 255, 40, 50, 60, 255]);
+    }
+
+    #[test]
+    fn the_budget_counts_four_bytes_per_pixel() {
+        let cache = ThumbnailRamCache::new(4 * 4 * 4 * 2);
+        cache.insert_rgb(1, 4, 4, &[0; 48]);
+        cache.insert_rgb(2, 4, 4, &[0; 48]);
+        assert!(
+            cache.contains(1) && cache.contains(2),
+            "two thumbnails of 64 bytes fit into 128"
+        );
+        cache.insert_rgb(3, 4, 4, &[0; 48]);
+        assert!(!cache.contains(1), "the least recently used one made room");
+        assert!(cache.contains(2) && cache.contains(3));
     }
 }

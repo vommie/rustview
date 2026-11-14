@@ -1,0 +1,36 @@
+# List loads: folder switches from small to large (twice: cold and warm thumbnails), jumps and sorting in the large folder.
+ready
+view grid
+folder Flat-1k
+settle 500
+folder Flat-5k
+settle 500
+folder Flat-20k
+settle 500
+folder Flat-100k
+settle 800
+folder Flat-1k
+settle 500
+folder Flat-5k
+settle 500
+folder Flat-20k
+settle 500
+folder Flat-100k
+settle 800
+begin jumps
+jump 0.5
+settle 300
+jump 0.9
+settle 300
+jump 0.1
+settle 300
+jump 0.7
+settle 300
+end
+begin sorts
+sort 4
+settle 400
+sort 0
+settle 400
+end
+quit

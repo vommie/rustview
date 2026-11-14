@@ -556,6 +556,13 @@ impl SettingsDiff {
             ));
         }
 
+        if old.view.table_column_order != new.view.table_column_order {
+            changes.push(format!(
+                "View: table_column_order ({:?} -> {:?})",
+                old.view.table_column_order, new.view.table_column_order
+            ));
+        }
+
         if old.view.left_sidebar_panel_tabs != new.view.left_sidebar_panel_tabs {
             changes.push(format!(
                 "View: left_sidebar_panel_tabs ({:?} -> {:?})",

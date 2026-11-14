@@ -5,17 +5,16 @@ use crate::library::models::MediaId;
 use crate::media::{MediaFormat, MediaType};
 use crate::thumbnails::error::ThumbnailError;
 use crate::thumbnails::gif::{AnimatedPreview, GifThumbnailer};
-use crate::thumbnails::ram_cache::CachedThumbnail;
+use crate::thumbnails::ram_cache::{CachedThumbnail, ThumbnailPixels};
 use crate::thumbnails::types::{ThumbnailConfig, VideoPreviewRecord};
 use crate::util::cast::SaturatingAs;
-use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 impl ThumbnailScheduler {
     /// The thumbnail if it is already in RAM (a reference-count bump, no I/O and no decode). The Browse view uses this on the UI
     /// thread; what is missing goes through [`Self::request_view_thumbnails`].
-    pub fn cached_thumbnail(&self, media_id: MediaId) -> Option<SharedPixelBuffer<Rgb8Pixel>> {
+    pub fn cached_thumbnail(&self, media_id: MediaId) -> Option<ThumbnailPixels> {
         self.cache.get(media_id)
     }
 
@@ -30,7 +29,7 @@ impl ThumbnailScheduler {
     }
 
     /// Blocking lookup in RAM, then in the pack store. For callers that are not on the UI thread.
-    pub fn try_load_existing(&self, media_id: MediaId) -> Option<SharedPixelBuffer<Rgb8Pixel>> {
+    pub fn try_load_existing(&self, media_id: MediaId) -> Option<ThumbnailPixels> {
         if let Some(cached) = self.cache.get(media_id) {
             return Some(cached);
         }

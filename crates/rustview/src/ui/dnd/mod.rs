@@ -128,11 +128,10 @@ impl BridgeDnd {
                 .map(rustview_core::query::IndexedMediaRecord::full_path)
                 .filter(|path| path.exists());
 
-            let thumb = if let Some(buf) = st.thumbs.get(params.media_id) {
-                Image::from_rgb8(buf)
-            } else {
-                Image::default()
-            };
+            let thumb = st
+                .thumbs
+                .get(params.media_id)
+                .map_or_else(Image::default, crate::ui::models::thumbnail_image);
 
             let title_text = if count > 1 {
                 format!("{} (+{} more)", name, count - 1)

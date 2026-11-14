@@ -1,0 +1,30 @@
+# Resizers in the thumbnail view: both sidebars and the splitters between the panels of a sidebar, dragged there and back.
+ready
+view grid
+folder Flat-5k
+settle 800
+begin sidebar_left
+press @left-resizer
+sweep 160 0 1.5 2
+release
+end
+settle 400
+begin sidebar_right
+press @right-resizer
+sweep -160 0 1.5 2
+release
+end
+settle 400
+begin splitter_left_0
+press @left-splitter:0
+sweep 0 -120 1.5 2
+release
+end
+settle 400
+begin splitter_right_0
+press @right-splitter:0
+sweep 0 -150 1.5 2
+release
+end
+settle 400
+quit

@@ -18,6 +18,7 @@ import { Dock, DockMetrics, RailPeek } from "dock_types.slint";
 import { VirtualizedMediaGrid } from "media_grid.slint";
 import { ThumbnailBadgeConfig, ThumbnailBadgeOverflowMode } from "thumbnail_badge_types.slint";
 import { MediaTableView } from "media_table.slint";
+import { TableColumns } from "media_table_columns.slint";
 import { StatusBar } from "status_bar.slint";
 import { ContextMenuPopup } from "context_menu.slint";
 import { ResizerBar } from "resizer_bar.slint";
@@ -35,6 +36,7 @@ export { SettingsWindow } from "settings_window.slint";
 export { TabCloseButtons } from "tab_bar.slint";
 // The look of every window (`src/ui/theme.rs` sets both).
 export { Theme } from "styles.slint";
+export { TableColumns } from "media_table_columns.slint";
 export { Palette } from "std-widgets.slint";
 export { Dock, DockMetrics, RailPeek, DockGroupView, DockTabView, DockRailItem, DockPanelPlace } from "dock_types.slint";
 export { LogWindow, LogLineView } from "log_window.slint";
@@ -508,11 +510,17 @@ export component MainWindow inherits Window {
     callback match-mode-changed(int);
     callback scope-mode-changed(int);
     callback tag-reset-clicked();
+    /// The height of the tag tree's row area (see `TagPanel.tree-height`).
+    out property <length> tag-tree-height: tag-panel.tree-height;
+    /// The width the Tag History has for its rows; read by Rust whenever it fills them.
+    out property <length> tag-history-width: tag-history-panel.width;
     callback tag-tree-geometry-changed(length /* available_height */);
 
     callback sort-column-clicked(int /* column_index */);
     callback column-resized(int /* column_index */, length /* new_width */);
     callback column-resize-finished(int /* column_index */, length /* final_width */);
+    /// A header of the table was dropped at another place of the display order.
+    callback table-column-moved(int /* from_place */, int /* to_place */);
     callback view-mode-toggled-with-index(bool /* is_table */, int /* anchor_top_index */);
 
     callback sidebar-left-resized(length /* new_width */);
@@ -618,6 +626,72 @@ export component MainWindow inherits Window {
         return root.is-table-view ? table-view.get-page-rows() : grid-view.get-page-rows();
     }
 
+    /// A point of the window (logical pixels) the performance probe (`src/ui/perf_probe/`) points at; (-1, -1) for an unknown
+    /// name. Evaluated only when the probe asks.
+    pure public function probe-anchor(name: string, index: int) -> Point {
+        if name == "left-resizer" {
+            return {
+                x: resizer_left.absolute-position.x + resizer_left.width / 2,
+                y: resizer_left.absolute-position.y + resizer_left.height / 2,
+            };
+        }
+        if name == "right-resizer" {
+            return {
+                x: resizer_right.absolute-position.x + resizer_right.width / 2,
+                y: resizer_right.absolute-position.y + resizer_right.height / 2,
+            };
+        }
+        if name == "left-splitter" {
+            return {
+                x: left-sidebar.absolute-position.x + left-sidebar.width / 2,
+                y: left-sidebar.absolute-position.y + left-sidebar.probe-splitter-y(index),
+            };
+        }
+        if name == "right-splitter" {
+            return {
+                x: right-sidebar.absolute-position.x + right-sidebar.width / 2,
+                y: right-sidebar.absolute-position.y + right-sidebar.probe-splitter-y(index),
+            };
+        }
+        if name == "view" {
+            return {
+                x: grid-view.absolute-position.x + grid-view.width / 2,
+                y: grid-view.absolute-position.y + grid-view.height / 2,
+            };
+        }
+        if name == "column" {
+            return {
+                x: table-view.absolute-position.x + table-view.probe-column-edge(index),
+                y: table-view.absolute-position.y + 14px,
+            };
+        }
+        if name == "header" {
+            return {
+                x: table-view.absolute-position.x + table-view.probe-header-x(index),
+                y: table-view.absolute-position.y + 14px,
+            };
+        }
+        if name == "item" {
+            if root.is-table-view {
+                return {
+                    x: table-view.absolute-position.x + 120px,
+                    y: table-view.absolute-position.y + table-view.probe-row-y(index),
+                };
+            }
+            return {
+                x: grid-view.absolute-position.x + grid-view.probe-tile-x(index),
+                y: grid-view.absolute-position.y + grid-view.probe-tile-y(index),
+            };
+        }
+        if name == "folder-tree" {
+            return {
+                x: folder-panel.absolute-position.x + folder-panel.width / 2,
+                y: folder-panel.absolute-position.y + folder-panel.height / 2 + index * 22px,
+            };
+        }
+        return { x: -1px, y: -1px };
+    }
+
     /// Switches the Browse view between thumbnails and the table, like the toolbar's button.
     public function toggle-table-view() {
         let new-is-table = !root.is-table-view;
@@ -648,6 +722,15 @@ export component MainWindow inherits Window {
             if root.is-context-menu-open {
                 if event.text == Key.Escape {
                     root.context-menu-dismissed();
+                    return accept;
+                }
+                return reject;
+            }
+
+            // A table column that is dragged: Escape puts it back.
+            if TableColumns.drag-place >= 0 {
+                if event.text == Key.Escape {
+                    TableColumns.end-drag();
                     return accept;
                 }
                 return reject;
@@ -949,6 +1032,7 @@ export component MainWindow inherits Window {
                         sort-clicked(idx) => { root.sort-column-clicked(idx); }
                         column-resized(idx, w) => { root.column-resized(idx, w); }
                         column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
+                        column-moved(from, to) => { root.table-column-moved(from, to); }
                         background-clicked => { root.background-clicked(); }
                         background-context-menu(x, y) => {
                             root.browse-background-context-menu(x + left-sidebar.width + resizer_left.width, y + top-toolbar.height + 26px);
@@ -1308,7 +1392,7 @@ export component MainWindow inherits Window {
         left-visible: root.active-view-mode == 0;
         right-visible: root.active-view-mode != 2;
 
-        TagHistoryPanel {
+        tag-history-panel := TagHistoryPanel {
             rows: root.tag-history-rows;
             tag-count: root.tag-history-count;
             has-selection: root.has-file-selection;

@@ -7,13 +7,12 @@
 
 use super::generator::ThumbnailGenerator;
 use super::loader::{ReadyThumbnailItem, VIEW_LOAD_PIPELINE_ID};
-use super::ram_cache::ThumbnailRamCache;
+use super::ram_cache::{CachedThumbnail, ThumbnailPixels, ThumbnailRamCache};
 use super::ready_queue::ReadyQueue;
 use super::store::PackStore;
 use crate::library::Library;
 use crate::library::models::MediaId;
 use parking_lot::{Condvar, Mutex};
-use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
 
@@ -169,20 +168,14 @@ fn load_one(deps: &ViewLoaderDeps, id: MediaId) {
     });
 }
 
-fn decode_stored(deps: &ViewLoaderDeps, id: MediaId) -> Option<SharedPixelBuffer<Rgb8Pixel>> {
+fn decode_stored(deps: &ViewLoaderDeps, id: MediaId) -> Option<ThumbnailPixels> {
     let location = {
         let rtxn = deps.library.raw_db().env.read_txn().ok()?;
         deps.library.raw_db().thumbnails.get(&rtxn, &id).ok().flatten()?
     };
     let compressed = deps.store.read(location).ok()?;
     match deps.generator.decompress(&compressed) {
-        Ok((width, height, rgb)) => {
-            let mut pixels = SharedPixelBuffer::<Rgb8Pixel>::new(width, height);
-            let target = pixels.make_mut_bytes();
-            let len = target.len().min(rgb.len());
-            target[..len].copy_from_slice(&rgb[..len]);
-            Some(pixels)
-        }
+        Ok((width, height, rgb)) => Some(CachedThumbnail::from_rgb8(width, height, &rgb).pixels),
         Err(e) => {
             tracing::warn!(media_id = id, error = %e, "[ThumbnailViewLoader] A stored thumbnail does not decode; dropping its record so that it is regenerated");
             if let Ok(mut wtxn) = deps.library.raw_db().env.write_txn() {

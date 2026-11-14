@@ -1,7 +1,7 @@
 use super::cache::L1AnimatedPreviewCache;
 use super::generator::ThumbnailGenerator;
 use super::progress::{ThumbnailProgressSnapshot, ThumbnailProgressTracker};
-use super::ram_cache::ThumbnailRamCache;
+use super::ram_cache::{ThumbnailPixels, ThumbnailRamCache};
 use super::ready_queue::ReadyQueue;
 use super::store::PackStore;
 use super::types::{ThumbnailConfig, ThumbnailLocation, ThumbnailStorageStats, VideoPreviewRecord};
@@ -11,7 +11,6 @@ use crate::library::models::MediaId;
 use crate::telemetry::benchmark::ThumbnailPipelineBenchmark;
 use parking_lot::{Mutex, RwLock};
 use rayon::{ThreadPool, ThreadPoolBuilder};
-use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::collections::{HashSet, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -21,10 +20,12 @@ mod on_demand;
 mod pipeline;
 mod worker;
 
-/// Threads that decode the thumbnails the Browse view shows (small decodes, latency matters more than throughput): half of the
-/// worker threads, between 2 and 4, so a scrollbar jump on a many-core machine fills its tiles faster without starving the UI.
+/// Threads that decode the thumbnails the Browse view shows (small decodes, latency matters more than throughput): as many as
+/// the worker threads the user allows, between 2 and 6. They sleep unless the view asks for thumbnails, so more of them cost
+/// nothing while idle, and a screen of thumbnails after a jump or the rows ahead of a fast scroll are decoded in one frame
+/// instead of two (measured: `docs/perf/2026-11-responsiveness.md`).
 fn view_loader_threads(worker_threads: usize) -> usize {
-    (worker_threads / 2).clamp(2, 4)
+    worker_threads.clamp(2, 6)
 }
 
 /// Pipeline id of the thumbnails that the view loader delivers: they belong to no folder pipeline, so starting or cancelling
@@ -79,7 +80,7 @@ pub struct ReadyThumbnailItem {
     pub media_id: MediaId,
     pub width: u32,
     pub height: u32,
-    pub pixel_buffer: Option<SharedPixelBuffer<Rgb8Pixel>>,
+    pub pixel_buffer: Option<ThumbnailPixels>,
     pub orig_width: u32,
     pub orig_height: u32,
     pub duration_ms: u64,

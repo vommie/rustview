@@ -1,6 +1,7 @@
 //! Windowing of the Browse view (grid and table): which list positions are alive as Slint tiles and how a scroll step updates them.
 
 pub mod geometry;
+pub mod prefetch;
 pub mod record_labels;
 pub mod ring;
 pub mod rows;

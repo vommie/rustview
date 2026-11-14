@@ -235,6 +235,7 @@ impl UiBridge {
         window.set_col_duration_width(v_settings.col_duration_width);
         window.set_col_format_width(v_settings.col_format_width);
         window.set_col_flags_width(v_settings.col_flags_width);
+        crate::ui::table_columns::install(&window, &settings);
 
         let app_settings = settings.get();
         window.set_thumb_size(app_settings.appearance.default_thumbnail_size.saturating_as::<i32>());
@@ -445,6 +446,10 @@ impl UiBridge {
 
     pub fn window(&self) -> &MainWindow {
         &self.window
+    }
+
+    pub fn state(&self) -> &Arc<RwLock<UiState>> {
+        &self.state
     }
 
     pub fn tab_manager(&self) -> &Arc<ViewerTabManager> {

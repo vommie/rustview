@@ -297,6 +297,16 @@ export component VirtualizedMediaGrid inherits Rectangle {
     callback item-drag-over-row(int /* id */);
     callback ensure-focus();
 
+    /// The middle of the tile at list position `index` in the view, for the performance probe.
+    pure public function probe-tile-x(index: int) -> length {
+        return root.grid-padding + Math.mod(index, root.columns) * root.column-stride + root.item-tile-width / 2;
+    }
+
+    pure public function probe-tile-y(index: int) -> length {
+        return 28px + root.grid-padding + Math.floor(index / root.columns) * root.row-stride + root.item-tile-height / 2
+            + scroll-area.clamped-y;
+    }
+
     // Rubberband selection callbacks
     callback rubberband-started(length /* start_content_x */, length /* start_content_y */, length /* view_x */, length /* view_y */, bool /* ctrl */, bool /* shift */);
     callback rubberband-moved(length /* content_x */, length /* content_y */, length /* view_x */, length /* view_y */);

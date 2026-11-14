@@ -4,6 +4,7 @@ use super::{ACTIVE_HOVER_MEDIA_ID, ACTIVE_PREVIEW_TIMER, BridgeMedia, MediaReloa
 use crate::ui::MainWindow;
 use crate::ui::browse_window::update_tile;
 use crate::ui::media::video_preview::VideoPreviewAnimator;
+use crate::ui::models::thumbnail_image;
 use crate::ui::state::{LastActivePanel, UiState};
 use crate::ui::tags::{BridgeTags, TagActionContext};
 use crate::ui::thumbnail_regeneration::ThumbnailRegeneration;
@@ -15,7 +16,7 @@ use rustview_core::query::{MediaTypeFilter, SortColumn, SortOrder};
 use rustview_core::settings::{LogObscurer, SettingsManager};
 use rustview_core::thumbnails::{ThumbnailConfig, ThumbnailManager};
 use rustview_core::util::cast::{SaturatingAs, WrappingAs};
-use slint::{ComponentHandle, Image};
+use slint::ComponentHandle;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
@@ -224,7 +225,7 @@ impl BridgeMedia {
 
                 let st_r = st.read();
                 if let Some(buf) = st_r.thumbs.get(media_id) {
-                    update_tile(&win_hover, &st_r, media_id, |row| row.thumbnail = Image::from_rgb8(buf));
+                    update_tile(&win_hover, &st_r, media_id, |row| row.thumbnail = thumbnail_image(buf));
                 }
             }
         });

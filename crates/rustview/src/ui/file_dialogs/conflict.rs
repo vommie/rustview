@@ -1,6 +1,6 @@
 use crate::system::SystemFileHandler;
 use crate::ui::media::video_preview::VideoPreviewAnimator;
-use crate::ui::models::{format_filesize, format_timestamp, rgb8_to_slint_image};
+use crate::ui::models::{format_filesize, format_timestamp, rgb8_to_slint_image, thumbnail_image};
 use crate::ui::{ConflictFileView, FileOpsConflictDialog, MainWindow};
 use rustview_core::library::models::{
     FileConflictItemDetails, FileConflictReport, FileConflictResolution, FileTransferKind, MediaId,
@@ -506,7 +506,7 @@ fn load_conflict_thumbnail(
 ) -> Image {
     if let Some(id) = media_id {
         match thumbnails.get_or_load_sync(id, path, &config.clone()) {
-            Ok(cached) => return slint::Image::from_rgb8(cached.pixels),
+            Ok(cached) => return thumbnail_image(cached.pixels),
             Err(e) => {
                 tracing::warn!(media_id = id, error = %e, "[ConflictDialog: Thumbnail] Stored/generated thumbnail unavailable, using transient fallback");
             }

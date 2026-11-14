@@ -11,7 +11,6 @@ use parking_lot::RwLock;
 use rustview_core::thumbnails::ThumbnailManager;
 use rustview_core::thumbnails::regeneration::{RegeneratedThumbnail, RegenerationBatchResult};
 use rustview_core::util::cast::SaturatingAs;
-use slint::Image;
 use std::time::Duration;
 
 /// Ends the "Gen" progress and the refresh lock. Only the generate counters are cleared; the preload counters
@@ -51,7 +50,7 @@ fn show_new_thumbnails(window: &MainWindow, state: &RwLock<UiState>, succeeded: 
 
         if !is_table {
             update_tile(window, &st, item.media_id, |view| {
-                view.thumbnail = Image::from_rgb8(buffer);
+                view.thumbnail = crate::ui::models::thumbnail_image(buffer);
             });
         }
     }

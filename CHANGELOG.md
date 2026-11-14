@@ -9,6 +9,43 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ## [Unreleased]
 
+Responsiveness: measurements, method and numbers are in `docs/perf/2026-11-responsiveness.md`. No migration: the library
+and the stored thumbnails are untouched, `settings.json` only gains `view.table_column_order`.
+
+### Added
+
+- The columns of the Browse table can be moved: drag a header to another place. The column follows the pointer as a
+  ghost, a gap shows where it lands and the columns in between move aside; Escape cancels. A click still sorts, the
+  right edge of a header still changes the width. The order is remembered (`view.table_column_order`; older settings
+  files start with the default order) and Settings > Debug > Reset Layout restores it.
+- A probe for developers that measures the responsiveness of the UI: it plays a plan of steps (scrolling, jumps, folder
+  switches, sorting, dragging resizers and headers) and logs every frame (`docs/perf/README.md`,
+  `scripts/perf/`). It runs only when `RUSTVIEW_PERF_PLAN` names a plan.
+
+### Changed
+
+- Thumbnails show up sooner while the thumbnail view scrolls fast: the rows the view is heading for are decoded before
+  they have tiles, and as many threads as the worker threads setting allows (2 to 6, before: 2 to 4, half of it)
+  decode the thumbnails of the view. The decoded thumbnails stay inside the memory budget.
+- Decoded thumbnails are kept in RAM as opaque RGBA (four bytes a pixel instead of three), the layout the renderer draws
+  without converting: drawing a thumbnail for the first time no longer costs the UI thread a conversion. The memory
+  budget is unchanged, so it holds a quarter fewer decoded thumbnails; the stored thumbnails are the same.
+- The table draws faster: its cells have fixed places, so their texts are no longer measured for a layout, and rows
+  outside the view cost nothing.
+- Dragging a sidebar's edge or the bar between two panel groups no longer writes `settings.json` for every pointer
+  movement: changes that follow each other closely are written once, a moment later (and when the application exits).
+- The tag tree is filled again only when the number of rows per column changes, not for every few pixels a resizer
+  moves, and while a resizer is dragged it waits until the pointer rests (at most 0.4 s).
+
+### Fixed
+
+- After sorting or filtering a list that was scrolled down, the view stayed empty until the next scroll: the tiles were
+  built for the top of the list while the view kept its place.
+- The tag tree could be drawn with too few rows per column (the lower part of the panel stayed empty) until a resizer
+  was moved: it relied on a size report that never came when the tree got its final height at once. The tree now reads
+  its height whenever it is filled; the Tag History reads its width the same way.
+
+
 ## [0.6.15] - 2026-11-06
 
 ### Added

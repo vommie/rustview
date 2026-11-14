@@ -6,8 +6,10 @@
 //! picture. It runs on the UI thread, reads memory only and does no decoding.
 
 use super::geometry::ViewGeometry;
+use super::prefetch::prefetch_range;
 use super::view_builder::build_view;
 use crate::ui::browse_folders::{Slot, folder_row_view};
+use crate::ui::models::thumbnail_image;
 use crate::ui::state::UiState;
 use crate::ui::{MainWindow, MediaItemView};
 use rustview_core::library::models::MediaId;
@@ -43,7 +45,7 @@ fn tile_image(thumbnails: &ThumbnailManager, id: MediaId, is_table: bool) -> Ima
     }
     thumbnails
         .cached_thumbnail(id)
-        .map_or_else(Image::default, Image::from_rgb8)
+        .map_or_else(Image::default, thumbnail_image)
 }
 
 fn build_row(st: &UiState, thumbnails: &ThumbnailManager, position: usize, is_table: bool) -> MediaItemView {
@@ -83,6 +85,7 @@ pub fn sync_window(
     let target = geometry.window(first_row, total);
     let pool = geometry.pool_size(total);
     let model = window.get_media_items();
+    let previous = st.ring.range();
     let rebuild = force || pool != st.ring.pool() || model.row_count() != pool;
     let mut outcome = SyncOutcome {
         rebuilt: rebuild,
@@ -107,32 +110,42 @@ pub fn sync_window(
     }
 
     if !is_table {
-        outcome.requested = request_missing_thumbnails(st, thumbnails, &target, first_row, geometry);
+        // A rebuilt pool has no direction of travel yet.
+        let ahead = if rebuild {
+            0..0
+        } else {
+            prefetch_range(&previous, &target, geometry.columns, total)
+        };
+        outcome.requested = request_missing_thumbnails(st, thumbnails, &target, &ahead, first_row, geometry);
     }
     st.view_geometry = Some(geometry);
     outcome
 }
 
-/// Queues every tile of the window that has no picture in RAM, the visible ones first.
+/// Queues every tile of the window that has no picture in RAM, the visible ones first, and after them the rows the view is
+/// heading for (`ahead`, see `prefetch.rs`), the nearest first.
 fn request_missing_thumbnails(
     st: &UiState,
     thumbnails: &ThumbnailManager,
     window: &std::ops::Range<usize>,
+    ahead: &std::ops::Range<usize>,
     first_row: usize,
     geometry: ViewGeometry,
 ) -> usize {
     let center = first_row * geometry.columns + geometry.visible_rows * geometry.columns / 2;
-    let mut missing: Vec<(usize, MediaId)> = window
-        .clone()
-        .filter_map(|position| {
-            let Slot::Media(row) = st.slot_at(position) else {
-                return None;
-            };
-            let id = st.item_at(row)?.record.id;
-            (!thumbnails.cache().contains(id)).then_some((position.abs_diff(center), id))
-        })
-        .collect();
+    let missing_at = |position: usize| {
+        let Slot::Media(row) = st.slot_at(position) else {
+            return None;
+        };
+        let id = st.item_at(row)?.record.id;
+        (!thumbnails.cache().contains(id)).then_some((position.abs_diff(center), id))
+    };
+    let mut missing: Vec<(usize, MediaId)> = window.clone().filter_map(missing_at).collect();
     missing.sort_unstable_by_key(|&(distance, _)| distance);
+    // The distance to the center also orders the rows ahead: they follow the window's own tiles.
+    let mut beyond: Vec<(usize, MediaId)> = ahead.clone().filter_map(missing_at).collect();
+    beyond.sort_unstable_by_key(|&(distance, _)| distance);
+    missing.extend(beyond);
     thumbnails.request_view_thumbnails(missing.into_iter().map(|(_, id)| id))
 }
 

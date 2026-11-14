@@ -216,6 +216,9 @@ export component TagPanel inherits VerticalLayout {
     in property <bool> compact-tree: false;
 
     out property <bool> filter-has-focus: filter-input.has-focus;
+    /// The height the tree has for its rows. Rust reads it whenever it fills the tree (`BridgeTags::reload_tags`), so the
+    /// columns never depend on a size report having arrived.
+    out property <length> tree-height: tree-area.height;
 
     callback mode-toggled(bool);
     callback match-mode-changed(int);
@@ -275,13 +278,22 @@ export component TagPanel inherits VerticalLayout {
     tree-area := Rectangle {
         vertical-stretch: 1;
 
+        // The height is reported from here, an element that exists as long as the panel: the lists below are created
+        // late (and again when the mode changes), and a `changed` handler only reports changes AFTER its element was
+        // created; a list that got its final height at once never reported it, and the tree kept the rows of a default
+        // height (the lower part stayed empty until a resizer moved).
+        changed height => {
+            if self.height > 10px {
+                root.tree-geometry-changed(self.height);
+            }
+        }
+
         if !root.compact-tree: TagTreeList {
             width: 100%;
             height: 100%;
             columns: root.tag-columns;
             is-assign-mode: root.is-tab-view ? true : root.is-assign-mode;
             has-selection: root.has-selection;
-            tree-geometry-changed(h) => { root.tree-geometry-changed(h); }
             tag-clicked(id) => { root.tag-clicked(id); }
             tag-toggle-expand(id) => { root.tag-toggle-expand(id); }
             tag-context-menu(id, x, y) => { root.tag-context-menu(id, tree-area.x + x, tree-area.y + y); }
@@ -294,7 +306,6 @@ export component TagPanel inherits VerticalLayout {
             columns: root.tag-columns;
             is-assign-mode: root.is-tab-view ? true : root.is-assign-mode;
             has-selection: root.has-selection;
-            tree-geometry-changed(h) => { root.tree-geometry-changed(h); }
             tag-clicked(id) => { root.tag-clicked(id); }
             tag-toggle-expand(id) => { root.tag-toggle-expand(id); }
             tag-context-menu(id, x, y) => { root.tag-context-menu(id, tree-area.x + x, tree-area.y + y); }

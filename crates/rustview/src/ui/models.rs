@@ -2,6 +2,7 @@ use num_format::{Locale, SystemLocale, ToFormattedString};
 pub use rustview_core::media::formats::{approximate_aspect_ratio, format_duration_hms_ms, format_filesize_mb};
 use rustview_core::util::cast::{Az, FloatToInt, SaturatingAs};
 
+use rustview_core::thumbnails::{CachedThumbnail, ThumbnailPixels};
 use slint::{Image, Rgb8Pixel, SharedPixelBuffer};
 use std::sync::LazyLock;
 
@@ -60,17 +61,26 @@ where
     )
 }
 
-/// Creates a thread-safe `SharedPixelBuffer` that implements `Send` + `Sync`.
-pub fn rgb8_to_shared_buffer(raw_rgb: &[u8], width: u32, height: u32) -> SharedPixelBuffer<Rgb8Pixel> {
-    let mut pixel_buffer = SharedPixelBuffer::<Rgb8Pixel>::new(width, height);
-    pixel_buffer.make_mut_bytes().copy_from_slice(raw_rgb);
-    pixel_buffer
+/// The picture of a decoded thumbnail. The pixels are opaque RGBA, which the renderer draws as they are (an RGB buffer would
+/// be converted pixel by pixel on the UI thread when it is first drawn).
+pub fn thumbnail_image(pixels: ThumbnailPixels) -> Image {
+    Image::from_rgba8_premultiplied(pixels)
 }
 
-/// Converts raw RGB8 slice directly into a Slint UI `Image`.
+/// Converts raw RGB8 into a Slint UI `Image`, expanded to opaque RGBA here (see `thumbnail_image`).
 pub fn rgb8_to_slint_image(raw_rgb: &[u8], width: u32, height: u32) -> Image {
-    let pixel_buffer = rgb8_to_shared_buffer(raw_rgb, width, height);
-    Image::from_rgb8(pixel_buffer)
+    thumbnail_image(CachedThumbnail::from_rgb8(width, height, raw_rgb).pixels)
+}
+
+/// The pixels of a thumbnail as RGB, for code that works on RGB pictures (a Multiview tile's placeholder).
+pub fn thumbnail_rgb(pixels: &ThumbnailPixels) -> SharedPixelBuffer<Rgb8Pixel> {
+    let mut rgb = SharedPixelBuffer::<Rgb8Pixel>::new(pixels.width(), pixels.height());
+    let (target, _) = rgb.make_mut_bytes().as_chunks_mut::<3>();
+    let (source, _) = pixels.as_bytes().as_chunks::<4>();
+    for (target, source) in target.iter_mut().zip(source) {
+        *target = [source[0], source[1], source[2]];
+    }
+    rgb
 }
 
 #[cfg(test)]
