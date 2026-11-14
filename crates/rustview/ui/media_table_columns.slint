@@ -87,18 +87,31 @@ export global TableColumns {
     in property <[bool]> sort-desc: [false, false, false, false, false, false, false, false, false, false, false, false, false];
     in property <int> sort-count: 1;
 
-    /// The width of column `other` when it is shown and stands left of column `column`.
+    // The room each column takes: its width, or nothing while it is hidden. Everything below reads these, so a cell needs
+    // no look at `shown` of its own.
+    out property <length> e0: root.shown[0] ? root.w0 : 0px;
+    out property <length> e1: root.shown[1] ? root.w1 : 0px;
+    out property <length> e2: root.shown[2] ? root.w2 : 0px;
+    out property <length> e3: root.shown[3] ? root.w3 : 0px;
+    out property <length> e4: root.shown[4] ? root.w4 : 0px;
+    out property <length> e5: root.shown[5] ? root.w5 : 0px;
+    out property <length> e6: root.shown[6] ? root.w6 : 0px;
+    out property <length> e7: root.shown[7] ? root.w7 : 0px;
+    out property <length> e8: root.shown[8] ? root.w8 : 0px;
+    out property <length> e9: root.shown[9] ? root.w9 : 0px;
+    out property <length> e10: root.shown[10] ? root.w10 : 0px;
+    out property <length> e11: root.shown[11] ? root.w11 : 0px;
+    out property <length> e12: root.shown[12] ? root.w12 : 0px;
+
+    /// The room of column `other` when it stands left of column `column`.
     pure function lead(column: int, other: int, width: length) -> length {
-        return root.shown[other] && root.rank[other] < root.rank[column] ? width : 0px;
-    }
-    pure function room(column: int, width: length) -> length {
-        return root.shown[column] ? width : 0px;
+        return root.rank[other] < root.rank[column] ? width : 0px;
     }
     pure function start(c: int) -> length {
-        return root.lead(c, 0, root.w0) + root.lead(c, 1, root.w1) + root.lead(c, 2, root.w2) + root.lead(c, 3, root.w3)
-            + root.lead(c, 4, root.w4) + root.lead(c, 5, root.w5) + root.lead(c, 6, root.w6) + root.lead(c, 7, root.w7)
-            + root.lead(c, 8, root.w8) + root.lead(c, 9, root.w9) + root.lead(c, 10, root.w10)
-            + root.lead(c, 11, root.w11) + root.lead(c, 12, root.w12);
+        return root.lead(c, 0, root.e0) + root.lead(c, 1, root.e1) + root.lead(c, 2, root.e2) + root.lead(c, 3, root.e3)
+            + root.lead(c, 4, root.e4) + root.lead(c, 5, root.e5) + root.lead(c, 6, root.e6) + root.lead(c, 7, root.e7)
+            + root.lead(c, 8, root.e8) + root.lead(c, 9, root.e9) + root.lead(c, 10, root.e10)
+            + root.lead(c, 11, root.e11) + root.lead(c, 12, root.e12);
     }
     out property <length> x0: root.start(0);
     out property <length> x1: root.start(1);
@@ -113,10 +126,8 @@ export global TableColumns {
     out property <length> x10: root.start(10);
     out property <length> x11: root.start(11);
     out property <length> x12: root.start(12);
-    out property <length> total: root.room(0, root.w0) + root.room(1, root.w1) + root.room(2, root.w2)
-        + root.room(3, root.w3) + root.room(4, root.w4) + root.room(5, root.w5) + root.room(6, root.w6)
-        + root.room(7, root.w7) + root.room(8, root.w8) + root.room(9, root.w9) + root.room(10, root.w10)
-        + root.room(11, root.w11) + root.room(12, root.w12);
+    out property <length> total: root.e0 + root.e1 + root.e2 + root.e3 + root.e4 + root.e5 + root.e6 + root.e7 + root.e8
+        + root.e9 + root.e10 + root.e11 + root.e12;
 
     /// Where column `c` starts, left edge of the table = 0.
     pure public function x(c: int) -> length {
@@ -126,9 +137,9 @@ export global TableColumns {
     }
     /// The width column `c` takes: its own, or nothing while it is hidden.
     pure public function w(c: int) -> length {
-        return !root.shown[c] ? 0px : c == 0 ? root.w0 : c == 1 ? root.w1 : c == 2 ? root.w2 : c == 3 ? root.w3 : c == 4 ? root.w4
-            : c == 5 ? root.w5 : c == 6 ? root.w6 : c == 7 ? root.w7 : c == 8 ? root.w8 : c == 9 ? root.w9
-            : c == 10 ? root.w10 : c == 11 ? root.w11 : root.w12;
+        return c == 0 ? root.e0 : c == 1 ? root.e1 : c == 2 ? root.e2 : c == 3 ? root.e3 : c == 4 ? root.e4
+            : c == 5 ? root.e5 : c == 6 ? root.e6 : c == 7 ? root.e7 : c == 8 ? root.e8 : c == 9 ? root.e9
+            : c == 10 ? root.e10 : c == 11 ? root.e11 : root.e12;
     }
     public function set-w(c: int, width: length) {
         if c == 0 { root.w0 = width; } else if c == 1 { root.w1 = width; } else if c == 2 { root.w2 = width; }
@@ -358,7 +369,7 @@ export component TableHeader inherits Rectangle {
         width: TableColumns.w(column);
         height: parent.height;
         opacity: place == TableColumns.drag-place ? 0 : 1;
-        visible: TableColumns.shown[column];
+        visible: self.width > 0px;
         column: column;
         place: place;
         sort-clicked(c, stacked) => { root.sort-clicked(c, stacked); }
@@ -385,7 +396,7 @@ export component TableCell inherits Rectangle {
     width: TableColumns.w(root.column);
     height: 100%;
     opacity: root.column == TableColumns.drag-column ? 0 : 1;
-    visible: TableColumns.shown[root.column];
+    visible: self.width > 0px;
     clip: true;
 
     Text {
