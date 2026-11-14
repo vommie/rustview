@@ -518,7 +518,10 @@ export component MainWindow inherits Window {
     out property <length> tag-history-width: tag-history-panel.width;
     callback tag-tree-geometry-changed(length /* available_height */);
 
-    callback sort-column-clicked(int /* column_index */);
+    /// A click on a column header or a chip of the sort bar; `stacked` (Shift) adds the column to the sort order.
+    callback sort-column-clicked(int /* column_index */, bool /* stacked */);
+    /// A right click on the table's header: the menu of the columns.
+    callback table-header-context-menu(length /* x */, length /* y */);
     callback column-resized(int /* column_index */, length /* new_width */);
     callback column-resize-finished(int /* column_index */, length /* final_width */);
     /// A header of the table was dropped at another place of the display order.
@@ -934,8 +937,6 @@ export component MainWindow inherits Window {
                         grid-padding-val: root.grid-padding;
                         grid-item-border-width: root.grid-item-border-width;
                         grid-item-corner-radius: root.grid-item-corner-radius;
-                        sort-column: root.sort-column-idx;
-                        sort-order: root.sort-order-idx;
 
                         rubberband-active: root.rubberband-active && !root.is-table-view && root.active-view-mode == 0;
                         rubberband-x: root.rubberband-x;
@@ -969,7 +970,7 @@ export component MainWindow inherits Window {
                             }
                         }
                         item-hover-changed(id, hover) => { root.media-hover-changed(id, hover); }
-                        sort-clicked(idx) => { root.sort-column-clicked(idx); }
+                        sort-clicked(idx, stacked) => { root.sort-column-clicked(idx, stacked); }
                         column-moved(from, to) => { root.table-column-moved(from, to); }
                         background-clicked => { root.background-clicked(); }
                         background-context-menu(x, y) => {
@@ -1000,8 +1001,6 @@ export component MainWindow inherits Window {
                         items: root.media-items;
                         total-items-count: root.total-items-count;
                         active: root.active-view-mode == 0 && root.is-table-view;
-                        sort-column: root.sort-column-idx;
-                        sort-order: root.sort-order-idx;
 
                         drop-target-row-id: root.drop-target-row-id;
                         rubberband-active: root.rubberband-active && root.is-table-view && root.active-view-mode == 0;
@@ -1049,10 +1048,11 @@ export component MainWindow inherits Window {
                                 root.folder-row-context-menu(id, x + left-sidebar.width + resizer_left.width, y + top-toolbar.height + 26px);
                             }
                         }
-                        sort-clicked(idx) => { root.sort-column-clicked(idx); }
+                        sort-clicked(idx, stacked) => { root.sort-column-clicked(idx, stacked); }
                         column-resized(idx, w) => { root.column-resized(idx, w); }
                         column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
                         column-moved(from, to) => { root.table-column-moved(from, to); }
+                        header-menu(x, y) => { root.table-header-context-menu(x, y); }
                         background-clicked => { root.background-clicked(); }
                         background-context-menu(x, y) => {
                             root.browse-background-context-menu(x + left-sidebar.width + resizer_left.width, y + top-toolbar.height + 26px);

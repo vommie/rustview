@@ -10,6 +10,7 @@ mod image_edit;
 mod viewer;
 pub use appearance::AppearanceSettings;
 pub use appearance::GridAspectRatio;
+pub use appearance::SortKeySetting;
 pub use appearance::ThumbnailBadgeOverflow;
 pub use appearance::ViewSettings;
 pub use constants::*;

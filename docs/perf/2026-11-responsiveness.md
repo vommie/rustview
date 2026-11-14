@@ -1,4 +1,4 @@
-# Responsiveness work, November 2026 (0.6.16)
+# Responsiveness work, November 2026 (0.6.16 and 0.6.17)
 
 Measurements, changes and limits of the work on the responsiveness of the Browse view (thumbnail view, table, resizers,
 column handling, folder switches). Method and tools: [`README.md`](README.md). **No migration**: the library and the stored
@@ -105,6 +105,15 @@ after the last switch the process used 0.5 % CPU (no worker went on). A canceled
 thumbnail store. **Open:** the thumbnails that were not generated before the switch are not generated when the folder is
 opened again (19 of 20 visible tiles stayed without a picture until a manual refresh). Generating them without a refresh
 would read files outside a refresh; that is a decision for the user, not made here.
+
+## Decisions of the user (questionnaire of 2026-11-14)
+
+- Thumbnails that a folder switch canceled are generated **only by a refresh**, as before: nothing reads files without
+  one. The same rule keeps the scan of a folder without media on every visit as it is.
+- The table gets RustMule's header menu (show and hide columns, Reset Columns) and its stacked sort (Shift + click, up
+  to four levels); both are in 0.6.17.
+- A tile whose thumbnail is loading shows no icon for half a second.
+- The title "Filesize (MB)" stays, also where the sort mark shortens it.
 
 ## What was changed
 

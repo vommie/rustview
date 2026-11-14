@@ -12,7 +12,7 @@ use crate::viewer::ViewerTabManager;
 use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::media::MediaFormat;
-use rustview_core::query::{MediaTypeFilter, SortColumn, SortOrder};
+use rustview_core::query::{MediaTypeFilter, SortColumn, SortKey};
 use rustview_core::settings::{LogObscurer, SettingsManager};
 use rustview_core::thumbnails::{ThumbnailConfig, ThumbnailManager};
 use rustview_core::util::cast::{SaturatingAs, WrappingAs};
@@ -117,29 +117,21 @@ impl BridgeMedia {
         let thumb = thumbnails.clone();
         let set = settings.clone();
         let st = state.clone();
-        window.on_sort_column_clicked(move |col_idx| {
-            let target_col = SortColumn::from_index(col_idx);
-            let (new_col, new_ord) = {
+        window.on_sort_column_clicked(move |col_idx, stacked| {
+            // A plain click sorts by that column alone, Shift + click adds it as the next level (`SortKey::click`).
+            let keys = {
                 let mut s = st.write();
                 s.last_active_panel = LastActivePanel::Media;
-                if s.sort_column == target_col {
-                    s.sort_order = s.sort_order.toggle();
-                } else {
-                    s.sort_column = target_col;
-                    s.sort_order = SortOrder::Ascending;
-                }
-                (s.sort_column, s.sort_order)
+                SortKey::click(&mut s.sort_keys, SortColumn::from_index(col_idx), stacked);
+                s.sort_keys.clone()
             };
 
             {
                 let mut app_settings = set.get();
-                app_settings.view.sort_column = new_col.as_str().to_string();
-                app_settings.view.sort_order = new_ord.as_str().to_string();
-                set.save_quiet(&app_settings);
+                rustview_core::settings::sort_keys::store_sort_keys(&mut app_settings.view, &keys);
+                set.save_quiet_async(&app_settings);
             }
-
-            win.set_sort_column_idx(new_col.to_index());
-            win.set_sort_order_idx(new_ord.to_index());
+            crate::ui::table_columns::apply_sort(&win, &keys);
 
             Self::reload_deferred(&win, &lib, &thumb, &set, &st, MediaReloadOptions::new(false, false));
         });

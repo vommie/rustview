@@ -22,6 +22,9 @@ export component MediaTile inherits Rectangle {
     property <length> item-thumb-w: root.thumb-width * 1px;
     property <length> item-thumb-h: Theme.calculate-thumb-height(root.thumb-width, root.thumb-aspect-idx);
 
+    /// The medium whose missing thumbnail has waited long enough for the file icon (see the fallback icon below).
+    property <int> icon-due-for: 0;
+
     property <length> tile-width: root.item-thumb-w + (root.padding-h * 2);
     property <length> tile-height: root.item-thumb-h + (root.padding-v * 2) + 22px;
 
@@ -53,6 +56,13 @@ export component MediaTile inherits Rectangle {
 
     border-radius: root.corner-radius-val;
     clip: true;
+
+    // Runs only while this tile waits for a thumbnail.
+    Timer {
+        interval: 500ms;
+        running: item.index >= 0 && !item.is-folder && item.thumbnail.width == 0 && root.icon-due-for != item.id;
+        triggered => { root.icon-due-for = item.id; }
+    }
 
     callback clicked(bool /* is_ctrl */, bool /* is_shift */);
     callback middle-clicked();
@@ -184,7 +194,9 @@ export component MediaTile inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                 }
 
-                if !item.is-pending && !item.is-deleted && !item.is-corrupted : AppIcon {
+                // A thumbnail that is still loading shows nothing at first (many icons flashing up look restless); the
+                // file icon comes when no picture arrived within half a second.
+                if !item.is-pending && !item.is-deleted && !item.is-corrupted && root.icon-due-for == item.id : AppIcon {
                     icon: IconId.file;
                     color: Theme.text-muted;
                     size: Math.min(IconSize.xxl, root.item-thumb-h - 16px);
@@ -241,8 +253,6 @@ export component VirtualizedMediaGrid inherits Rectangle {
 
     in property <int> thumb-size: 190;
     in property <int> thumb-aspect-idx: 1;
-    in property <int> sort-column: 0;
-    in property <int> sort-order: 0;
 
     in property <ThumbnailBadgeConfig> badge-config;
     in property <int> grid-item-padding-h: 8;
@@ -290,7 +300,7 @@ export component VirtualizedMediaGrid inherits Rectangle {
     callback item-clicked(int /* id */, bool /* ctrl */, bool /* shift */);
     callback item-middle-clicked(int /* id */);
     callback item-context-menu(int /* id */, length /* x */, length /* y */);
-    callback sort-clicked(int /* column_index */);
+    callback sort-clicked(int /* column_index */, bool /* stacked */);
     /// A chip of the sort bar was dragged to another place of the columns' display order.
     callback column-moved(int /* from_place */, int /* to_place */);
     callback background-clicked();
@@ -421,9 +431,7 @@ export component VirtualizedMediaGrid inherits Rectangle {
         spacing: 0px;
 
         sort-bar := GridSortBar {
-            sort-column: root.sort-column;
-            sort-order: root.sort-order;
-            sort-clicked(idx) => { root.sort-clicked(idx); }
+            sort-clicked(idx, stacked) => { root.sort-clicked(idx, stacked); }
             column-moved(from, to) => { root.column-moved(from, to); }
         }
 

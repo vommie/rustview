@@ -8,7 +8,8 @@
 //! folder NAME [index|nowait] open the folder with that name and wait until its list and thumbnails are shown;
 //!                            `index` waits for its scan and thumbnail generation, `nowait` goes on at once
 //! view grid|table            switch the Browse view
-//! sort COLUMN                click the header of a column (0 = name), wait until the list is shown again
+//! sort COLUMN [stack]        click the header of a column (0 = name), wait until the list is shown again;
+//!                            `stack` is a Shift + click (the column becomes the next sort level)
 //! scroll PX_PER_S SECONDS    move the list like a drag of the scroll bar (negative: up)
 //! wheel NOTCHES_PER_S SECONDS  turn the mouse wheel over the list (negative: up)
 //! jump FRACTION              jump to a place of the list (0 = top, 1 = end), wait until its thumbnails are shown
@@ -17,6 +18,8 @@
 //! moveto @ANCHOR SECONDS     move the pointer to an element
 //! drag DX DY SECONDS         move the pointer by DX/DY and leave it there
 //! release                    release the button
+//! rclick @ANCHOR             right click on an element
+//! click DX DY                move the pointer by DX/DY and click there (an entry of an open menu)
 //! key NAME                   press and release a key (escape, return)
 //! shot NAME                  save a picture of the window next to the log (LOG.NAME.png)
 //! quit                       close the application
@@ -57,7 +60,10 @@ pub enum Step {
         wait: FolderWait,
     },
     View(ViewKind),
-    Sort(i32),
+    Sort {
+        column: i32,
+        stacked: bool,
+    },
     Scroll {
         px_per_s: f32,
         seconds: f32,
@@ -84,6 +90,11 @@ pub enum Step {
         seconds: f32,
     },
     Release,
+    RightClick(Anchor),
+    ClickBy {
+        dx: f32,
+        dy: f32,
+    },
     Key(String),
     Shot(String),
     Quit,
@@ -151,7 +162,20 @@ fn step(line: &str) -> Result<Option<Step>, String> {
             Some("table") => Step::View(ViewKind::Table),
             other => return Err(format!("the view is grid or table, not {}", other.unwrap_or("nothing"))),
         },
-        "sort" => Step::Sort(number(words.next(), "the column")?),
+        "sort" => {
+            let column = number(words.next(), "the column")?;
+            let stacked = match words.next() {
+                None => false,
+                Some("stack") => true,
+                Some(other) => return Err(format!("unknown sort option: {other}")),
+            };
+            Step::Sort { column, stacked }
+        }
+        "rclick" => Step::RightClick(anchor(words.next())?),
+        "click" => Step::ClickBy {
+            dx: number(words.next(), "the horizontal distance")?,
+            dy: number(words.next(), "the vertical distance")?,
+        },
         "scroll" => Step::Scroll {
             px_per_s: number(words.next(), "the speed in px/s")?,
             seconds: positive(words.next(), "the duration in s")?,
@@ -217,7 +241,7 @@ mod tests {
         let steps = parse(
             "ready\n# a comment\n\nfolder Flat-5k index\nview table # after the folder\nbegin resize\npress @column:3\n\
              sweep 120 0 2.5 3\nrelease\nend\nscroll -3000 4\nwheel 20 2\njump 0.5\nmoveto @folder-tree 0.5\nkey escape\n\
-             settle 250\ntree\nsort 4\nshot after-sort\nquit\n",
+             settle 250\ntree\nsort 4\nsort 0 stack\nrclick @header:2\nclick 20 60\nshot after-sort\nquit\n",
         )
         .expect("the plan is valid");
         assert_eq!(
@@ -261,7 +285,19 @@ mod tests {
                 Step::Key("escape".to_owned()),
                 Step::Settle(Duration::from_millis(250)),
                 Step::Tree,
-                Step::Sort(4),
+                Step::Sort {
+                    column: 4,
+                    stacked: false
+                },
+                Step::Sort {
+                    column: 0,
+                    stacked: true
+                },
+                Step::RightClick(Anchor {
+                    name: "header".to_owned(),
+                    index: 2
+                }),
+                Step::ClickBy { dx: 20.0, dy: 60.0 },
                 Step::Shot("after-sort".to_owned()),
                 Step::Quit,
             ]

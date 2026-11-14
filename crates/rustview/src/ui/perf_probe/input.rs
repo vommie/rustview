@@ -37,6 +37,18 @@ pub fn press(window: &slint::Window, point: (f32, f32)) {
     });
 }
 
+pub fn right_click(window: &slint::Window, point: (f32, f32)) {
+    move_to(window, point);
+    window.dispatch_event(WindowEvent::PointerPressed {
+        position: position(point),
+        button: PointerEventButton::Right,
+    });
+    window.dispatch_event(WindowEvent::PointerReleased {
+        position: position(point),
+        button: PointerEventButton::Right,
+    });
+}
+
 pub fn release(window: &slint::Window, point: (f32, f32)) {
     recorder::note_input();
     window.dispatch_event(WindowEvent::PointerReleased {

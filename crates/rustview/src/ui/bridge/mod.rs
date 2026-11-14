@@ -37,7 +37,7 @@ use crate::viewer::zoom::prefs as zoom_prefs;
 use parking_lot::{Mutex, RwLock};
 use rustview_core::library::Library;
 use rustview_core::library::models::{FolderId, MediaId, TagId};
-use rustview_core::query::{MediaTypeFilter, ScopeMode, SortColumn, SortOrder};
+use rustview_core::query::{MediaTypeFilter, ScopeMode};
 use rustview_core::settings::{GridAspectRatio, SettingsManager};
 use rustview_core::thumbnails::ThumbnailManager;
 use rustview_core::util::cast::SaturatingAs;
@@ -201,13 +201,8 @@ impl UiBridge {
         window.set_sidebar_left_width(v_settings.sidebar_left_width);
         window.set_sidebar_right_width(v_settings.sidebar_right_width);
 
-        let initial_sort_col = SortColumn::from_name(&v_settings.sort_column);
-        let initial_sort_ord = SortOrder::from_name(&v_settings.sort_order);
-        initial_state.sort_column = initial_sort_col;
-        initial_state.sort_order = initial_sort_ord;
-
-        window.set_sort_column_idx(initial_sort_col.to_index());
-        window.set_sort_order_idx(initial_sort_ord.to_index());
+        initial_state.sort_keys = rustview_core::settings::sort_keys::sort_keys_of(&v_settings);
+        crate::ui::table_columns::apply_sort(&window, &initial_state.sort_keys);
 
         let initial_media_type_filter = MediaTypeFilter::from_str_name(&v_settings.media_type_filter);
         initial_state.filter.media_type_filter = initial_media_type_filter;

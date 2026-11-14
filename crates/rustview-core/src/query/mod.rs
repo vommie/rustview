@@ -10,4 +10,4 @@ pub use folder_dir::FolderDir;
 pub use indexed_record::IndexedMediaRecord;
 pub use list_layout::{ListLayout, ListRequest, RowMap, lay_out};
 pub use media_store::MediaStore;
-pub use sorting::{MediaSorter, SortColumn, SortOrder};
+pub use sorting::{MAX_SORT_KEYS, MediaSorter, SortColumn, SortKey, SortOrder};

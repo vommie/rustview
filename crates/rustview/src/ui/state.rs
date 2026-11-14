@@ -11,7 +11,7 @@ use crate::viewer::TabId;
 use rustview_core::library::models::{FolderHierarchySnapshot, FolderId, MediaId, TagId};
 use rustview_core::query::MediaStore;
 use rustview_core::query::filters::{IndexedMediaRecord, PreparedFilter};
-use rustview_core::query::{QueryFilter, SortColumn, SortOrder};
+use rustview_core::query::{QueryFilter, SortColumn, SortKey, SortOrder};
 use rustview_core::settings::{
     DEFAULT_IS_INSPECTOR_COLLAPSED, DEFAULT_IS_TAG_HISTORY_COLLAPSED, DEFAULT_LEFT_SIDEBAR_ACTIVE_PANEL_TAB,
     DEFAULT_MAX_HISTORY_TAGS, DEFAULT_SORT_COLUMN, DEFAULT_SORT_ORDER, DEFAULT_TAB_GRID_AUTO_COLUMNS,
@@ -82,6 +82,10 @@ pub const CTX_BROWSE_SELECTION_OPEN_IN_FILE_MANAGER: CtxMenuActionId = 3020;
 pub const CTX_BROWSE_SELECTION_DELETE: CtxMenuActionId = 3021;
 pub const CTX_BROWSE_TOGGLE_FOLDERS: CtxMenuActionId = 3022;
 pub const CTX_FOLDER_MOVE_BASE: CtxMenuActionId = 300_000;
+
+// The menu of the table's header: one entry per column (base + column number), then Reset Columns.
+pub const CTX_TABLE_COLUMN_BASE: CtxMenuActionId = 6100;
+pub const CTX_TABLE_COLUMNS_RESET: CtxMenuActionId = 6199;
 
 // Media Batch Destination Action IDs
 pub const CTX_ACTION_COPY_TO_BASE: CtxMenuActionId = 500_000;
@@ -160,8 +164,8 @@ pub struct UiState {
     pub media_row_map: RowMap,
     pub filter: QueryFilter,
     pub last_executed_query: String,
-    pub sort_column: SortColumn,
-    pub sort_order: SortOrder,
+    /// The sort order of the Browse list, first key first (never empty).
+    pub sort_keys: Vec<SortKey>,
     pub is_assign_mode: bool,
     pub is_query_active: bool,
     pub selected_rating: u8,
@@ -244,8 +248,10 @@ impl Default for UiState {
             media_row_map: RowMap::default(),
             filter: QueryFilter::default(),
             last_executed_query: String::new(),
-            sort_column: SortColumn::from_name(DEFAULT_SORT_COLUMN),
-            sort_order: SortOrder::from_name(DEFAULT_SORT_ORDER),
+            sort_keys: vec![SortKey::new(
+                SortColumn::from_name(DEFAULT_SORT_COLUMN),
+                SortOrder::from_name(DEFAULT_SORT_ORDER),
+            )],
             is_assign_mode: false,
             is_query_active: false,
             selected_rating: 0,

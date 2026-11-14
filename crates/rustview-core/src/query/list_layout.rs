@@ -4,7 +4,7 @@
 //! UI thread only swaps the finished result in.
 
 use super::filters::{IndexedMediaRecord, QueryFilter};
-use super::sorting::{MediaSorter, SortColumn, SortOrder};
+use super::sorting::{MediaSorter, SortKey};
 use crate::library::Library;
 use crate::library::models::MediaId;
 use crate::thumbnails::ram_cache::IdBuildHasher;
@@ -18,8 +18,8 @@ pub type RowMap = HashMap<MediaId, usize, IdBuildHasher>;
 #[derive(Debug, Clone)]
 pub struct ListRequest {
     pub filter: QueryFilter,
-    pub sort_column: SortColumn,
-    pub sort_order: SortOrder,
+    /// The sort order, first key first (never empty).
+    pub sort: Vec<SortKey>,
     /// When the new query only narrows the previous one, the record positions of the previous result (the search starts there).
     pub refine_from: Option<Vec<usize>>,
 }
@@ -44,7 +44,7 @@ pub fn lay_out(library: &Library, records: &[IndexedMediaRecord], request: &List
     let filter_us = started.elapsed().as_micros().saturating_as::<u64>();
 
     let started = Instant::now();
-    MediaSorter::sort_indexed_refs(&mut matched, request.sort_column, request.sort_order);
+    MediaSorter::sort_indexed_refs(&mut matched, &request.sort);
     let sort_us = started.elapsed().as_micros().saturating_as::<u64>();
 
     let started = Instant::now();

@@ -556,6 +556,20 @@ impl SettingsDiff {
             ));
         }
 
+        if old.view.sort_keys != new.view.sort_keys {
+            changes.push(format!(
+                "View: sort_keys ({:?} -> {:?})",
+                old.view.sort_keys, new.view.sort_keys
+            ));
+        }
+
+        if old.view.table_hidden_columns != new.view.table_hidden_columns {
+            changes.push(format!(
+                "View: table_hidden_columns ({:?} -> {:?})",
+                old.view.table_hidden_columns, new.view.table_hidden_columns
+            ));
+        }
+
         if old.view.table_column_order != new.view.table_column_order {
             changes.push(format!(
                 "View: table_column_order ({:?} -> {:?})",

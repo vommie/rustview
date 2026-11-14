@@ -124,6 +124,56 @@ impl SortOrder {
     }
 }
 
+/// The most levels a stacked sort has.
+pub const MAX_SORT_KEYS: usize = 4;
+
+/// One level of the list's sort order: the first key decides, the next one orders the records the keys before it leave
+/// equal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SortKey {
+    pub column: SortColumn,
+    pub order: SortOrder,
+}
+
+impl SortKey {
+    pub fn new(column: SortColumn, order: SortOrder) -> Self {
+        Self { column, order }
+    }
+
+    /// A click on a column header. A plain click sorts by that column alone (ascending) and reverses it
+    /// when it already is the only key. A stacked click (Shift) adds the column as the next level, or reverses the level
+    /// it already has; a full list replaces its last level.
+    pub fn click(keys: &mut Vec<SortKey>, column: SortColumn, stacked: bool) {
+        let place = keys.iter().position(|key| key.column == column);
+        match (stacked, place) {
+            (true, Some(place)) => keys[place].order = keys[place].order.toggle(),
+            (true, None) => {
+                if keys.len() >= MAX_SORT_KEYS {
+                    keys.pop();
+                }
+                keys.push(SortKey::new(column, SortOrder::Ascending));
+            }
+            (false, Some(0)) if keys.len() == 1 => keys[0].order = keys[0].order.toggle(),
+            (false, _) => *keys = vec![SortKey::new(column, SortOrder::Ascending)],
+        }
+    }
+
+    /// The keys with every column at most once and at most `MAX_SORT_KEYS` of them; an empty list becomes the default
+    /// order (file name, ascending).
+    pub fn sanitized(keys: &[SortKey]) -> Vec<SortKey> {
+        let mut clean: Vec<SortKey> = Vec::with_capacity(MAX_SORT_KEYS);
+        for key in keys {
+            if clean.len() < MAX_SORT_KEYS && !clean.iter().any(|kept| kept.column == key.column) {
+                clean.push(*key);
+            }
+        }
+        if clean.is_empty() {
+            clean.push(SortKey::new(SortColumn::Filename, SortOrder::Ascending));
+        }
+        clean
+    }
+}
+
 pub struct MediaSorter;
 
 impl MediaSorter {
@@ -199,29 +249,36 @@ impl MediaSorter {
         });
     }
 
-    pub fn sort_indexed_refs(records: &mut [&IndexedMediaRecord], column: SortColumn, order: SortOrder) {
+    /// Sorts by `keys`, the first one first. Records that are equal in every key are ordered by file name, in the
+    /// direction of the last key (so a single key sorts exactly as it always did).
+    pub fn sort_indexed_refs(records: &mut [&IndexedMediaRecord], keys: &[SortKey]) {
+        let tie_order = keys.last().map_or(SortOrder::Ascending, |key| key.order);
+        let directed = |cmp: Ordering, order: SortOrder| match order {
+            SortOrder::Ascending => cmp,
+            SortOrder::Descending => cmp.reverse(),
+        };
         records.par_sort_unstable_by(|a, b| {
-            let cmp = Self::compare_indexed(a, b, column);
-            match order {
-                SortOrder::Ascending => cmp,
-                SortOrder::Descending => cmp.reverse(),
+            for key in keys {
+                let cmp = Self::compare_column(a, b, key.column);
+                if cmp != Ordering::Equal {
+                    return directed(cmp, key.order);
+                }
             }
+            directed(a.filename_lower.cmp(&b.filename_lower), tie_order)
         });
     }
 
-    /// The ascending order of two records for `column`; ties are broken by file name.
-    fn compare_indexed(a: &IndexedMediaRecord, b: &IndexedMediaRecord, column: SortColumn) -> Ordering {
-        let by_name = || a.filename_lower.cmp(&b.filename_lower);
+    /// The ascending order of two records for `column` alone (no tie-break).
+    fn compare_column(a: &IndexedMediaRecord, b: &IndexedMediaRecord, column: SortColumn) -> Ordering {
         let (ra, rb) = (&a.record, &b.record);
         match column {
-            SortColumn::Filename => return by_name(),
+            SortColumn::Filename => a.filename_lower.cmp(&b.filename_lower),
             SortColumn::Path => {
-                let by_dir = if Arc::ptr_eq(&a.folder, &b.folder) {
+                if Arc::ptr_eq(&a.folder, &b.folder) {
                     Ordering::Equal
                 } else {
                     a.folder.path_lower().cmp(b.folder.path_lower())
-                };
-                return by_dir.then_with(by_name);
+                }
             }
             SortColumn::ModifiedDate => ra.modification_time.cmp(&rb.modification_time),
             SortColumn::CreatedDate => ra.creation_time.cmp(&rb.creation_time),
@@ -238,6 +295,85 @@ impl MediaSorter {
             SortColumn::Format => a.format_label().cmp(b.format_label()),
             SortColumn::Flags => a.flags_label().cmp(b.flags_label()),
         }
-        .then_with(by_name)
+    }
+}
+
+#[cfg(test)]
+mod sort_key_tests {
+    use super::*;
+
+    fn key(column: SortColumn, order: SortOrder) -> SortKey {
+        SortKey::new(column, order)
+    }
+
+    #[test]
+    fn a_plain_click_sorts_by_one_column_and_reverses_it() {
+        let mut keys = vec![key(SortColumn::Filename, SortOrder::Ascending)];
+        SortKey::click(&mut keys, SortColumn::Filename, false);
+        assert_eq!(keys, [key(SortColumn::Filename, SortOrder::Descending)]);
+        SortKey::click(&mut keys, SortColumn::Rating, false);
+        assert_eq!(
+            keys,
+            [key(SortColumn::Rating, SortOrder::Ascending)],
+            "another column starts ascending"
+        );
+    }
+
+    #[test]
+    fn a_stacked_click_adds_a_level_or_reverses_it() {
+        let mut keys = vec![key(SortColumn::Rating, SortOrder::Descending)];
+        SortKey::click(&mut keys, SortColumn::Filename, true);
+        assert_eq!(
+            keys,
+            [
+                key(SortColumn::Rating, SortOrder::Descending),
+                key(SortColumn::Filename, SortOrder::Ascending)
+            ]
+        );
+        SortKey::click(&mut keys, SortColumn::Rating, true);
+        assert_eq!(
+            keys[0],
+            key(SortColumn::Rating, SortOrder::Ascending),
+            "the level it has is reversed"
+        );
+        assert_eq!(keys.len(), 2);
+        // A plain click on the first of several keys starts over with that column.
+        SortKey::click(&mut keys, SortColumn::Rating, false);
+        assert_eq!(keys, [key(SortColumn::Rating, SortOrder::Ascending)]);
+    }
+
+    #[test]
+    fn a_full_list_replaces_its_last_level() {
+        let mut keys = Vec::new();
+        for column in [
+            SortColumn::Rating,
+            SortColumn::Tags,
+            SortColumn::Format,
+            SortColumn::FileSize,
+        ] {
+            SortKey::click(&mut keys, column, true);
+        }
+        assert_eq!(keys.len(), MAX_SORT_KEYS);
+        SortKey::click(&mut keys, SortColumn::Width, true);
+        assert_eq!(keys.len(), MAX_SORT_KEYS);
+        assert_eq!(keys[3].column, SortColumn::Width);
+        assert_eq!(keys[2].column, SortColumn::Format);
+    }
+
+    #[test]
+    fn stored_keys_are_cleaned() {
+        let filename = key(SortColumn::Filename, SortOrder::Ascending);
+        assert_eq!(SortKey::sanitized(&[]), [filename], "no keys: the default order");
+        let rating = key(SortColumn::Rating, SortOrder::Descending);
+        let repeated = [rating, key(SortColumn::Rating, SortOrder::Ascending), filename];
+        assert_eq!(
+            SortKey::sanitized(&repeated),
+            [rating, filename],
+            "a column counts once"
+        );
+        let many: Vec<SortKey> = (0..7)
+            .map(|index| key(SortColumn::from_index(index), SortOrder::Ascending))
+            .collect();
+        assert_eq!(SortKey::sanitized(&many).len(), MAX_SORT_KEYS);
     }
 }

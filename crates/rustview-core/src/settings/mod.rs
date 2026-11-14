@@ -4,6 +4,7 @@ pub mod obscurer;
 pub mod page_reset;
 pub mod registry;
 pub mod schema;
+pub mod sort_keys;
 pub mod store;
 pub mod table_columns;
 pub mod theme;

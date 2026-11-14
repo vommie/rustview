@@ -165,8 +165,6 @@ export component MediaTableView inherits Rectangle {
     in property <bool> active: true;
     in property <int> total-items-count: 0;
 
-    in property <int> sort-column: 0;
-    in property <int> sort-order: 0;
 
     // Rubberband selection state properties
     in property <bool> rubberband-active: false;
@@ -193,7 +191,9 @@ export component MediaTableView inherits Rectangle {
     callback item-clicked(int /* id */, bool /* ctrl */, bool /* shift */);
     callback item-middle-clicked(int /* id */);
     callback item-context-menu(int /* id */, length /* x */, length /* y */);
-    callback sort-clicked(int /* column_index */);
+    callback sort-clicked(int /* column_index */, bool /* stacked */);
+    /// A right click on the header: the menu of the columns, at this point of the window.
+    callback header-menu(length /* x */, length /* y */);
     callback column-resized(int /* column_index */, length /* new_width */);
     callback column-resize-finished(int /* column_index */, length /* final_width */);
     /// A header was dragged to another place of the display order.
@@ -333,10 +333,8 @@ export component MediaTableView inherits Rectangle {
                 TableHeader {
                     width: 100%;
                     height: 100%;
-                    sort-column: root.sort-column;
-                    sort-order: root.sort-order;
-
-                    sort-clicked(idx) => { root.sort-clicked(idx); }
+                    sort-clicked(idx, stacked) => { root.sort-clicked(idx, stacked); }
+                    menu-requested(x, y) => { root.header-menu(x, y); }
                     column-resized(idx, w) => { root.column-resized(idx, w); }
                     column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
                     column-moved(from, to) => { root.column-moved(from, to); }

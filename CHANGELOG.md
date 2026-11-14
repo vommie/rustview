@@ -19,6 +19,16 @@ and the stored thumbnails are untouched, `settings.json` only gains `view.table_
   right edge of a header still changes the width. The sort bar of the thumbnail view shows the columns in the same
   order, and its entries are moved the same way. The order is remembered (`view.table_column_order`; older settings
   files start with the default order) and Settings > Debug > Reset Layout restores it.
+- A right click on a header of the table opens the menu of its columns: every column can be hidden and shown again
+  (the menu stays for several picks; the last column that is shown stays), and Reset Columns restores order, visibility
+  and widths. Hidden columns are remembered (`view.table_hidden_columns`); the sort bar of the thumbnail view keeps all
+  its entries.
+- The list can be sorted by up to four columns: Shift + click on a header (or on an entry of the sort bar) adds the
+  column as the next level, or reverses the level it already has; with several levels every header shows its level. A
+  plain click sorts by one column as before. The order is remembered in `view.sort_keys`; `view.sort_column` and
+  `view.sort_order` keep the first level, so an older version still reads the file.
+- The headers of the table and the entries of the sort bar have a tooltip that says what a click, Shift + click, a drag
+  and a right click do.
 - Escape ends a drag of media: nothing is moved, copied or dropped.
 - A probe for developers that measures the responsiveness of the UI: it plays a plan of steps (scrolling, jumps, folder
   switches, sorting, dragging resizers and headers) and logs every frame (`docs/perf/README.md`,
@@ -38,6 +48,8 @@ and the stored thumbnails are untouched, `settings.json` only gains `view.table_
   movement: changes that follow each other closely are written once, a moment later (and when the application exits).
 - The tag tree is filled again only when the number of rows per column changes, not for every few pixels a resizer
   moves, and while a resizer is dragged it waits until the pointer rests (at most 0.4 s).
+- A tile whose thumbnail is still loading shows no icon at first (many icons flashing up looked restless); the file
+  icon appears when no picture arrived within half a second. Pending, missing and corrupt files show their icon at once.
 - A folder switch does less: whether the folder has subfolders (the recursive view's button) comes from the folder
   snapshot in memory instead of a walk through the library, and selecting the folder that is already remembered writes
   no settings.

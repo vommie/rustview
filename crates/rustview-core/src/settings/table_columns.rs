@@ -1,4 +1,5 @@
-//! The order of the columns of the Browse table (`view.table_column_order`).
+//! The order of the columns of the Browse table (`view.table_column_order`) and the columns that are hidden
+//! (`view.table_hidden_columns`).
 //!
 //! A column is named by a stable key in `settings.json`; its number (0 to 12) is the one the UI and the sort settings use.
 //! The widths stay in their own fields (`view.col_*_width`), so a settings file of an older version reads as before and gets
@@ -69,6 +70,53 @@ pub fn move_column(display: &mut Vec<usize>, from: usize, to: usize) {
     display.insert(to, column);
 }
 
+/// Which columns are shown (`shown[column]`) for a stored list of hidden ones. Unknown keys are ignored; a list that
+/// would hide every column hides none.
+pub fn shown_columns(hidden: &[String]) -> Vec<bool> {
+    let shown: Vec<bool> = TABLE_COLUMN_KEYS
+        .iter()
+        .map(|key| !hidden.iter().any(|name| name == key))
+        .collect();
+    if shown.contains(&true) {
+        shown
+    } else {
+        vec![true; TABLE_COLUMN_KEYS.len()]
+    }
+}
+
+/// The stored form of the hidden columns: known keys in the default order, each once.
+pub fn sanitize_hidden(hidden: &[String]) -> Vec<String> {
+    shown_columns(hidden)
+        .iter()
+        .zip(TABLE_COLUMN_KEYS)
+        .filter(|(shown, _)| !**shown)
+        .map(|(_, key)| key.to_owned())
+        .collect()
+}
+
+/// Shows or hides `column`; the last column that is shown stays (a table without columns could not get them back).
+/// Returns whether anything changed.
+pub fn set_column_shown(hidden: &mut Vec<String>, column: usize, shown: bool) -> bool {
+    let Some(&key) = TABLE_COLUMN_KEYS.get(column) else {
+        return false;
+    };
+    let mut flags = shown_columns(hidden);
+    if flags[column] == shown {
+        return false;
+    }
+    if !shown && flags.iter().filter(|flag| **flag).count() <= 1 {
+        return false;
+    }
+    flags[column] = shown;
+    if shown {
+        hidden.retain(|name| name != key);
+    } else {
+        hidden.push(key.to_owned());
+    }
+    *hidden = sanitize_hidden(hidden);
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -100,6 +148,37 @@ mod tests {
         for (place, &column) in display.iter().enumerate() {
             assert_eq!(ranks[column], place);
         }
+    }
+
+    #[test]
+    fn columns_are_hidden_by_key_and_the_last_one_stays() {
+        assert_eq!(shown_columns(&[]), vec![true; 13]);
+        let shown = shown_columns(&keys(&["ar", "format", "nonsense"]));
+        assert_eq!(shown.iter().filter(|flag| !**flag).count(), 2);
+        assert!(!shown[9] && !shown[11]);
+        assert_eq!(
+            sanitize_hidden(&keys(&["format", "ar", "ar", "nonsense"])),
+            keys(&["ar", "format"])
+        );
+        // A list that hides everything hides nothing.
+        assert_eq!(shown_columns(&default_order()), vec![true; 13]);
+        assert_eq!(sanitize_hidden(&default_order()).len(), 0);
+
+        let mut hidden = Vec::new();
+        assert!(set_column_shown(&mut hidden, 9, false));
+        assert!(!set_column_shown(&mut hidden, 9, false), "already hidden");
+        assert_eq!(hidden, keys(&["ar"]));
+        assert!(set_column_shown(&mut hidden, 9, true));
+        assert_eq!(hidden.len(), 0);
+        for column in 1..13 {
+            assert!(set_column_shown(&mut hidden, column, false));
+        }
+        assert!(
+            !set_column_shown(&mut hidden, 0, false),
+            "the last column that is shown stays"
+        );
+        assert_eq!(hidden.len(), 12);
+        assert!(!set_column_shown(&mut hidden, 99, false));
     }
 
     #[test]

@@ -248,10 +248,10 @@ impl Driver {
                     frames_before: recorder::frames(),
                 })
             }
-            Step::Sort(column) => {
+            Step::Sort { column, stacked } => {
                 let commits_before = super::commits();
                 recorder::event("sort_click", column.saturating_as());
-                window.invoke_sort_column_clicked(column);
+                window.invoke_sort_column_clicked(column, stacked);
                 Begun::Running(Running::Shown {
                     started: now,
                     commits_before: Some(commits_before),
@@ -330,6 +330,20 @@ impl Driver {
                 started: now,
                 seconds,
             }),
+            Step::RightClick(anchor) => match Self::anchor(window, &anchor) {
+                Some(point) => {
+                    self.pointer = point;
+                    input::right_click(window.window(), point);
+                    Begun::Done
+                }
+                None => Begun::Failed("unknown element"),
+            },
+            Step::ClickBy { dx, dy } => {
+                self.pointer = (self.pointer.0 + dx, self.pointer.1 + dy);
+                input::press(window.window(), self.pointer);
+                input::release(window.window(), self.pointer);
+                Begun::Done
+            }
             Step::Release => {
                 // A media drag released over no folder is offered to the window under the REAL pointer (XDND), which may be
                 // another application: the run stops instead, and closing the window drops nothing.

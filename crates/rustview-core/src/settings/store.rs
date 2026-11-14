@@ -343,8 +343,13 @@ impl SettingsStore {
             settings.view.col_flags_width = settings.view.col_flags_width.clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
         }
 
+        // The sort order: known columns once, at most four levels, the first one repeated for older versions.
+        let sort_keys = super::sort_keys::sort_keys_of(&settings.view);
+        super::sort_keys::store_sort_keys(&mut settings.view, &sort_keys);
+
         // Every table column exactly once (an older file has no order, a hand-edited one may have anything).
         settings.view.table_column_order = super::table_columns::sanitize(&settings.view.table_column_order);
+        settings.view.table_hidden_columns = super::table_columns::sanitize_hidden(&settings.view.table_hidden_columns);
 
         // Sanitize sidebar widths
         settings.view.sidebar_left_width = settings

@@ -43,6 +43,12 @@ impl BridgeContextMenu {
             tab_mgr.set_menu_open(false);
             let action_u64 = action_id.wrapping_as::<u64>();
 
+            // 0. The menu of the table's header (columns)
+            if crate::ui::table_columns::is_header_action(action_u64) {
+                crate::ui::table_columns::handle_header_action(action_u64, &win, &st, &tab_mgr, &set);
+                return;
+            }
+
             // 1. Favorites Action Handling (5000..6000)
             if (5000..6000).contains(&action_u64) {
                 let target_fav = st.write().active_favorite_target.take();

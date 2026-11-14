@@ -185,12 +185,25 @@ impl Default for AppearanceSettings {
     }
 }
 
+/// One level of the Browse list's sort order as it is stored: names, not numbers, so a hand-edited file cannot break
+/// parsing (`settings/sort_keys.rs` turns them into `SortKey`s and drops what it does not know).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SortKeySetting {
+    pub column: String,
+    pub order: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ViewSettings {
     pub is_table_view: bool,
     pub sort_column: String,
     pub sort_order: String,
+    /// The whole sort order, first level first (up to four, added with Shift + click on a header). `sort_column` and
+    /// `sort_order` always repeat the first level, so an older version reads at least that; a settings file of 0.6.15 or
+    /// older has no list and is read from those two.
+    pub sort_keys: Vec<SortKeySetting>,
     pub media_type_filter: String,
     pub show_folders_in_browse: bool,
     pub is_inspector_collapsed: bool,
@@ -216,6 +229,8 @@ pub struct ViewSettings {
     /// The columns of the Browse table in display order, by key (`settings/table_columns.rs`); empty in a settings file
     /// of 0.6.15 or older, which means the default order.
     pub table_column_order: Vec<String>,
+    /// The columns of the Browse table that are hidden, by key (the header's menu); empty: all are shown.
+    pub table_hidden_columns: Vec<String>,
 
     pub sidebar_left_width: f32,
     pub sidebar_right_width: f32,
@@ -248,6 +263,7 @@ impl Default for ViewSettings {
             is_table_view: DEFAULT_IS_TABLE_VIEW,
             sort_column: DEFAULT_SORT_COLUMN.to_string(),
             sort_order: DEFAULT_SORT_ORDER.to_string(),
+            sort_keys: Vec::new(),
             media_type_filter: DEFAULT_MEDIA_TYPE_FILTER.to_string(),
             show_folders_in_browse: DEFAULT_SHOW_FOLDERS_IN_BROWSE,
             is_inspector_collapsed: DEFAULT_IS_INSPECTOR_COLLAPSED,
@@ -269,6 +285,7 @@ impl Default for ViewSettings {
             col_format_width: DEFAULT_COL_FORMAT_WIDTH,
             col_flags_width: DEFAULT_COL_FLAGS_WIDTH,
             table_column_order: crate::settings::table_columns::default_order(),
+            table_hidden_columns: Vec::new(),
 
             sidebar_left_width: DEFAULT_SIDEBAR_LEFT_WIDTH,
             sidebar_right_width: DEFAULT_SIDEBAR_RIGHT_WIDTH,

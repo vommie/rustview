@@ -140,6 +140,16 @@ impl BridgeContextMenu {
             tab_manager.clone(),
             state.clone(),
         );
+        let (win_header, st_header, tm_header, set_header) = (
+            window.clone_strong(),
+            state.clone(),
+            tab_manager.clone(),
+            settings.clone(),
+        );
+        window.on_table_header_context_menu(move |x, y| {
+            crate::ui::table_columns::show_header_menu(&win_header, &st_header, &tm_header, &set_header, x, y);
+        });
+
         window.on_browse_background_context_menu(move |x, y| {
             BrowseContextMenus::show_background_menu(
                 &BrowseMenuContext {

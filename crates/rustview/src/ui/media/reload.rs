@@ -98,8 +98,7 @@ impl BridgeMedia {
             !current_query.is_empty() && !last_query.is_empty() && current_query.starts_with(last_query.as_str());
         let request = ListRequest {
             filter: st.filter.clone(),
-            sort_column: st.sort_column,
-            sort_order: st.sort_order,
+            sort: st.sort_keys.clone(),
             refine_from: (is_refinement && !st.active_indices.is_empty()).then(|| st.active_indices.clone()),
         };
         (request, current_query)

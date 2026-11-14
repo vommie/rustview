@@ -64,21 +64,9 @@ pub fn reset_layout(
         .clone_from(&defaults.left_sidebar_active_panel_tab);
     view.tab_grid_columns = defaults.tab_grid_columns;
     view.tab_grid_auto_columns = defaults.tab_grid_auto_columns;
-    view.col_filename_width = defaults.col_filename_width;
-    view.col_path_width = defaults.col_path_width;
-    view.col_modified_date_width = defaults.col_modified_date_width;
-    view.col_created_date_width = defaults.col_created_date_width;
-    view.col_size_width = defaults.col_size_width;
-    view.col_rating_width = defaults.col_rating_width;
-    view.col_tags_width = defaults.col_tags_width;
-    view.col_width_width = defaults.col_width_width;
-    view.col_height_width = defaults.col_height_width;
-    view.col_ar_width = defaults.col_ar_width;
-    view.col_duration_width = defaults.col_duration_width;
-    view.col_format_width = defaults.col_format_width;
-    view.col_flags_width = defaults.col_flags_width;
-    view.table_column_order.clone_from(&defaults.table_column_order);
     view.dock = None;
+    // Order, visibility and widths of the table's columns.
+    crate::ui::table_columns::reset(window, view);
     settings.save_quiet(&app_settings);
 
     {
@@ -91,20 +79,6 @@ pub fn reset_layout(
     window.set_sidebar_right_width(defaults.sidebar_right_width);
     window.set_tab_grid_columns(defaults.tab_grid_columns.saturating_as::<i32>());
     window.set_tab_grid_auto_columns(defaults.tab_grid_auto_columns);
-    window.set_col_filename_width(defaults.col_filename_width);
-    window.set_col_path_width(defaults.col_path_width);
-    window.set_col_modified_date_width(defaults.col_modified_date_width);
-    window.set_col_created_date_width(defaults.col_created_date_width);
-    window.set_col_size_width(defaults.col_size_width);
-    window.set_col_rating_width(defaults.col_rating_width);
-    window.set_col_tags_width(defaults.col_tags_width);
-    window.set_col_width_width(defaults.col_width_width);
-    window.set_col_height_width(defaults.col_height_width);
-    window.set_col_ar_width(defaults.col_ar_width);
-    window.set_col_duration_width(defaults.col_duration_width);
-    window.set_col_format_width(defaults.col_format_width);
-    window.set_col_flags_width(defaults.col_flags_width);
-    crate::ui::table_columns::apply(window, &defaults.table_column_order);
     // The dock goes back to its default arrangement (it saves itself, `view.dock`).
     crate::ui::dock::reset_layout();
     if table_view_changed {

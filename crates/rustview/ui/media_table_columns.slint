@@ -1,5 +1,6 @@
 import { Theme } from "styles.slint";
 import { IconId, IconSize, IconSlot } from "icons.slint";
+import { TooltipHost } from "tooltips.slint";
 
 /// How long a column takes to move aside while another one is dragged (as in RustCut and RustMule).
 export global ColumnMotion {
@@ -78,9 +79,20 @@ export global TableColumns {
     in property <[int]> order: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
     in property <[int]> rank: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
-    /// The width of column `other` when it stands left of column `column`.
+    /// Which columns are shown (the header's menu, `view.table_hidden_columns`); a hidden column takes no room.
+    in property <[bool]> shown: [true, true, true, true, true, true, true, true, true, true, true, true, true];
+    /// The sort order (`view.sort_keys`): the level of each column (0: it is no key, 1: the first key), whether it sorts
+    /// descending, and the number of keys.
+    in property <[int]> sort-level: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    in property <[bool]> sort-desc: [false, false, false, false, false, false, false, false, false, false, false, false, false];
+    in property <int> sort-count: 1;
+
+    /// The width of column `other` when it is shown and stands left of column `column`.
     pure function lead(column: int, other: int, width: length) -> length {
-        return root.rank[other] < root.rank[column] ? width : 0px;
+        return root.shown[other] && root.rank[other] < root.rank[column] ? width : 0px;
+    }
+    pure function room(column: int, width: length) -> length {
+        return root.shown[column] ? width : 0px;
     }
     pure function start(c: int) -> length {
         return root.lead(c, 0, root.w0) + root.lead(c, 1, root.w1) + root.lead(c, 2, root.w2) + root.lead(c, 3, root.w3)
@@ -101,8 +113,10 @@ export global TableColumns {
     out property <length> x10: root.start(10);
     out property <length> x11: root.start(11);
     out property <length> x12: root.start(12);
-    out property <length> total: root.w0 + root.w1 + root.w2 + root.w3 + root.w4 + root.w5 + root.w6 + root.w7 + root.w8
-        + root.w9 + root.w10 + root.w11 + root.w12;
+    out property <length> total: root.room(0, root.w0) + root.room(1, root.w1) + root.room(2, root.w2)
+        + root.room(3, root.w3) + root.room(4, root.w4) + root.room(5, root.w5) + root.room(6, root.w6)
+        + root.room(7, root.w7) + root.room(8, root.w8) + root.room(9, root.w9) + root.room(10, root.w10)
+        + root.room(11, root.w11) + root.room(12, root.w12);
 
     /// Where column `c` starts, left edge of the table = 0.
     pure public function x(c: int) -> length {
@@ -110,8 +124,9 @@ export global TableColumns {
             : c == 5 ? root.x5 : c == 6 ? root.x6 : c == 7 ? root.x7 : c == 8 ? root.x8 : c == 9 ? root.x9
             : c == 10 ? root.x10 : c == 11 ? root.x11 : root.x12;
     }
+    /// The width column `c` takes: its own, or nothing while it is hidden.
     pure public function w(c: int) -> length {
-        return c == 0 ? root.w0 : c == 1 ? root.w1 : c == 2 ? root.w2 : c == 3 ? root.w3 : c == 4 ? root.w4
+        return !root.shown[c] ? 0px : c == 0 ? root.w0 : c == 1 ? root.w1 : c == 2 ? root.w2 : c == 3 ? root.w3 : c == 4 ? root.w4
             : c == 5 ? root.w5 : c == 6 ? root.w6 : c == 7 ? root.w7 : c == 8 ? root.w8 : c == 9 ? root.w9
             : c == 10 ? root.w10 : c == 11 ? root.w11 : root.w12;
     }
@@ -185,17 +200,22 @@ export component TableHeaderCell inherits Rectangle {
     /// The column's number and its display place.
     in property <int> column;
     in property <int> place;
-    in property <int> active-sort-column: 0;
-    in property <int> active-sort-order: 0; // 0 = Ascending, 1 = Descending
 
-    callback sort-clicked(int /* column */);
+    /// A click: sort by this column; `stacked` (Shift) adds it to the sort order instead.
+    callback sort-clicked(int /* column */, bool /* stacked */);
     callback column-resized(int /* column */, length /* new_width */);
     callback column-resize-finished(int /* column */, length /* final_width */);
     /// The column was dropped at another display place.
     callback moved-to(int /* from_place */, int /* to_place */);
+    /// A right click: the menu of the columns, at this point of the window.
+    callback menu-requested(length /* x */, length /* y */);
 
-    property <bool> is-sorted: root.column == root.active-sort-column;
+    property <int> sort-level: TableColumns.sort-level[root.column];
+    property <bool> is-sorted: root.sort-level > 0;
+    /// Several sort keys: each one shows its level.
+    property <bool> shows-level: root.is-sorted && TableColumns.sort-count > 1;
     property <length> press-x;
+    property <bool> stacked;
     property <bool> moving;
     property <length> start-abs;
     property <length> start-width;
@@ -203,11 +223,21 @@ export component TableHeaderCell inherits Rectangle {
 
     background: touch.has-hover && !root.moving ? Theme.surface-hover : Theme.surface;
 
+    host := TooltipHost {
+        text: "Click: sort. Shift+click: sort by it next. Drag: move. Right click: columns.";
+    }
+
     touch := TouchArea {
         mouse-cursor: root.moving ? MouseCursor.grabbing : MouseCursor.pointer;
         pointer-event(event) => {
-            if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+            if event.kind == PointerEventKind.down {
+                host.on-hover-leave();
+            }
+            if event.kind == PointerEventKind.down && event.button == PointerEventButton.right {
+                root.menu-requested(root.absolute-position.x + self.mouse-x, root.absolute-position.y + self.mouse-y);
+            } else if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
                 root.press-x = self.mouse-x;
+                root.stacked = event.modifiers.shift;
                 root.moving = false;
             } else if event.kind == PointerEventKind.up && event.button == PointerEventButton.left {
                 if root.moving {
@@ -220,8 +250,15 @@ export component TableHeaderCell inherits Rectangle {
                         TableColumns.end-drag();
                     }
                 } else {
-                    root.sort-clicked(root.column);
+                    root.sort-clicked(root.column, root.stacked);
                 }
+            }
+        }
+        changed has-hover => {
+            if self.has-hover {
+                host.on-hover-enter(self.mouse-x, self.mouse-y);
+            } else {
+                host.on-hover-leave();
             }
         }
         // 6 px of movement turn a press into a drag (a click sorts).
@@ -238,7 +275,7 @@ export component TableHeaderCell inherits Rectangle {
 
     Text {
         x: 8px;
-        width: Math.max(0px, parent.width - 16px - (root.is-sorted ? IconSize.sm + 5px : 0px));
+        width: Math.max(0px, parent.width - 16px - (root.is-sorted ? IconSize.sm + 5px : 0px) - (root.shows-level ? 8px : 0px));
         height: parent.height;
         text: TableColumns.title(root.column);
         color: root.is-sorted ? Theme.primary : Theme.text;
@@ -249,13 +286,24 @@ export component TableHeaderCell inherits Rectangle {
         overflow: elide;
     }
 
-    // Directional sort indicator (ascending / descending), right of the title.
+    // Directional sort indicator (ascending / descending), right of the title; with several sort keys its level follows.
     if root.is-sorted: IconSlot {
-        x: parent.width - 8px - self.width;
+        x: parent.width - 8px - self.width - (root.shows-level ? 8px : 0px);
         height: parent.height;
-        icon: root.active-sort-order == 0 ? IconId.sort-ascending : IconId.sort-descending;
+        icon: TableColumns.sort-desc[root.column] ? IconId.sort-descending : IconId.sort-ascending;
         size: IconSize.sm;
         color: Theme.primary;
+    }
+    if root.shows-level: Text {
+        x: parent.width - 14px;
+        width: 8px;
+        height: parent.height;
+        text: root.sort-level;
+        font-size: 9px;
+        font-weight: 700;
+        color: Theme.primary;
+        vertical-alignment: center;
+        horizontal-alignment: center;
     }
 
     Rectangle {
@@ -296,13 +344,11 @@ export component TableHeaderCell inherits Rectangle {
 
 /// The header of the table: the columns in their display order.
 export component TableHeader inherits Rectangle {
-    in property <int> sort-column: 0;
-    in property <int> sort-order: 0;
-
-    callback sort-clicked(int /* column */);
+    callback sort-clicked(int /* column */, bool /* stacked */);
     callback column-resized(int /* column */, length /* new_width */);
     callback column-resize-finished(int /* column */, length /* final_width */);
     callback column-moved(int /* from_place */, int /* to_place */);
+    callback menu-requested(length /* x */, length /* y */);
 
     background: Theme.surface;
 
@@ -312,14 +358,14 @@ export component TableHeader inherits Rectangle {
         width: TableColumns.w(column);
         height: parent.height;
         opacity: place == TableColumns.drag-place ? 0 : 1;
+        visible: TableColumns.shown[column];
         column: column;
         place: place;
-        active-sort-column: root.sort-column;
-        active-sort-order: root.sort-order;
-        sort-clicked(c) => { root.sort-clicked(c); }
+        sort-clicked(c, stacked) => { root.sort-clicked(c, stacked); }
         column-resized(c, w) => { root.column-resized(c, w); }
         column-resize-finished(c, w) => { root.column-resize-finished(c, w); }
         moved-to(from, to) => { root.column-moved(from, to); }
+        menu-requested(x, y) => { root.menu-requested(x, y); }
     }
 }
 
@@ -339,6 +385,7 @@ export component TableCell inherits Rectangle {
     width: TableColumns.w(root.column);
     height: 100%;
     opacity: root.column == TableColumns.drag-column ? 0 : 1;
+    visible: TableColumns.shown[root.column];
     clip: true;
 
     Text {
@@ -375,15 +422,16 @@ export global SortBarDrag {
 /// One column in the sort bar of the thumbnail view: as wide as its title. A click sorts, a drag moves the column.
 component SortChip inherits Rectangle {
     in property <int> column;
-    in property <int> active-sort-column: 0;
-    in property <int> active-sort-order: 0; // 0 = Ascending, 1 = Descending
 
-    callback sort-clicked(int /* column */);
+    callback sort-clicked(int /* column */, bool /* stacked */);
     callback dragged(length /* offset from the press */);
     callback dropped();
 
-    property <bool> is-sorted: root.column == root.active-sort-column;
+    property <int> sort-level: TableColumns.sort-level[root.column];
+    property <bool> is-sorted: root.sort-level > 0;
+    property <bool> shows-level: root.is-sorted && TableColumns.sort-count > 1;
     property <length> press-x;
+    property <bool> stacked;
     property <bool> moving;
 
     width: content.preferred-width;
@@ -391,19 +439,34 @@ component SortChip inherits Rectangle {
     border-radius: 3px;
     background: touch.has-hover && !root.moving ? Theme.surface-hover : Theme.surface;
 
+    host := TooltipHost {
+        text: "Click: sort. Shift+click: sort by it next. Drag: move.";
+    }
+
     touch := TouchArea {
         mouse-cursor: root.moving ? MouseCursor.grabbing : MouseCursor.pointer;
         pointer-event(event) => {
+            if event.kind == PointerEventKind.down {
+                host.on-hover-leave();
+            }
             if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
                 root.press-x = self.mouse-x;
+                root.stacked = event.modifiers.shift;
                 root.moving = false;
             } else if event.kind == PointerEventKind.up && event.button == PointerEventButton.left {
                 if root.moving {
                     root.moving = false;
                     root.dropped();
                 } else {
-                    root.sort-clicked(root.column);
+                    root.sort-clicked(root.column, root.stacked);
                 }
+            }
+        }
+        changed has-hover => {
+            if self.has-hover {
+                host.on-hover-enter(self.mouse-x, self.mouse-y);
+            } else {
+                host.on-hover-leave();
             }
         }
         // 6 px of movement turn a press into a drag (a click sorts).
@@ -431,9 +494,17 @@ component SortChip inherits Rectangle {
         }
 
         if root.is-sorted: IconSlot {
-            icon: root.active-sort-order == 0 ? IconId.sort-ascending : IconId.sort-descending;
+            icon: TableColumns.sort-desc[root.column] ? IconId.sort-descending : IconId.sort-ascending;
             size: IconSize.sm;
             color: Theme.primary;
+        }
+
+        if root.shows-level: Text {
+            text: root.sort-level;
+            font-size: 9px;
+            font-weight: 700;
+            color: Theme.primary;
+            vertical-alignment: center;
         }
     }
 }
@@ -441,10 +512,7 @@ component SortChip inherits Rectangle {
 /// The sort bar of the thumbnail view: the table's columns as chips, in the table's order. A chip is moved like a table
 /// header (ghost, gap, the chips in between move aside, Escape cancels), and the order is the same one.
 export component GridSortBar inherits Rectangle {
-    in property <int> sort-column: 0;
-    in property <int> sort-order: 0;
-
-    callback sort-clicked(int /* column */);
+    callback sort-clicked(int /* column */, bool /* stacked */);
     callback column-moved(int /* from_place */, int /* to_place */);
 
     property <length> edge: 6px;
@@ -514,9 +582,7 @@ export component GridSortBar inherits Rectangle {
         animate x { duration: root.motion; easing: ease-out; }
         opacity: TableColumns.rank[0] == SortBarDrag.place ? 0 : 1;
         column: 0;
-        active-sort-column: root.sort-column;
-        active-sort-order: root.sort-order;
-        sort-clicked(c) => { root.sort-clicked(c); }
+        sort-clicked(c, stacked) => { root.sort-clicked(c, stacked); }
         dragged(dx) => { root.drag(TableColumns.rank[0], dx); }
         dropped => { root.drop(TableColumns.rank[0]); }
     }
@@ -526,9 +592,7 @@ export component GridSortBar inherits Rectangle {
         animate x { duration: root.motion; easing: ease-out; }
         opacity: TableColumns.rank[1] == SortBarDrag.place ? 0 : 1;
         column: 1;
-        active-sort-column: root.sort-column;
-        active-sort-order: root.sort-order;
-        sort-clicked(c) => { root.sort-clicked(c); }
+        sort-clicked(c, stacked) => { root.sort-clicked(c, stacked); }
         dragged(dx) => { root.drag(TableColumns.rank[1], dx); }
         dropped => { root.drop(TableColumns.rank[1]); }
     }
@@ -538,9 +602,7 @@ export component GridSortBar inherits Rectangle {
         animate x { duration: root.motion; easing: ease-out; }
         opacity: TableColumns.rank[2] == SortBarDrag.place ? 0 : 1;
         column: 2;
-        active-sort-column: root.sort-column;
-        active-sort-order: root.sort-order;
-        sort-clicked(c) => { root.sort-clicked(c); }
+        sort-clicked(c, stacked) => { root.sort-clicked(c, stacked); }
         dragged(dx) => { root.drag(TableColumns.rank[2], dx); }
         dropped => { root.drop(TableColumns.rank[2]); }
     }
@@ -550,9 +612,7 @@ export component GridSortBar inherits Rectangle {
         animate x { duration: root.motion; easing: ease-out; }
         opacity: TableColumns.rank[3] == SortBarDrag.place ? 0 : 1;
         column: 3;
-        active-sort-column: root.sort-column;
-        active-sort-order: root.sort-order;
-        sort-clicked(c) => { root.sort-clicked(c); }
+        sort-clicked(c, stacked) => { root.sort-clicked(c, stacked); }
         dragged(dx) => { root.drag(TableColumns.rank[3], dx); }
         dropped => { root.drop(TableColumns.rank[3]); }
     }
@@ -562,9 +622,7 @@ export component GridSortBar inherits Rectangle {
         animate x { duration: root.motion; easing: ease-out; }
         opacity: TableColumns.rank[4] == SortBarDrag.place ? 0 : 1;
         column: 4;
-        active-sort-column: root.sort-column;
-        active-sort-order: root.sort-order;
-        sort-clicked(c) => { root.sort-clicked(c); }
+        sort-clicked(c, stacked) => { root.sort-clicked(c, stacked); }
         dragged(dx) => { root.drag(TableColumns.rank[4], dx); }
         dropped => { root.drop(TableColumns.rank[4]); }
     }
@@ -574,9 +632,7 @@ export component GridSortBar inherits Rectangle {
         animate x { duration: root.motion; easing: ease-out; }
         opacity: TableColumns.rank[5] == SortBarDrag.place ? 0 : 1;
         column: 5;
-        active-sort-column: root.sort-column;
-        active-sort-order: root.sort-order;
-        sort-clicked(c) => { root.sort-clicked(c); }
+        sort-clicked(c, stacked) => { root.sort-clicked(c, stacked); }
         dragged(dx) => { root.drag(TableColumns.rank[5], dx); }
         dropped => { root.drop(TableColumns.rank[5]); }
     }
@@ -586,9 +642,7 @@ export component GridSortBar inherits Rectangle {
         animate x { duration: root.motion; easing: ease-out; }
         opacity: TableColumns.rank[6] == SortBarDrag.place ? 0 : 1;
         column: 6;
-        active-sort-column: root.sort-column;
-        active-sort-order: root.sort-order;
-        sort-clicked(c) => { root.sort-clicked(c); }
+        sort-clicked(c, stacked) => { root.sort-clicked(c, stacked); }
         dragged(dx) => { root.drag(TableColumns.rank[6], dx); }
         dropped => { root.drop(TableColumns.rank[6]); }
     }
@@ -598,9 +652,7 @@ export component GridSortBar inherits Rectangle {
         animate x { duration: root.motion; easing: ease-out; }
         opacity: TableColumns.rank[7] == SortBarDrag.place ? 0 : 1;
         column: 7;
-        active-sort-column: root.sort-column;
-        active-sort-order: root.sort-order;
-        sort-clicked(c) => { root.sort-clicked(c); }
+        sort-clicked(c, stacked) => { root.sort-clicked(c, stacked); }
         dragged(dx) => { root.drag(TableColumns.rank[7], dx); }
         dropped => { root.drop(TableColumns.rank[7]); }
     }
@@ -610,9 +662,7 @@ export component GridSortBar inherits Rectangle {
         animate x { duration: root.motion; easing: ease-out; }
         opacity: TableColumns.rank[8] == SortBarDrag.place ? 0 : 1;
         column: 8;
-        active-sort-column: root.sort-column;
-        active-sort-order: root.sort-order;
-        sort-clicked(c) => { root.sort-clicked(c); }
+        sort-clicked(c, stacked) => { root.sort-clicked(c, stacked); }
         dragged(dx) => { root.drag(TableColumns.rank[8], dx); }
         dropped => { root.drop(TableColumns.rank[8]); }
     }
@@ -622,9 +672,7 @@ export component GridSortBar inherits Rectangle {
         animate x { duration: root.motion; easing: ease-out; }
         opacity: TableColumns.rank[9] == SortBarDrag.place ? 0 : 1;
         column: 9;
-        active-sort-column: root.sort-column;
-        active-sort-order: root.sort-order;
-        sort-clicked(c) => { root.sort-clicked(c); }
+        sort-clicked(c, stacked) => { root.sort-clicked(c, stacked); }
         dragged(dx) => { root.drag(TableColumns.rank[9], dx); }
         dropped => { root.drop(TableColumns.rank[9]); }
     }
@@ -634,9 +682,7 @@ export component GridSortBar inherits Rectangle {
         animate x { duration: root.motion; easing: ease-out; }
         opacity: TableColumns.rank[10] == SortBarDrag.place ? 0 : 1;
         column: 10;
-        active-sort-column: root.sort-column;
-        active-sort-order: root.sort-order;
-        sort-clicked(c) => { root.sort-clicked(c); }
+        sort-clicked(c, stacked) => { root.sort-clicked(c, stacked); }
         dragged(dx) => { root.drag(TableColumns.rank[10], dx); }
         dropped => { root.drop(TableColumns.rank[10]); }
     }
@@ -646,9 +692,7 @@ export component GridSortBar inherits Rectangle {
         animate x { duration: root.motion; easing: ease-out; }
         opacity: TableColumns.rank[11] == SortBarDrag.place ? 0 : 1;
         column: 11;
-        active-sort-column: root.sort-column;
-        active-sort-order: root.sort-order;
-        sort-clicked(c) => { root.sort-clicked(c); }
+        sort-clicked(c, stacked) => { root.sort-clicked(c, stacked); }
         dragged(dx) => { root.drag(TableColumns.rank[11], dx); }
         dropped => { root.drop(TableColumns.rank[11]); }
     }
@@ -658,9 +702,7 @@ export component GridSortBar inherits Rectangle {
         animate x { duration: root.motion; easing: ease-out; }
         opacity: TableColumns.rank[12] == SortBarDrag.place ? 0 : 1;
         column: 12;
-        active-sort-column: root.sort-column;
-        active-sort-order: root.sort-order;
-        sort-clicked(c) => { root.sort-clicked(c); }
+        sort-clicked(c, stacked) => { root.sort-clicked(c, stacked); }
         dragged(dx) => { root.drag(TableColumns.rank[12], dx); }
         dropped => { root.drop(TableColumns.rank[12]); }
     }

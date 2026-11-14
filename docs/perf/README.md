@@ -67,11 +67,12 @@ One step per line, `#` starts a comment (`src/ui/perf_probe/plan.rs`):
 | `tree` | Refresh Tree (Full), waits until it is done. |
 | `folder NAME [index\|nowait]` | Opens the folder with that name and waits until its list and visible thumbnails are shown; `index` waits for its scan and thumbnail generation, `nowait` goes on at once. |
 | `view grid\|table` | Switches the Browse view. |
-| `sort COLUMN` | Clicks a column header (0 = name), waits for the list. |
+| `sort COLUMN [stack]` | Clicks a column header (0 = name), waits for the list; `stack` is a Shift + click. |
 | `scroll PX_PER_S SECONDS` | Moves the list like a drag of the scroll bar (negative: up). |
 | `wheel NOTCHES_PER_S SECONDS` | Turns the mouse wheel over the list. |
 | `jump FRACTION` | Jumps to a place of the list (0 to 1) and waits for its thumbnails. |
 | `press @ELEMENT`, `sweep DX DY SECONDS CYCLES`, `moveto @ELEMENT SECONDS`, `drag DX DY SECONDS`, `release` | Pointer input: press on an element, move away and back, move to an element, move by a distance and stay, release. |
+| `rclick @ELEMENT`, `click DX DY` | A right click on an element; a left click DX/DY away from the pointer (an entry of an open menu). |
 | `key NAME` | escape, return, delete, up, down, pageup, pagedown. |
 | `shot NAME` | Saves a picture of the window next to the log (`LOG.NAME.png`). |
 | `quit` | Closes the application. |

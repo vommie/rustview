@@ -174,19 +174,8 @@ impl BridgeRubberband {
         let total_items = st.view_len();
 
         let hits = if is_table {
-            let col_w_sum = window.get_col_filename_width()
-                + window.get_col_path_width()
-                + window.get_col_modified_date_width()
-                + window.get_col_created_date_width()
-                + window.get_col_size_width()
-                + window.get_col_rating_width()
-                + window.get_col_tags_width()
-                + window.get_col_width_width()
-                + window.get_col_height_width()
-                + window.get_col_ar_width()
-                + window.get_col_duration_width()
-                + window.get_col_format_width()
-                + window.get_col_flags_width();
+            // The width of the columns that are shown (a hidden one takes no room).
+            let col_w_sum = window.global::<crate::ui::TableColumns>().get_total();
 
             let config = TableLayoutConfig {
                 row_height: 28.0,
