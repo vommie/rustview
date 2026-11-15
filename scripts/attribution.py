@@ -32,7 +32,7 @@ BUNDLED = {
     "libwebp-sys": "0.9.6",
     "lmdb-master-sys": "0.2.6",
     # SQLite is in the public domain.
-    "libsqlite3-sys": "0.38.2",
+    "libsqlite3-sys": "0.40.0",
 }
 EXTRA_LINES = {
     "MIT": (

@@ -79,6 +79,11 @@ and the stored thumbnails are untouched, `settings.json` only gains `view.table_
   first picture of the new file; the player is reused as before.
 
 
+### Security
+
+- The SQLite that is compiled into RustView is 3.54.1 instead of 3.53.2 (`rusqlite` 0.42, `libsqlite3-sys` 0.40;
+  RUSTSEC-2026-0459), and `rustix` is 1.1.6 (RUSTSEC-2026-0486). Existing databases are read as before.
+
 ## [0.6.15] - 2026-11-06
 
 ### Added
