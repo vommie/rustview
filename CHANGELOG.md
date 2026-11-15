@@ -9,8 +9,11 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ## [Unreleased]
 
+## [0.6.18] - 2026-11-15
+
 Responsiveness: measurements, method and numbers are in `docs/perf/2026-11-responsiveness.md`. No migration: the library
-and the stored thumbnails are untouched, `settings.json` only gains `view.table_column_order`.
+and the stored thumbnails are untouched, `settings.json` only gains `view.table_column_order`,
+`view.table_hidden_columns` and `view.sort_keys`.
 
 ### Added
 
@@ -1180,7 +1183,8 @@ First usable version: the application skeleton grew into a working media browser
 ### Added
 - Initial commit of the project.
 
-[Unreleased]: https://github.com/vommie/rustview/compare/v0.6.15...HEAD
+[Unreleased]: https://github.com/vommie/rustview/compare/v0.6.18...HEAD
+[0.6.18]: https://github.com/vommie/rustview/compare/v0.6.15...v0.6.18
 [0.6.15]: https://github.com/vommie/rustview/compare/v0.6.13...v0.6.15
 [0.6.13]: https://github.com/vommie/rustview/compare/v0.6.11...v0.6.13
 [0.6.11]: https://github.com/vommie/rustview/compare/v0.6.9...v0.6.11
