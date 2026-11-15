@@ -15,6 +15,8 @@ export component MultiviewFullscreenWindow inherits Window {
     no-frame: true;
 
     in property <[MultiviewTileView]> tiles;
+    in property <[image]> tile-images;
+    in property <[image]> zoom-images;
     in property <[MultiviewGutterView]> gutters;
     // The newest picture of every video drawn in this window (`video_surface::hosts`).
     in property <[image]> video-frames;
@@ -119,6 +121,8 @@ export component MultiviewFullscreenWindow inherits Window {
         animate opacity { duration: 60ms; }
 
         tiles: root.tiles;
+        tile-images: root.tile-images;
+        zoom-images: root.zoom-images;
         gutters: root.gutters;
         video-frames: root.video-frames;
         video-bars: root.video-bars;

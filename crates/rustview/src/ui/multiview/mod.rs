@@ -18,6 +18,7 @@ pub mod hint;
 mod navigation;
 mod pointer_events;
 mod pointer_lock;
+pub mod probe;
 mod rating;
 mod router;
 mod session;

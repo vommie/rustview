@@ -28,8 +28,10 @@ export struct MultiviewTileView {
     y: length,
     width: length,
     height: length,
+    // The picture of an image tile is not part of this row: it is the row of the canvas' `tile-images` with the tile's index
+    // (a row is rewritten on every change of the geometry, and a picture bound to it would be uploaded to the GPU again).
     kind: int, // 0 = image, 1 = video, 2 = unavailable
-    image: image,
+    has-image: bool,
     // A video: the row of the window's `video-frames` with its newest picture (-1: none yet), where the whole picture (the
     // texture) is drawn and the part of it that shows (the room while zoomed), relative to the tile.
     video-row: int,
@@ -43,12 +45,11 @@ export struct MultiviewTileView {
     video-clip-height: length,
     is-loading: bool,
     error-text: string,
-    // A zoomed image: drawn instead of `image` (which is its fitted picture) in the rectangle zoom-x/y/width/height of the tile.
-    // `zoom-hq` says the sharp, resampled `zoom-image` is ready; until then `image` is cut out (zoom-clip-*, pixels of `image`)
-    // and scaled by the renderer.
+    // A zoomed image: drawn instead of the fitted picture in the rectangle zoom-x/y/width/height of the tile. `zoom-hq` says
+    // the sharp, resampled picture (the row of the canvas' `zoom-images`) is ready; until then the fitted picture is cut out
+    // (zoom-clip-*, its pixels) and scaled by the renderer.
     zoomed: bool,
     zoom-hq: bool,
-    zoom-image: image,
     // The room the zoomed picture may use (the tile and the free space around it), relative to the tile; zoom-x/y/width/height are
     // relative to it.
     zoom-area-x: length,

@@ -2,9 +2,8 @@
 //! like a mouse). Every step uses the same callbacks and events as the user's own input.
 
 use super::plan::{Anchor, FolderWait, Step, ViewKind};
-use super::{input, recorder, tiles};
+use super::{input, pointing, recorder, tiles};
 use crate::ui::MainWindow;
-use crate::ui::folder_tree::BridgeFolders;
 use crate::ui::media::BridgeMedia;
 use crate::ui::state::UiState;
 use parking_lot::RwLock;
@@ -29,6 +28,8 @@ const INDEX_TIMEOUT: Duration = Duration::from_hours(6);
 const FRAME_WAIT: Duration = Duration::from_millis(400);
 /// Tiles whose thumbnail is not stored never fill; the step goes on after this time and says so in the log.
 const THUMBS_TIMEOUT: Duration = Duration::from_secs(10);
+/// How long the fullscreen of a Multiview may take to show its media.
+const FULLSCREEN_TIMEOUT: Duration = Duration::from_secs(15);
 
 pub struct Context {
     pub window: slint::Weak<MainWindow>,
@@ -84,6 +85,10 @@ enum Running {
         started: Instant,
         seconds: f32,
     },
+    /// The fullscreen of a Multiview has to show its media.
+    Fullscreen {
+        started: Instant,
+    },
 }
 
 enum Begun {
@@ -94,11 +99,15 @@ enum Begun {
 }
 
 pub struct Driver {
-    ctx: Context,
+    pub(super) ctx: Context,
     steps: VecDeque<Step>,
     step_number: u64,
     running: Option<Running>,
-    pointer: (f32, f32),
+    pub(super) pointer: (f32, f32),
+    /// Pointer and key steps go to the fullscreen window of the Multiview.
+    pub(super) fullscreen: bool,
+    /// The keys the plan gave to actions (`bind`).
+    binds: Vec<(String, String)>,
     scenario: Option<String>,
 }
 
@@ -110,6 +119,8 @@ impl Driver {
             step_number: 0,
             running: None,
             pointer: (0.0, 0.0),
+            fullscreen: false,
+            binds: Vec::new(),
             scenario: None,
         }
     }
@@ -163,33 +174,12 @@ impl Driver {
         BridgeMedia::is_system_busy(window, &self.ctx.thumbnails, &self.ctx.state)
     }
 
-    fn anchor(window: &MainWindow, anchor: &Anchor) -> Option<(f32, f32)> {
-        let point = window.invoke_probe_anchor(anchor.name.as_str().into(), anchor.index);
-        (point.x >= 0.0 && point.y >= 0.0).then_some((point.x, point.y))
-    }
-
-    fn open_folder(&self, window: &MainWindow, name: &str) -> bool {
-        let found = {
-            let st = self.ctx.state.read();
-            st.folder_hierarchy.as_deref().and_then(|tree| {
-                tree.nodes
-                    .values()
-                    .find(|node| node.name == name && !node.is_deleted)
-                    .map(|node| (node.id, node.path.clone()))
-            })
-        };
-        let Some((id, path)) = found else { return false };
-        recorder::event("folder_select", id);
-        BridgeFolders::select_folder(
-            id,
-            &path,
-            window,
-            &self.ctx.library,
-            &self.ctx.thumbnails,
-            &self.ctx.settings,
-            &self.ctx.state,
-        );
-        true
+    fn key(&self, window: &MainWindow, name: &str, down: bool, up: bool) -> Begun {
+        if self.with_target(window, |target| input::key(target, name, down, up)) {
+            Begun::Done
+        } else {
+            Begun::Failed("unknown key")
+        }
     }
 
     fn begin(&mut self, step: Step, window: &MainWindow, now: Instant) -> Begun {
@@ -263,18 +253,22 @@ impl Driver {
                 last: now,
                 until: now + Duration::from_secs_f32(seconds),
             }),
-            Step::Wheel { notches_per_s, seconds } => {
-                let Some(point) = Self::anchor(
-                    window,
-                    &Anchor {
+            Step::Wheel {
+                notches_per_s,
+                seconds,
+                here,
+            } => {
+                if !here {
+                    let view = Anchor {
                         name: "view".to_owned(),
                         index: 0,
-                    },
-                ) else {
-                    return Begun::Failed("the view has no place");
-                };
-                self.pointer = point;
-                input::move_to(window.window(), point);
+                    };
+                    let Some(point) = self.anchor(window, &view) else {
+                        return Begun::Failed("the view has no place");
+                    };
+                    self.pointer = point;
+                }
+                self.move_pointer(window);
                 Begun::Running(Running::Wheel {
                     per_s: notches_per_s,
                     last: now,
@@ -294,10 +288,25 @@ impl Driver {
                     frames_before: recorder::frames(),
                 })
             }
-            Step::Press(anchor) => match Self::anchor(window, &anchor) {
+            Step::Press(anchor) => match self.anchor(window, &anchor) {
                 Some(point) => {
                     self.pointer = point;
-                    input::press(window.window(), point);
+                    self.move_pointer(window);
+                    self.with_target(window, |target| input::press(target, point));
+                    Begun::Done
+                }
+                None => Begun::Failed("unknown element"),
+            },
+            Step::DoubleClick(anchor) => match self.anchor(window, &anchor) {
+                Some(point) => {
+                    self.pointer = point;
+                    self.move_pointer(window);
+                    self.with_target(window, |target| {
+                        for _ in 0..2 {
+                            input::press(target, point);
+                            input::release(target, point);
+                        }
+                    });
                     Begun::Done
                 }
                 None => Begun::Failed("unknown element"),
@@ -315,7 +324,7 @@ impl Driver {
                 seconds,
                 cycles,
             }),
-            Step::MoveTo { anchor, seconds } => match Self::anchor(window, &anchor) {
+            Step::MoveTo { anchor, seconds } => match self.anchor(window, &anchor) {
                 Some(to) => Begun::Running(Running::MoveTo {
                     from: self.pointer,
                     to,
@@ -330,18 +339,23 @@ impl Driver {
                 started: now,
                 seconds,
             }),
-            Step::RightClick(anchor) => match Self::anchor(window, &anchor) {
+            Step::RightClick(anchor) => match self.anchor(window, &anchor) {
                 Some(point) => {
                     self.pointer = point;
-                    input::right_click(window.window(), point);
+                    self.move_pointer(window);
+                    self.with_target(window, |target| input::right_click(target, point));
                     Begun::Done
                 }
                 None => Begun::Failed("unknown element"),
             },
             Step::ClickBy { dx, dy } => {
                 self.pointer = (self.pointer.0 + dx, self.pointer.1 + dy);
-                input::press(window.window(), self.pointer);
-                input::release(window.window(), self.pointer);
+                let point = self.pointer;
+                self.move_pointer(window);
+                self.with_target(window, |target| {
+                    input::press(target, point);
+                    input::release(target, point);
+                });
                 Begun::Done
             }
             Step::Release => {
@@ -353,18 +367,32 @@ impl Driver {
                 {
                     return Begun::Failed("the media drag is over no folder");
                 }
-                input::release(window.window(), self.pointer);
+                let point = self.pointer;
+                self.with_target(window, |target| input::release(target, point));
                 Begun::Done
             }
-            Step::Key(name) => {
-                if input::key(window.window(), &name) {
-                    Begun::Done
-                } else {
-                    Begun::Failed("unknown key")
+            Step::Key(name) => self.key(window, &name, true, true),
+            Step::KeyDown(name) => self.key(window, &name, true, false),
+            Step::KeyUp(name) => self.key(window, &name, false, true),
+            Step::Bind { action, key } => {
+                if crate::ui::keymap::Action::from_id(&action).is_none() {
+                    return Begun::Failed("unknown action");
                 }
+                let mut stored = self.ctx.settings.get().hotkeys.clone();
+                self.binds.push((action, key));
+                for (action, key) in &self.binds {
+                    stored.insert(action.clone(), serde_json::json!([key]));
+                }
+                crate::ui::hotkeys::apply(&stored);
+                Begun::Done
             }
+            Step::Window(false) => {
+                self.fullscreen = false;
+                Begun::Done
+            }
+            Step::Window(true) => Begun::Running(Running::Fullscreen { started: now }),
             Step::Shot(name) => {
-                super::shot(window, &name);
+                self.with_target(window, |target| super::shot(target, &name));
                 Begun::Done
             }
             Step::Quit => {
@@ -485,8 +513,9 @@ impl Driver {
                 mut owed,
             } => {
                 owed += per_s.abs() * (now - last).as_secs_f32();
+                let point = self.pointer;
                 while owed >= 1.0 {
-                    input::wheel(window.window(), self.pointer, per_s > 0.0);
+                    self.with_target(window, |target| input::wheel(target, point, per_s > 0.0));
                     owed -= 1.0;
                 }
                 Ok((now < until).then_some(Running::Wheel {
@@ -506,7 +535,8 @@ impl Driver {
             } => {
                 let progress = (now - started).as_secs_f32() / seconds;
                 let reach = input::triangle(progress, cycles);
-                input::move_to(window.window(), (origin.0 + dx * reach, origin.1 + dy * reach));
+                self.pointer = (origin.0 + dx * reach, origin.1 + dy * reach);
+                self.move_pointer(window);
                 Ok((progress < 1.0).then_some(Running::Sweep {
                     origin,
                     dx,
@@ -524,13 +554,23 @@ impl Driver {
             } => {
                 let progress = ((now - started).as_secs_f32() / seconds).min(1.0);
                 self.pointer = (from.0 + (to.0 - from.0) * progress, from.1 + (to.1 - from.1) * progress);
-                input::move_to(window.window(), self.pointer);
+                self.move_pointer(window);
                 Ok((progress < 1.0).then_some(Running::MoveTo {
                     from,
                     to,
                     started,
                     seconds,
                 }))
+            }
+            Running::Fullscreen { started } => {
+                if pointing::fullscreen_shown() {
+                    self.fullscreen = true;
+                    return Ok(None);
+                }
+                if now - started > FULLSCREEN_TIMEOUT {
+                    return Err("the fullscreen did not open");
+                }
+                Ok(Some(Running::Fullscreen { started }))
             }
         }
     }

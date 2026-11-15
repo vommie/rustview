@@ -22,6 +22,17 @@ pub struct PlaybackNumbers {
 }
 
 impl MpvPlayer {
+    /// Another file is about to be loaded (the load itself may wait for the render context): what the player shows and
+    /// reports from now on belongs to a file that is going.
+    pub fn expect_load(&self) {
+        self.loads.fetch_add(1, Ordering::AcqRel);
+    }
+
+    /// The newest load that was requested or announced; `MpvNotice::FirstPicture` names the load its picture belongs to.
+    pub fn newest_load(&self) -> u64 {
+        self.loads.load(Ordering::Acquire)
+    }
+
     /// Loads a video file from disk and starts immediate playback (resets user pause state to false).
     pub fn load_file(&self, path: &Path) -> Result<(), ViewerError> {
         if !path.exists() {
@@ -34,6 +45,7 @@ impl MpvPlayer {
         self.reset_video_zoom();
         // The size mpv reports until the new file starts is still the previous file's.
         self.params.write().reset(true);
+        self.loads.fetch_add(1, Ordering::AcqRel);
 
         self.mpv
             .command("loadfile", &[&path_str, "replace"])

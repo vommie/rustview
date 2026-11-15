@@ -68,21 +68,43 @@ pub fn wheel(window: &slint::Window, point: (f32, f32), down: bool) {
     });
 }
 
-/// Presses and releases the key with that name; `false` for a name the probe does not know.
-pub fn key(window: &slint::Window, name: &str) -> bool {
-    let text: SharedString = match name {
-        "escape" => Key::Escape.into(),
-        "return" => Key::Return.into(),
-        "delete" => Key::Delete.into(),
-        "up" => Key::UpArrow.into(),
-        "down" => Key::DownArrow.into(),
-        "pagedown" => Key::PageDown.into(),
-        "pageup" => Key::PageUp.into(),
-        _ => return false,
+fn key_text(name: &str) -> Option<SharedString> {
+    let key = match name {
+        "escape" => Key::Escape,
+        "return" => Key::Return,
+        "delete" => Key::Delete,
+        "backspace" => Key::Backspace,
+        "up" => Key::UpArrow,
+        "down" => Key::DownArrow,
+        "left" => Key::LeftArrow,
+        "right" => Key::RightArrow,
+        "pagedown" => Key::PageDown,
+        "pageup" => Key::PageUp,
+        "f11" => Key::F11,
+        "control" => Key::Control,
+        "shift" => Key::Shift,
+        _ => {
+            let mut letters = name.chars();
+            return match (letters.next(), letters.next()) {
+                (Some(letter), None) => Some(letter.into()),
+                _ => None,
+            };
+        }
     };
+    Some(key.into())
+}
+
+/// Presses (`down`) and releases (`up`) the key with that name, a single character or a name like `escape`; `false` for a
+/// name the probe does not know.
+pub fn key(window: &slint::Window, name: &str, down: bool, up: bool) -> bool {
+    let Some(text) = key_text(name) else { return false };
     recorder::note_input();
-    window.dispatch_event(WindowEvent::KeyPressed { text: text.clone() });
-    window.dispatch_event(WindowEvent::KeyReleased { text });
+    if down {
+        window.dispatch_event(WindowEvent::KeyPressed { text: text.clone() });
+    }
+    if up {
+        window.dispatch_event(WindowEvent::KeyReleased { text });
+    }
     true
 }
 

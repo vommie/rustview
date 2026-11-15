@@ -1,5 +1,5 @@
 //! Performance probe of the main window for developers: runs a plan of scripted steps (scrolling, resizing, dragging, folder
-//! switches) and logs every frame, so the responsiveness of the UI can be measured and compared on any machine
+//! switches) and logs every frame, so the responsiveness of the UI can be measured and compared
 //! (`docs/perf/README.md`, `scripts/perf/`).
 //!
 //! It runs only when `RUSTVIEW_PERF_PLAN` names a plan file; the log goes to `RUSTVIEW_PERF_LOG` (default: the plan's path
@@ -8,14 +8,14 @@
 mod driver;
 mod input;
 pub mod plan;
+mod pointing;
 mod recorder;
 mod tiles;
 
 pub use driver::Context;
 pub use recorder::{event, flush, is_active, on_rendering};
 
-use crate::ui::MainWindow;
-use slint::{ComponentHandle, Timer, TimerMode};
+use slint::{Timer, TimerMode};
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::sync::OnceLock;
@@ -47,24 +47,20 @@ pub fn note_list_committed(total: usize) {
 }
 
 /// Saves what the window shows as `LOG.NAME.png` (a `shot` step of the plan).
-fn shot(window: &MainWindow, name: &str) {
+fn shot(window: &slint::Window, name: &str) {
     let Some(log_path) = LOG_PATH.get() else { return };
     let mut path = log_path.clone().into_os_string();
     path.push(format!(".{name}.png"));
-    let saved = window
-        .window()
-        .take_snapshot()
+    let saved = window.take_snapshot().map_err(|e| e.to_string()).and_then(|pixels| {
+        image::save_buffer(
+            &path,
+            pixels.as_bytes(),
+            pixels.width(),
+            pixels.height(),
+            image::ExtendedColorType::Rgba8,
+        )
         .map_err(|e| e.to_string())
-        .and_then(|pixels| {
-            image::save_buffer(
-                &path,
-                pixels.as_bytes(),
-                pixels.width(),
-                pixels.height(),
-                image::ExtendedColorType::Rgba8,
-            )
-            .map_err(|e| e.to_string())
-        });
+    });
     if let Err(reason) = saved {
         tracing::error!(reason, "[PerfProbe] The picture of the window was not saved");
     }

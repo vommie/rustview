@@ -50,8 +50,10 @@ impl MultiviewInstance {
 
     /// Gives every video's textures the size its placement needs (`VideoPlacement::texture_size`; a video that would show less
     /// than `MULTIVIEW_MIN_VIDEO_WINDOW_PX` draws nothing). While a zoom animates a texture keeps its size until it falls far
-    /// behind. Called after the layout changed and on every poll of the zoom.
+    /// behind, and while a gutter is dragged until it is clearly too small (`drag_finished` gives it the exact size). Called
+    /// after the layout changed and on every poll of the zoom.
     pub(super) fn size_video_textures(&mut self) {
+        let dragging = self.drag.is_some();
         for index in 0..self.tiles.len() {
             let placement = self.video_placement(index);
             let tile = &mut self.tiles[index];
@@ -67,7 +69,9 @@ impl MultiviewInstance {
                 .visible()
                 .is_some_and(|v| v.w >= MULTIVIEW_MIN_VIDEO_WINDOW_PX && v.h >= MULTIVIEW_MIN_VIDEO_WINDOW_PX);
             let wanted = if shows { placement.texture_size(native) } else { (0, 0) };
-            if video_placement::keeps_texture(video.texture, wanted, animating && shows) {
+            if video_placement::keeps_texture(video.texture, wanted, animating && shows)
+                || dragging && video_placement::keeps_texture_in_drag(video.texture, wanted)
+            {
                 continue;
             }
             video.surface.set_size(wanted.0, wanted.1);

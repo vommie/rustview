@@ -694,6 +694,12 @@ export component MainWindow inherits Window {
                 y: grid-view.absolute-position.y + grid-view.probe-tile-y(index),
             };
         }
+        if name == "multiview" {
+            return {
+                x: multiview-viewer.absolute-position.x,
+                y: multiview-viewer.absolute-position.y,
+            };
+        }
         if name == "folder-tree" {
             return {
                 x: folder-panel.absolute-position.x + folder-panel.width / 2,
@@ -1087,6 +1093,8 @@ export component MainWindow inherits Window {
                     multiview-viewer := MultiviewCanvas {
                         visible: root.active-view-mode == 1;
                         tiles: MultiviewTabBus.tiles;
+                        tile-images: MultiviewTabBus.tile-images;
+                        zoom-images: MultiviewTabBus.zoom-images;
                         gutters: MultiviewTabBus.gutters;
                         video-frames: root.video-frames;
                         video-bars: MultiviewTabBus.video-bars;

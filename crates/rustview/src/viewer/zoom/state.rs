@@ -287,13 +287,14 @@ impl ZoomState {
     // ---- the tile -------------------------------------------------------------------------------------------------------
 
     /// The tile the picture is shown in, with no room around it (physical pixels); see `set_area`.
-    pub fn set_tile(&mut self, tile: (i32, i32), prefs: &ZoomPrefs) -> bool {
-        self.set_area(Area::plain(tile), prefs)
+    pub fn set_tile(&mut self, tile: (i32, i32), prefs: &ZoomPrefs, now: Instant) -> bool {
+        self.set_area(Area::plain(tile), prefs, now)
     }
 
     /// The room the picture may use (physical pixels): the tile and the free space around it. A different room re-fits the view
-    /// and asks for a new render. Returns whether anything changed.
-    pub fn set_area(&mut self, area: Area, prefs: &ZoomPrefs) -> bool {
+    /// and asks for a new render once the room rests (a gutter drag changes it with every pointer movement, and a render per
+    /// step would be thrown away). Returns whether anything changed.
+    pub fn set_area(&mut self, area: Area, prefs: &ZoomPrefs, now: Instant) -> bool {
         if !area.is_valid() || self.tile == Some(area) {
             return false;
         }
@@ -304,6 +305,7 @@ impl ZoomState {
             self.shown = frame.normalize(self.shown, limits);
         }
         self.hq = None;
+        self.changed_at = Some(now);
         self.minimap.hover = false;
         true
     }

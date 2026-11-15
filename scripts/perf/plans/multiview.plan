@@ -1,0 +1,140 @@
+# The Multiview fullscreen: dragging gutters between pictures and videos, with a zoomed picture, and moving the pointer.
+# Expects a folder "Multiview-Tests" whose first four media (by name) are pictures and whose next four are videos.
+ready
+folder Multiview-Tests
+view grid
+settle 300
+
+# two pictures
+press @item:0
+release
+keydown control
+press @item:1
+release
+keyup control
+settle 200
+key f11
+window fullscreen
+settle 1500
+begin mv_gutter_2_pictures
+press @gutter:0
+sweep 300 0 3 2
+release
+end
+settle 300
+begin mv_pointer_2_pictures
+moveto @tile:0 0.2
+sweep 700 300 3 2
+end
+# the first picture zoomed in
+moveto @tile:0 0.2
+begin mv_zoom_wheel_picture
+keydown control
+wheel -6 1 here
+keyup control
+settle 400
+end
+settle 800
+begin mv_gutter_zoomed_picture
+press @gutter:0
+sweep 300 0 3 2
+release
+end
+settle 800
+begin mv_pan_zoomed_picture
+press @tile:0
+sweep 200 120 3 2
+release
+end
+settle 500
+key escape
+window main
+settle 600
+
+# four pictures
+press @item:0
+release
+keydown control
+press @item:1
+release
+press @item:2
+release
+press @item:3
+release
+keyup control
+settle 200
+key f11
+window fullscreen
+settle 1500
+begin mv_gutter_4_pictures
+press @gutter:0
+sweep 200 200 3 2
+release
+end
+settle 300
+begin mv_gutter_4_pictures_second
+press @gutter:1
+sweep 200 200 3 2
+release
+end
+settle 300
+key escape
+window main
+settle 600
+
+# two videos
+press @item:4
+release
+keydown control
+press @item:5
+release
+keyup control
+settle 200
+key f11
+window fullscreen
+settle 2500
+begin mv_gutter_2_videos
+press @gutter:0
+sweep 300 0 3 2
+release
+end
+settle 500
+begin mv_pointer_2_videos
+moveto @tile:0 0.2
+sweep 700 300 3 2
+end
+key escape
+window main
+settle 800
+
+# four videos
+press @item:4
+release
+keydown control
+press @item:5
+release
+press @item:6
+release
+press @item:7
+release
+keyup control
+settle 200
+key f11
+window fullscreen
+settle 3000
+begin mv_gutter_4_videos
+press @gutter:0
+sweep 200 200 3 2
+release
+end
+settle 500
+begin mv_gutter_4_videos_second
+press @gutter:1
+sweep 200 200 3 2
+release
+end
+settle 500
+key escape
+window main
+settle 800
+quit

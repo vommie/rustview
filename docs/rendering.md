@@ -26,6 +26,15 @@ no cutouts, no pointer polling and no `overlay-add`/`osd-overlay`; mpv draws not
   hand-off) re-creates the render context in the other window's share group and selects the video track again. Meanwhile the render
   thread reads the newest picture back before it leaves the old window and the new window shows it as a still until mpv reports a
   real frame there (`Bound::has_frame`), so no black frame shows.
+- **A player that takes over another file** (a Multiview that follows the Browse selection reuses the player and the surface of
+  the video that left, `loadfile replace`) shows nothing until the first picture of the new file: until then mpv would render the
+  last picture of the old file into the texture of the new medium, with bars, and on a slow drive that shows for a moment. The
+  surface holds its pictures back (`VideoSurface::hold_pictures`: the row is blank, the render thread goes on because mpv waits for
+  its frames to be rendered) until mpv's `playback-restart` of the newest load (`MpvNotice::FirstPicture`,
+  `MultiviewInstance::on_first_picture`). A refresh of the same file keeps its picture.
+- **During a gutter drag** a video keeps its textures while they are at most a quarter too small (`keeps_texture_in_drag`); the
+  canvas scales them, and the drag's end gives them the exact size. Otherwise every pointer movement would mean three new textures
+  and a render of mpv per video.
 - Slint must get **desktop OpenGL** (`BackendSelector::require_opengl`): on Slint's default GLES 2.0 context mpv drew
   black in the lab. The renderer is **skia** (`system/renderer.rs`; `RUSTVIEW_RENDERER=femtovg` for one start): its EGL context is
   what mpv's zero-copy VAAPI and native Wayland need; on the virtualized test machine both renderers drew the UI alike.

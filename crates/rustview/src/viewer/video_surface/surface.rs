@@ -71,7 +71,11 @@ impl VideoSurface {
         }
         let track = self.host.is_some().then(|| player.video_track());
         if let Some(old) = self.host.take() {
-            self.channel.lock().keep_still = true;
+            {
+                let mut state = self.channel.lock();
+                // A held picture belongs to a file that is going: the new window does not show it either.
+                state.keep_still = !state.hold;
+            }
             let epoch = hosts::detach(old, self.id);
             let started = std::time::Instant::now();
             let in_time = epoch.is_none_or(|epoch| self.channel.wait_left(epoch, STILL_WAIT));
@@ -137,6 +141,36 @@ impl VideoSurface {
         }
         state.size = (width, height);
         self.channel.notify_locked(state);
+    }
+
+    /// Shows nothing from now on (UI thread): the player is about to load another file, and what it renders until that file's
+    /// first picture is the last picture of the old one. `show_pictures` ends it.
+    pub fn hold_pictures(&self) {
+        let mut state = self.channel.lock();
+        state.hold = true;
+        state.still = None;
+        drop(state);
+        if let Some(host) = self.host {
+            hosts::blank(host, self.id);
+        }
+        tracing::debug!(
+            surface = self.id,
+            "[VideoSurface: Hold] Pictures held back until the next file shows"
+        );
+    }
+
+    /// Ends `hold_pictures` (UI thread): the window takes the newest rendered picture with its next frame.
+    pub fn show_pictures(&self) {
+        let mut state = self.channel.lock();
+        if !std::mem::take(&mut state.hold) {
+            return;
+        }
+        let redraw = state.binding.as_ref().map(|binding| Arc::clone(&binding.redraw));
+        drop(state);
+        if let Some(redraw) = redraw {
+            redraw();
+        }
+        tracing::debug!(surface = self.id, "[VideoSurface: Hold] Pictures shown again");
     }
 
     /// Why the last render context could not be created, if it could not.

@@ -135,6 +135,7 @@ impl BridgeTabGrid {
                     orig_width: width.saturating_as::<i32>(),
                     orig_height: height.saturating_as::<i32>(),
                     mv_tiles: ModelRc::new(VecModel::from(multiview_item.tiles)),
+                    mv_images: ModelRc::new(VecModel::from(multiview_item.images)),
                     mv_gutters: ModelRc::new(VecModel::from(multiview_item.gutters)),
                     mv_screen: multiview_item.screen,
                     mv_video_bars: crate::ui::multiview::grid_bars::model_for(instance_id),

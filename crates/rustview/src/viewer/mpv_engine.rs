@@ -4,7 +4,7 @@ use libmpv2::Mpv;
 use parking_lot::{Mutex, RwLock};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Instant;
 
 pub mod ab_repeat;
@@ -43,6 +43,9 @@ pub enum MpvNotice {
     Playback,
     /// mpv knows the display size of the loaded file (`MpvPlayer::video_display_params`).
     VideoParams,
+    /// The first picture of a loaded file is rendered; the number is the load it belongs to (`MpvPlayer::newest_load`), so a
+    /// notice of a file that is being replaced can be told apart.
+    FirstPicture(u64),
     /// The file cannot be played (mpv's reason), or mpv stopped by itself.
     Failed(String),
     /// The script `ab_repeat.lua` published a change (its support, A-B or saved repeats).
@@ -62,6 +65,8 @@ pub struct MpvPlayer {
     is_view_active: Arc<AtomicBool>,
     is_user_paused: Arc<AtomicBool>,
     is_tab_grid_mode: Arc<AtomicBool>,
+    /// Counts the loads that were requested or announced (`load_file`, `expect_load`).
+    loads: Arc<AtomicU64>,
     observer_running: Arc<AtomicBool>,
     listener: Arc<RwLock<Option<MpvNoticeCallback>>>,
     /// What the player knows about the mpv script `ab_repeat.lua` (`viewer::ab_repeat`).
@@ -105,6 +110,7 @@ impl MpvPlayer {
             is_view_active: Arc::new(AtomicBool::new(true)),
             is_user_paused: Arc::new(AtomicBool::new(false)),
             is_tab_grid_mode: Arc::new(AtomicBool::new(false)),
+            loads: Arc::new(AtomicU64::new(0)),
             observer_running: Arc::new(AtomicBool::new(true)),
             listener,
             ab,

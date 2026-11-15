@@ -17,6 +17,11 @@ import { MultiviewActionBar, MultiviewActionBarView } from "multiview_action_bar
 /// part of the scene, so menus, tooltips and popups of the window simply lie over them.
 export component MultiviewCanvas inherits Rectangle {
     in property <[MultiviewTileView]> tiles;
+    // The fitted picture of every image tile and the sharp picture of every zoomed one, by tile index. They are models of their
+    // own, changed only when a picture changes: a picture bound to a tile's row would be converted and uploaded again whenever
+    // that row is rewritten (every step of a gutter drag, of a pan, of an animation).
+    in property <[image]> tile-images;
+    in property <[image]> zoom-images;
     in property <[MultiviewGutterView]> gutters;
     in property <MultiviewScreenView> screen;
     // The newest picture of every video the window shows (`video_surface::hosts`); a video tile names its row.
@@ -134,8 +139,8 @@ export component MultiviewCanvas inherits Rectangle {
             background: Colors.white.with-alpha(tile.focus-brighten);
         }
 
-        if tile.kind == 0 && !tile.zoomed && tile.image.width > 0 : Image {
-            source: tile.image;
+        if tile.kind == 0 && !tile.zoomed && tile.has-image : Image {
+            source: root.tile-images[index];
             width: 100%;
             height: 100%;
             image-fit: contain;
@@ -174,7 +179,7 @@ export component MultiviewCanvas inherits Rectangle {
                 y: tile.zoom-y;
                 width: tile.zoom-width;
                 height: tile.zoom-height;
-                source: tile.zoom-image;
+                source: root.zoom-images[index];
                 source-clip-x: tile.zoom-clip-x;
                 source-clip-y: tile.zoom-clip-y;
                 source-clip-width: tile.zoom-clip-width;
@@ -183,12 +188,12 @@ export component MultiviewCanvas inherits Rectangle {
                 image-rendering: tile.zoom-pixelated ? ImageRendering.pixelated : ImageRendering.smooth;
             }
 
-            if !tile.zoom-hq && tile.image.width > 0 : Image {
+            if !tile.zoom-hq && tile.has-image : Image {
                 x: tile.zoom-x;
                 y: tile.zoom-y;
                 width: tile.zoom-width;
                 height: tile.zoom-height;
-                source: tile.image;
+                source: root.tile-images[index];
                 source-clip-x: tile.zoom-clip-x;
                 source-clip-y: tile.zoom-clip-y;
                 source-clip-width: tile.zoom-clip-width;

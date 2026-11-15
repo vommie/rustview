@@ -24,6 +24,8 @@ pub enum PlayerEvent {
     Playback { tile: TileKey },
     /// mpv knows the display size of the video of this tile.
     VideoParams { tile: TileKey },
+    /// The first picture of a file the player of this tile loaded is rendered (`load`: which load, `MpvPlayer::newest_load`).
+    FirstPicture { tile: TileKey, load: u64 },
     /// mpv cannot play the video of this tile (or stopped by itself): the tile shows `message` where the video would be.
     Failed { tile: TileKey, message: String },
     /// The mpv script `ab_repeat.lua` in the player of this tile published a change (its support, A-B or saved repeats).

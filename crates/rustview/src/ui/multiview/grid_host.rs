@@ -17,6 +17,8 @@ use std::cell::RefCell;
 /// What a grid item draws for its Multiview (coordinates relative to the media canvas of the item).
 pub struct GridItemView {
     pub tiles: Vec<MultiviewTileView>,
+    /// The picture of every image tile, by tile index.
+    pub images: Vec<slint::Image>,
     pub gutters: Vec<MultiviewGutterView>,
     pub screen: MultiviewScreenView,
 }
@@ -45,6 +47,7 @@ impl GridHost {
             guard.view()
         };
         GridItemView {
+            images: views::tile_images(&view, &mut self.images.borrow_mut()),
             tiles: views::tile_views(&view, &mut self.images.borrow_mut()),
             gutters: views::gutter_views(&view),
             screen: views::screen_view(&view),

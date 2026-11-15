@@ -177,6 +177,7 @@ pub(super) fn connect_callbacks(
             MpvNotice::UserPause(paused) => PlayerEvent::PauseChanged { tile, paused },
             MpvNotice::Playback => PlayerEvent::Playback { tile },
             MpvNotice::VideoParams => PlayerEvent::VideoParams { tile },
+            MpvNotice::FirstPicture(load) => PlayerEvent::FirstPicture { tile, load },
             MpvNotice::Failed(message) => PlayerEvent::Failed { tile, message },
             MpvNotice::AbRepeat(change) => PlayerEvent::AbRepeat { tile, change },
         };

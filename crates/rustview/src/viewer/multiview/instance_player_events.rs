@@ -19,6 +19,16 @@ impl MultiviewInstance {
         }
     }
 
+    /// The first picture of a loaded file is rendered: a video that showed nothing since it took over the player of the tile
+    /// it replaced (`VideoSurface::hold_pictures`) shows its pictures again. The picture of a file that is being replaced by
+    /// a newer load stays hidden.
+    pub fn on_first_picture(&mut self, key: TileKey, load: u64) {
+        let video = self.tiles.iter().find(|t| t.key == key).and_then(|t| t.video.as_ref());
+        if let Some(video) = video.filter(|v| v.player.newest_load() == load) {
+            video.surface.show_pictures();
+        }
+    }
+
     /// mpv cannot play the video of a tile (or stopped by itself): the tile shows the reason where the video would be. The
     /// player stays, so a refresh (F5) can try the file again.
     pub fn on_player_failed(&mut self, key: TileKey, message: &str) {

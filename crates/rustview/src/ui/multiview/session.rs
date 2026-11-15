@@ -122,6 +122,15 @@ pub(super) fn instance() -> Option<SharedInstance> {
     })
 }
 
+/// The fullscreen window once it shows its media (for the developer probe).
+pub(super) fn populated_window() -> Option<MultiviewFullscreenWindow> {
+    SESSION.with(|cell| {
+        cell.try_borrow()
+            .ok()
+            .and_then(|g| g.as_ref().filter(|s| s.populated).and_then(|s| s.window.upgrade()))
+    })
+}
+
 /// The handle of the open fullscreen.
 pub(super) fn handle() -> Option<MultiviewHandle> {
     SESSION.with(|cell| {
@@ -330,6 +339,8 @@ fn prepare_window(
     win.set_is_ready(false);
     apply_background(win, settings);
     win.set_tiles(ModelRc::from(models.tiles.clone()));
+    win.set_tile_images(ModelRc::from(models.images.rows.clone()));
+    win.set_zoom_images(ModelRc::from(models.zoom_images.rows.clone()));
     win.set_gutters(ModelRc::from(models.gutters.clone()));
     win.set_navigation(0);
     let appearance = &settings.get().appearance;

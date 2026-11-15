@@ -42,10 +42,10 @@ pub fn register<W: ComponentHandle + 'static>(win: &W, id: HostWindowId, set_fra
 
 /// A rendering notifier that only forwards to the video hosts (for windows without a notifier of their own).
 pub fn install_notifier<W: ComponentHandle>(win: &W, id: HostWindowId) {
-    if let Err(e) = win
-        .window()
-        .set_rendering_notifier(move |state, api| hosts::on_rendering(id, &state, api))
-    {
+    if let Err(e) = win.window().set_rendering_notifier(move |state, api| {
+        crate::ui::perf_probe::on_rendering(&state);
+        hosts::on_rendering(id, &state, api);
+    }) {
         tracing::error!(window = id, error = %e, "[VideoSurface: Host] No rendering notifier; videos cannot be drawn here");
     }
 }

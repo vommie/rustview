@@ -118,7 +118,10 @@ impl MultiviewInstance {
     }
 
     pub fn drag_finished(&mut self) {
-        self.drag = None;
+        if self.drag.take().is_some() {
+            // The videos kept textures of about the right size while the gutter moved.
+            self.size_video_textures();
+        }
     }
 
     /// Back to the automatic arrangement: every pinned width and row height is forgotten.

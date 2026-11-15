@@ -383,9 +383,10 @@ impl MultiviewInstance {
             })
             .collect();
         let prefs = zoom_prefs::current();
+        let now = Instant::now();
         for (tile, area) in self.tiles.iter_mut().zip(areas) {
             if let (Some(zoom), Some(area)) = (tile.zoom.as_mut(), area) {
-                zoom.set_area(area, &prefs);
+                zoom.set_area(area, &prefs, now);
             }
         }
     }

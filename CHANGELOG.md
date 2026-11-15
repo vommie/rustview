@@ -53,6 +53,10 @@ and the stored thumbnails are untouched, `settings.json` only gains `view.table_
 - A folder switch does less: whether the folder has subfolders (the recursive view's button) comes from the folder
   snapshot in memory instead of a walk through the library, and selecting the folder that is already remembered writes
   no settings.
+- Dragging a gutter of a Multiview with pictures is smooth: the pictures were converted and sent to the graphics card
+  again with every pointer movement (as with every step of a pan or a zoom of a picture); they are sent once now.
+  While a gutter moves, the sharp picture of a zoomed image is rendered only when the gutter rests, and the videos keep
+  their textures until they are clearly too small (the exact size follows when the gutter is let go).
 
 ### Fixed
 
@@ -67,6 +71,9 @@ and the stored thumbnails are untouched, `settings.json` only gains `view.table_
   without recording it (space that was never used again). A canceled job stores nothing more.
 - External files that were completed for a folder the user had left meanwhile reloaded the list of the folder shown
   now; they only go to the thumbnail cache.
+- When an open Multiview got another video (another file selected in Browse) and that file took a moment to load, the
+  last picture of the old video showed small, with bars, in the shape of the new one. The view shows nothing until the
+  first picture of the new file; the player is reused as before.
 
 
 ## [0.6.15] - 2026-11-06

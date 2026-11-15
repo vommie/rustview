@@ -226,7 +226,7 @@ fn take_frames(id: HostWindowId) {
         };
         for attached in &mut window.attached {
             let mut state = attached.channel.lock();
-            if state.ready.as_ref().is_none_or(|f| f.epoch != attached.epoch) {
+            if state.hold || state.ready.as_ref().is_none_or(|f| f.epoch != attached.epoch) {
                 continue;
             }
             let Some(frame) = state.ready.take() else {
@@ -309,6 +309,16 @@ pub(super) fn attach(id: HostWindowId, surface: u64, channel: &Arc<Channel>) -> 
         );
         Some(row)
     })
+}
+
+/// The row of a surface shows nothing until its next frame is taken (the surface keeps its render context and textures).
+pub(super) fn blank(id: HostWindowId, surface: u64) {
+    HOSTS.with_borrow_mut(|hosts| {
+        let Some(window) = hosts.get_mut(&id) else { return };
+        if let Some(attached) = window.attached.iter().find(|a| a.surface == surface) {
+            window.frames.set_row_data(attached.row, slint::Image::default());
+        }
+    });
 }
 
 /// Detaches a surface from a window: its row shows nothing from now on and the surface loses its render context. Returns the

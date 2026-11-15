@@ -79,9 +79,39 @@ pub fn keeps_texture(current: (u32, u32), wanted: (u32, u32), animating: bool) -
     current == wanted || animating && current.0 > 0 && current.1 > 0 && current.0.saturating_mul(2) >= wanted.0
 }
 
+/// Whether a texture of `current` size may stay while a gutter is dragged and the picture wants `wanted`: it is at most a
+/// quarter too small in each direction (the canvas scales it; a larger one exists already). Every other size would mean new
+/// textures and a new render of mpv with each pointer movement; the exact size follows when the drag ends.
+pub fn keeps_texture_in_drag(current: (u32, u32), wanted: (u32, u32)) -> bool {
+    let near = |have: u32, want: u32| have > 0 && u64::from(want) * 4 <= u64::from(have) * 5;
+    wanted.0 > 0 && wanted.1 > 0 && near(current.0, wanted.0) && near(current.1, wanted.1)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_gutter_drag_keeps_a_texture_that_is_large_enough() {
+        assert!(keeps_texture_in_drag((800, 450), (800, 450)));
+        assert!(
+            keeps_texture_in_drag((800, 450), (640, 360)),
+            "a larger texture is scaled down"
+        );
+        assert!(
+            keeps_texture_in_drag((800, 450), (1000, 562)),
+            "a quarter too small is scaled up"
+        );
+        assert!(!keeps_texture_in_drag((800, 450), (1001, 563)));
+        assert!(
+            !keeps_texture_in_drag((0, 0), (640, 360)),
+            "a video that drew nothing gets its texture"
+        );
+        assert!(
+            !keeps_texture_in_drag((800, 450), (0, 0)),
+            "a video that shows nothing gives its texture up"
+        );
+    }
 
     #[test]
     fn a_plain_video_is_drawn_and_shown_at_its_place() {

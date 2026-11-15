@@ -121,6 +121,8 @@ pub fn bind(window: &MainWindow, handle: MultiviewHandle) {
         h.window = Some(window.as_weak());
         h.handle = Some(handle);
         bus.set_tiles(ModelRc::from(h.models.tiles.clone()));
+        bus.set_tile_images(ModelRc::from(h.models.images.rows.clone()));
+        bus.set_zoom_images(ModelRc::from(h.models.zoom_images.rows.clone()));
         bus.set_gutters(ModelRc::from(h.models.gutters.clone()));
     });
     super::tab_video_bar::bind(window);
@@ -590,7 +592,7 @@ fn on_tick() {
 }
 
 /// The pointer moved over the main window or left it: the bars of the tab view follow on this turn of the event loop.
-fn on_pointer(pointer: Option<(i32, i32)>) {
+pub(super) fn on_pointer(pointer: Option<(i32, i32)>) {
     let Some(instance) = with_host(|h| {
         h.pointer = pointer;
         h.instance.upgrade()

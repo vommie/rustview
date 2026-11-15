@@ -76,6 +76,9 @@ pub struct Exchange {
     pub still: Option<SharedPixelBuffer<Rgba8Pixel>>,
     /// The newest epoch for which the render thread has left its old binding (a move waits for it to have the still).
     pub left_epoch: u64,
+    /// The pictures belong to a file that is being replaced: the UI shows none of them (the render thread goes on, mpv waits
+    /// for its frames to be rendered) until the first picture of the new file (`VideoSurface::show_pictures`).
+    pub hold: bool,
 }
 
 pub struct Channel {

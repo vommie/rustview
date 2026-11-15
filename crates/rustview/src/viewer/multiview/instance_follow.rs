@@ -98,6 +98,11 @@ impl MultiviewInstance {
                     if let Some(passed) = inherited.remove(&index) {
                         tile.pin = passed.pin;
                         if let Some(video) = passed.video {
+                            // The last picture of the medium that left would be drawn in the shape of the new one until
+                            // its file is loaded (mpv renders it into the new texture, with bars): the tile shows nothing
+                            // until the first picture of the new file.
+                            video.player.expect_load();
+                            video.surface.hold_pictures();
                             tile.video = Some(video);
                             tile.audio = passed.audio;
                             recycled += 1;

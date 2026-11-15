@@ -1,23 +1,12 @@
 # Measuring the responsiveness of the UI
 
 RustView has a built-in probe for developers. It plays a plan of scripted steps in the main window (scrolling, jumps, folder
-switches, sorting, dragging resizers) and logs every frame, so the same scenario can be measured before and after a change, on
-any machine. Results of past work: [`RESULTS.md`](RESULTS.md) (Browse performance, 0.3.46) and
+switches, sorting, dragging resizers) and logs every frame, so the same scenario can be measured before and after a change.
+Results of past work: [`RESULTS.md`](RESULTS.md) (Browse performance, 0.3.46) and
 [`2026-11-responsiveness.md`](2026-11-responsiveness.md).
 
 The probe is part of every build and costs one relaxed atomic load per frame while it is not used. It never runs unless the
 environment variable `RUSTVIEW_PERF_PLAN` names a plan file.
-
-## Everything in one command
-
-```bash
-scripts/perf/measure.sh
-```
-
-`measure.sh` generates a library of 126,000 small pictures once (`scripts/perf/gen-library.py`, about 1.5 GB, needs
-`python-pillow` and `python-numpy`), indexes it once in an isolated profile, runs the plans three times each and prints the
-tables with the medians. Library, profile and logs live in `~/.cache/rustview-perf` (`--dir` changes it; delete the folder
-to get the space back); your own library and settings are not touched. Do not use the machine meanwhile.
 
 ## One run
 
@@ -37,7 +26,7 @@ two variants side by side.
 
 ## What is measured
 
-Per frame of the main window (`src/ui/perf_probe/recorder.rs`):
+Per frame of the main window and of the fullscreen window of a Multiview (`src/ui/perf_probe/recorder.rs`):
 
 | Value | Meaning |
 |---|---|
@@ -69,17 +58,22 @@ One step per line, `#` starts a comment (`src/ui/perf_probe/plan.rs`):
 | `view grid\|table` | Switches the Browse view. |
 | `sort COLUMN [stack]` | Clicks a column header (0 = name), waits for the list; `stack` is a Shift + click. |
 | `scroll PX_PER_S SECONDS` | Moves the list like a drag of the scroll bar (negative: up). |
-| `wheel NOTCHES_PER_S SECONDS` | Turns the mouse wheel over the list. |
+| `wheel NOTCHES_PER_S SECONDS [here]` | Turns the mouse wheel over the list; `here`: where the pointer is (a tile of a Multiview). |
 | `jump FRACTION` | Jumps to a place of the list (0 to 1) and waits for its thumbnails. |
 | `press @ELEMENT`, `sweep DX DY SECONDS CYCLES`, `moveto @ELEMENT SECONDS`, `drag DX DY SECONDS`, `release` | Pointer input: press on an element, move away and back, move to an element, move by a distance and stay, release. |
 | `rclick @ELEMENT`, `click DX DY` | A right click on an element; a left click DX/DY away from the pointer (an entry of an open menu). |
-| `key NAME` | escape, return, delete, up, down, pageup, pagedown. |
-| `shot NAME` | Saves a picture of the window next to the log (`LOG.NAME.png`). |
+| `dclick @ELEMENT` | A double click on an element. |
+| `key NAME` | escape, return, delete, backspace, up, down, left, right, pageup, pagedown, f11, or a single character. |
+| `keydown NAME` / `keyup NAME` | Holds and lets go of `control` or `shift`: the clicks and wheel turns in between carry it (Ctrl + click selects, Ctrl + wheel zooms). |
+| `bind ACTION KEY` | Gives an action of the keymap a key for this run (`bind fullscreen.crop C`); nothing is saved. |
+| `window main\|fullscreen` | Where the next pointer and key steps go. `fullscreen` waits until the fullscreen of a Multiview shows its media (open it with `key f11` on a selection). |
+| `shot NAME` | Saves a picture of the window the steps act on next to the log (`LOG.NAME.png`). The textures of videos may be garbled in it: record the screen when the picture of a video matters. |
 | `quit` | Closes the application. |
 
 Elements (`probe-anchor` in `ui/main.slint`): `@left-resizer`, `@right-resizer`, `@left-splitter:N` and `@right-splitter:N`
 (the bar below panel group N of a sidebar), `@column:N` (the resize handle of table column N), `@header:N` (the header of table column N), `@chip:N` (the chip of column N in the sort bar of the thumbnail view), `@item:N` (the tile or
-row at list position N), `@view`, `@folder-tree`.
+row at list position N), `@view`, `@folder-tree`. In a Multiview (the tab view of the main window, or the fullscreen after
+`window fullscreen`): `@tile:N` (the middle of tile N) and `@gutter:N` (gutter N, a quarter along it, beside its swap button).
 
 The pointer events are the probe's own: they enter the window like real ones, and the real pointer is not moved. **A media
 drag is never released over anything but a folder**: such a release offers the files to the window under the real pointer.
@@ -88,5 +82,7 @@ The plans in `scripts/perf/plans/` are short (about 20 seconds each, so a run fi
 `grid.plan` (thumbnail view: scrolling, wheel), `table.plan` (table: scrolling, wheel, column resize), `loads.plan` (folder
 switches, jumps, sorting), `resize.plan` (sidebars and splitters) and `columns.plan` (moving a table header and a
 chip of the sort bar). They expect folders named `Flat-1k`, `Flat-5k`,
-`Flat-20k` and `Flat-100k` (1,000 to 100,000 pictures each) below the root folder of the profile; `index-stress.plan`
-indexes them once.
+`Flat-20k` and `Flat-100k` (1,000 to 100,000 pictures each) below the root folder of the profile, `multiview.plan` (the
+fullscreen of a Multiview: dragging gutters between pictures and between videos, a zoomed picture, the pointer) a folder
+`Multiview-Tests` whose first four media by name are pictures and whose next four are videos. The `Flat` folders:
+`scripts/perf/gen-library.py` generates them (needs `python-pillow` and `python-numpy`), `index-stress.plan` indexes them once.

@@ -8,7 +8,7 @@ use libmpv2::{Format, Mpv};
 use parking_lot::RwLock;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 /// The ids of the observed properties (`reply_userdata` of their change events; `ab_repeat` uses `0xab..`).
 const TIME_POS: u64 = 1;
@@ -88,6 +88,9 @@ impl MpvPlayer {
             current_file: Arc::clone(&self.current_file_path),
             ab: Arc::clone(&self.ab),
             loop_file: self.loop_file.clone(),
+            loads: Arc::clone(&self.loads),
+            file_load: 0,
+            first_picture_due: false,
             last_error: None,
             last_mute: None,
         };
@@ -129,6 +132,10 @@ struct Observer {
     current_file: Arc<RwLock<Option<PathBuf>>>,
     ab: Arc<RwLock<ab_repeat::AbSnapshot>>,
     loop_file: Option<Arc<str>>,
+    loads: Arc<AtomicU64>,
+    /// The load the file that started last belongs to, and whether its first picture is still to come.
+    file_load: u64,
+    first_picture_due: bool,
     /// The last error message of mpv for the current file (the reason shown when the file cannot be played).
     last_error: Option<String>,
     last_mute: Option<bool>,
@@ -156,6 +163,8 @@ impl Observer {
                 }) => self.on_property(reply_userdata, &change),
                 Ok(Event::StartFile) => self.on_start_file(),
                 Ok(Event::FileLoaded) => self.on_file_loaded(),
+                // Sent once the first picture after a load (or a seek) was handed to the video output and rendered.
+                Ok(Event::PlaybackRestart) => self.on_playback_restart(),
                 Ok(Event::EndFile(reason)) => {
                     tracing::debug!(reason, "[MpvPlayer: Observer] The file ended");
                 }
@@ -262,7 +271,15 @@ impl Observer {
     fn on_start_file(&mut self) {
         self.last_error = None;
         self.params.write().reset(false);
+        self.file_load = self.loads.load(Ordering::Acquire);
+        self.first_picture_due = true;
         self.playback(file_started);
+    }
+
+    fn on_playback_restart(&mut self) {
+        if std::mem::take(&mut self.first_picture_due) {
+            self.notify(MpvNotice::FirstPicture(self.file_load));
+        }
     }
 
     /// mpv reports a property only when its value differs from the one it reported last, and only once its event queue is

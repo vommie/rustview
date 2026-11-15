@@ -12,6 +12,7 @@ use crate::viewer::multiview::view::{
 };
 use rustview_core::util::cast::{Az, FloatToInt, SaturatingAs};
 use slint::{Model, VecModel};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -31,43 +32,46 @@ pub struct ImageCache {
     thumbs: HashMap<TileKey, (usize, slint::Image)>,
 }
 
+/// A Slint image with the address of its pixel buffer (0: no picture), which tells whether a row of an image model has to change.
+type KeyedImage = (usize, slint::Image);
+
 /// The Slint image of `pixels`, made once per buffer (a new buffer has a new address).
 fn cached_image(
-    entries: &mut HashMap<TileKey, (usize, slint::Image)>,
+    entries: &mut HashMap<TileKey, KeyedImage>,
     tile: TileKey,
     pixels: &slint::SharedPixelBuffer<slint::Rgb8Pixel>,
-) -> slint::Image {
+) -> KeyedImage {
     let key = pixels.as_bytes().as_ptr() as usize;
-    if let Some((cached_key, image)) = entries.get(&tile)
-        && *cached_key == key
+    if let Some(cached) = entries.get(&tile)
+        && cached.0 == key
     {
-        return image.clone();
+        return cached.clone();
     }
-    let image = slint::Image::from_rgb8(pixels.clone());
-    entries.insert(tile, (key, image.clone()));
+    let image = (key, slint::Image::from_rgb8(pixels.clone()));
+    entries.insert(tile, image.clone());
     image
 }
 
 impl ImageCache {
-    fn image_for(&mut self, tile: &TileView) -> slint::Image {
+    fn image_for(&mut self, tile: &TileView) -> KeyedImage {
         match tile.pixels.as_ref() {
             Some(pixels) => cached_image(&mut self.entries, tile.key, pixels),
-            None => slint::Image::default(),
+            None => KeyedImage::default(),
         }
     }
 
-    fn zoomed_image_for(&mut self, tile: &TileView) -> slint::Image {
+    fn zoomed_image_for(&mut self, tile: &TileView) -> KeyedImage {
         if let Some(ZoomContentView::Rendered { pixels, .. }) = tile.zoom.as_ref().map(|z| &z.content) {
             cached_image(&mut self.zoomed, tile.key, pixels)
         } else {
             self.zoomed.remove(&tile.key);
-            slint::Image::default()
+            KeyedImage::default()
         }
     }
 
     fn thumb_for(&mut self, tile: &TileView) -> slint::Image {
         match tile.minimap.as_ref().map(|m| &m.picture) {
-            Some(MinimapPicture::Thumb(thumb)) => cached_image(&mut self.thumbs, tile.key, thumb),
+            Some(MinimapPicture::Thumb(thumb)) => cached_image(&mut self.thumbs, tile.key, thumb).1,
             Some(MinimapPicture::Video(_)) | None => slint::Image::default(),
         }
     }
@@ -86,8 +90,6 @@ fn tile_view(tile: &TileView, dpi: f32, images: &mut ImageCache) -> MultiviewTil
         i32::from(tile.kind == TileKind::Video)
     };
     let Rect { x, y, w, h } = tile.rect;
-    let image = images.image_for(tile);
-    let zoom_image = images.zoomed_image_for(tile);
     let mm_image = images.thumb_for(tile);
     let minimap_area = tile.minimap.as_ref().map(|m| m.area);
     let (zoomed, zoom_hq, zoom_area, zoom_rect, zoom_clip, zoom_pixelated) = match tile.zoom.as_ref() {
@@ -129,7 +131,7 @@ fn tile_view(tile: &TileView, dpi: f32, images: &mut ImageCache) -> MultiviewTil
         width: logical(w, dpi),
         height: logical(h, dpi),
         kind,
-        image,
+        has_image: tile.pixels.is_some(),
         video_row,
         video_frame_x: logical(video_frame.x, dpi),
         video_frame_y: logical(video_frame.y, dpi),
@@ -143,7 +145,6 @@ fn tile_view(tile: &TileView, dpi: f32, images: &mut ImageCache) -> MultiviewTil
         error_text: tile.error.clone().unwrap_or_default().into(),
         zoomed,
         zoom_hq,
-        zoom_image,
         zoom_area_x: logical(zoom_area.x, dpi),
         zoom_area_y: logical(zoom_area.y, dpi),
         zoom_area_width: logical(zoom_area.w, dpi),
@@ -310,6 +311,11 @@ pub fn tile_views(view: &HostedView, images: &mut ImageCache) -> Vec<MultiviewTi
     view.tiles.iter().map(|t| tile_view(t, view.dpi, images)).collect()
 }
 
+/// The fitted pictures of the image tiles, by tile index (the canvas' `tile-images`).
+pub fn tile_images(view: &HostedView, images: &mut ImageCache) -> Vec<slint::Image> {
+    view.tiles.iter().map(|t| images.image_for(t).1).collect()
+}
+
 pub fn gutter_views(view: &HostedView) -> Vec<MultiviewGutterView> {
     view.gutters.iter().map(|g| gutter_view(g, view.dpi)).collect()
 }
@@ -319,12 +325,49 @@ pub fn gutter_views(view: &HostedView) -> Vec<MultiviewGutterView> {
 pub struct ViewModels {
     pub tiles: Rc<VecModel<MultiviewTileView>>,
     pub gutters: Rc<VecModel<MultiviewGutterView>>,
+    pub images: ImageModel,
+    pub zoom_images: ImageModel,
+}
+
+/// One picture per tile for the canvas (`tile-images`, `zoom-images`). A row changes only when its picture does, so the renderer
+/// keeps the texture it uploaded while the tile moves, is resized or its picture is panned.
+#[derive(Default)]
+pub struct ImageModel {
+    pub rows: Rc<VecModel<slint::Image>>,
+    keys: RefCell<Vec<usize>>,
+}
+
+impl ImageModel {
+    fn sync(&self, images: Vec<KeyedImage>) {
+        let mut keys = self.keys.borrow_mut();
+        if keys.len() == images.len() {
+            for (row, (key, image)) in images.into_iter().enumerate() {
+                if keys[row] != key {
+                    keys[row] = key;
+                    self.rows.set_row_data(row, image);
+                }
+            }
+        } else {
+            *keys = images.iter().map(|(key, _)| *key).collect();
+            self.rows
+                .set_vec(images.into_iter().map(|(_, image)| image).collect::<Vec<_>>());
+        }
+    }
+
+    fn clear(&self) {
+        self.keys.borrow_mut().clear();
+        self.rows.set_vec(Vec::new());
+    }
 }
 
 impl ViewModels {
     /// Updates the models from the description of the instance.
     pub fn sync(&self, view: &HostedView, images: &mut ImageCache) {
         images.retain(&view.tiles);
+        self.images
+            .sync(view.tiles.iter().map(|t| images.image_for(t)).collect());
+        self.zoom_images
+            .sync(view.tiles.iter().map(|t| images.zoomed_image_for(t)).collect());
         sync_model(&self.tiles, tile_views(view, images));
         sync_model(&self.gutters, gutter_views(view));
     }
@@ -332,6 +375,8 @@ impl ViewModels {
     pub fn clear(&self) {
         self.tiles.set_vec(Vec::new());
         self.gutters.set_vec(Vec::new());
+        self.images.clear();
+        self.zoom_images.clear();
     }
 }
 

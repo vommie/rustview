@@ -11,7 +11,7 @@
 //! sort COLUMN [stack]        click the header of a column (0 = name), wait until the list is shown again;
 //!                            `stack` is a Shift + click (the column becomes the next sort level)
 //! scroll PX_PER_S SECONDS    move the list like a drag of the scroll bar (negative: up)
-//! wheel NOTCHES_PER_S SECONDS  turn the mouse wheel over the list (negative: up)
+//! wheel NOTCHES_PER_S SECONDS [here]  turn the mouse wheel over the list (negative: up); `here`: where the pointer is
 //! jump FRACTION              jump to a place of the list (0 = top, 1 = end), wait until its thumbnails are shown
 //! press @ANCHOR              press the left button on an element (see `anchor.rs` for the names)
 //! sweep DX DY SECONDS CYCLES move the pressed pointer DX/DY away and back, CYCLES times
@@ -20,7 +20,13 @@
 //! release                    release the button
 //! rclick @ANCHOR             right click on an element
 //! click DX DY                move the pointer by DX/DY and click there (an entry of an open menu)
-//! key NAME                   press and release a key (escape, return)
+//! dclick @ANCHOR             double click on an element
+//! key NAME                   press and release a key (escape, return, f11, ...)
+//! keydown NAME / keyup NAME  hold and let go of a key (control, shift: the clicks and wheel turns between them carry it)
+//! bind ACTION KEY            give an action of the keymap a key for this run (`bind fullscreen.crop C`; nothing is saved)
+//! window main|fullscreen     where the next pointer and key steps go; `fullscreen` waits until the Multiview fullscreen
+//!                            shows its media. Elements of a Multiview: `@tile:N`, `@gutter:N` (the tab view of the main
+//!                            window, or the fullscreen)
 //! shot NAME                  save a picture of the window next to the log (LOG.NAME.png)
 //! quit                       close the application
 //! ```
@@ -71,6 +77,7 @@ pub enum Step {
     Wheel {
         notches_per_s: f32,
         seconds: f32,
+        here: bool,
     },
     Jump(f32),
     Press(Anchor),
@@ -95,7 +102,16 @@ pub enum Step {
         dx: f32,
         dy: f32,
     },
+    DoubleClick(Anchor),
     Key(String),
+    KeyDown(String),
+    KeyUp(String),
+    Bind {
+        action: String,
+        key: String,
+    },
+    /// `true`: the fullscreen window of the Multiview.
+    Window(bool),
     Shot(String),
     Quit,
 }
@@ -180,10 +196,20 @@ fn step(line: &str) -> Result<Option<Step>, String> {
             px_per_s: number(words.next(), "the speed in px/s")?,
             seconds: positive(words.next(), "the duration in s")?,
         },
-        "wheel" => Step::Wheel {
-            notches_per_s: number(words.next(), "the speed in notches/s")?,
-            seconds: positive(words.next(), "the duration in s")?,
-        },
+        "wheel" => {
+            let notches_per_s = number(words.next(), "the speed in notches/s")?;
+            let seconds = positive(words.next(), "the duration in s")?;
+            let here = match words.next() {
+                None => false,
+                Some("here") => true,
+                Some(other) => return Err(format!("unknown wheel option: {other}")),
+            };
+            Step::Wheel {
+                notches_per_s,
+                seconds,
+                here,
+            }
+        }
         "jump" => {
             let fraction: f32 = number(words.next(), "the place (0 to 1)")?;
             if !(0.0..=1.0).contains(&fraction) {
@@ -208,7 +234,24 @@ fn step(line: &str) -> Result<Option<Step>, String> {
             seconds: positive(words.next(), "the duration in s")?,
         },
         "release" => Step::Release,
+        "dclick" => Step::DoubleClick(anchor(words.next())?),
         "key" => Step::Key(words.next().ok_or("the key name is missing")?.to_owned()),
+        "keydown" => Step::KeyDown(words.next().ok_or("the key name is missing")?.to_owned()),
+        "keyup" => Step::KeyUp(words.next().ok_or("the key name is missing")?.to_owned()),
+        "bind" => Step::Bind {
+            action: words.next().ok_or("the action is missing")?.to_owned(),
+            key: words.next().ok_or("the key is missing")?.to_owned(),
+        },
+        "window" => match words.next() {
+            Some("main") => Step::Window(false),
+            Some("fullscreen") => Step::Window(true),
+            other => {
+                return Err(format!(
+                    "the window is main or fullscreen, not {}",
+                    other.unwrap_or("nothing")
+                ));
+            }
+        },
         "shot" => Step::Shot(words.next().ok_or("the picture's name is missing")?.to_owned()),
         "quit" => Step::Quit,
         other => return Err(format!("unknown step: {other}")),
@@ -272,7 +315,8 @@ mod tests {
                 },
                 Step::Wheel {
                     notches_per_s: 20.0,
-                    seconds: 2.0
+                    seconds: 2.0,
+                    here: false
                 },
                 Step::Jump(0.5),
                 Step::MoveTo {
@@ -301,6 +345,41 @@ mod tests {
                 Step::Shot("after-sort".to_owned()),
                 Step::Quit,
             ]
+        );
+    }
+
+    #[test]
+    fn the_steps_of_a_multiview_are_read() {
+        let steps = parse(
+            "keydown control\nwheel 5 1 here\nkeyup control\nwindow fullscreen\ndclick @tile:1\nwindow main\n\
+             bind fullscreen.crop C\n",
+        )
+        .expect("the plan is valid");
+        assert_eq!(
+            steps,
+            vec![
+                Step::KeyDown("control".to_owned()),
+                Step::Wheel {
+                    notches_per_s: 5.0,
+                    seconds: 1.0,
+                    here: true
+                },
+                Step::KeyUp("control".to_owned()),
+                Step::Window(true),
+                Step::DoubleClick(Anchor {
+                    name: "tile".to_owned(),
+                    index: 1
+                }),
+                Step::Window(false),
+                Step::Bind {
+                    action: "fullscreen.crop".to_owned(),
+                    key: "C".to_owned()
+                },
+            ]
+        );
+        assert_eq!(
+            parse("window tab\n"),
+            Err("line 1: the window is main or fullscreen, not tab".to_owned())
         );
     }
 

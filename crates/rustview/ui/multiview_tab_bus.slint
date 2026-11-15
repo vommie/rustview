@@ -7,6 +7,8 @@ import { MultiviewActionBarView } from "multiview_action_bar.slint";
 /// no Multiview properties of its own.
 export global MultiviewTabBus {
     in-out property <[MultiviewTileView]> tiles;
+    in-out property <[image]> tile-images;
+    in-out property <[image]> zoom-images;
     in-out property <[MultiviewGutterView]> gutters;
     in-out property <MultiviewScreenView> screen;
     // The control bars of the videos (their events go to `VideoBarBus`).
